@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "291092236875",
+    "project_id": "academy-manager-65b2a",
+    "storage_bucket": "academy-manager-65b2a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:291092236875:android:cadc6f82a3678559705bce",
+        "android_client_info": {
+          "package_name": "com.example.academy_management"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhJoPe_tmRlM1H2gIZWj4zr7_9WpepNN0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
