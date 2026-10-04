@@ -1472,9 +1472,20 @@ class _SharedDashboardState extends State<SharedDashboard> {
                     iconColor: Colors.deepPurple.shade800,
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
+                      final currentUserId =
+                          supabase.auth.currentUser?.id ??
+                          ''; // বর্তমান ইউজারের আইডি বের করা
+
                       if (fetchedAcademyId != null) {
                         await Get.to(
-                          () => QuestionCreateView(academyId: fetchedAcademyId),
+                          () => QuestionCreateView(
+                            academyId: fetchedAcademyId,
+                            currentUserId:
+                                currentUserId, // সঠিকভাবে আইডি পাস করা হলো
+                            currentUserName: widget.userName,
+                            userRole: widget
+                                .role, // ড্যাশবোর্ডের widget থেকে নাম পাস করা হলো
+                          ),
                         );
                         _loadStatsInitial();
                       } else {

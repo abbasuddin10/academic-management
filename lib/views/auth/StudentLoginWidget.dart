@@ -30,7 +30,6 @@ class _StudentLoginWidgetState extends State<StudentLoginWidget> {
   @override
   void initState() {
     super.initState();
-    // মাইক্রোটাস্ক বা একটু ডিলে দিয়ে কল করলে টগল করার সময় আর ল্যাগ করবে না
     Future.delayed(const Duration(milliseconds: 50), () {
       if (mounted) {
         fetchAcademies();
@@ -38,15 +37,15 @@ class _StudentLoginWidgetState extends State<StudentLoginWidget> {
     });
   }
 
-  // একাডেমি ফেচ করা (টাইমআউট হ্যান্ডলিং সহ)
+  // একাডেমি ফেচ করা এবং ক্র্যাশ এড়াতে সেফ কাস্টিং
   Future<void> fetchAcademies() async {
     if (!mounted) return;
     try {
       final supabase = Supabase.instance.client;
       final response = await supabase
           .from('academies')
-          .select('id, academy_name')
-          .timeout(const Duration(seconds: 10)); // অতিরিক্ত সেফটির জন্য টাইমআউট
+          .select('id, academy_name, address, logo_url')
+          .timeout(const Duration(seconds: 10));
 
       if (!mounted) return;
 
@@ -140,11 +139,10 @@ class _StudentLoginWidgetState extends State<StudentLoginWidget> {
       if (!mounted) return;
 
       if (studentResponse != null) {
-        String studentName = studentResponse['name'];
+        String studentName = studentResponse['name'] ?? '';
         String academyName = academyController.text.trim();
-        String studentId = studentResponse['id'];
+        String studentId = studentResponse['id'] ?? '';
 
-        // ফায়ারবেস থেকে FCM টোকেন নিয়ে students টেবিলে আপডেট করা
         try {
           String? fcmToken = await FirebaseMessaging.instance.getToken();
           if (fcmToken != null) {
@@ -194,7 +192,7 @@ class _StudentLoginWidgetState extends State<StudentLoginWidget> {
     }
   }
 
-  // একাডেমি সার্চ ডায়ালগ (অফিসিয়াল গেট ডায়ালগ অপ্টিমাইজড)
+  // একাডেমি সার্চ ডায়ালগ (ক্র্যাশ ফ্রি ও স্মার্ট ইউআই)
   void _showAcademySearchDialog() {
     if (academyList.isEmpty) {
       Get.snackbar(
@@ -208,61 +206,131 @@ class _StudentLoginWidgetState extends State<StudentLoginWidget> {
 
     List<Map<String, dynamic>> tempSearchList = List.from(academyList);
 
-    Get.defaultDialog(
-      title: "একাডেমি বেছে নিন",
-      content: StatefulBuilder(
-        builder: (context, setStateDialog) {
-          return SizedBox(
-            width: 320,
-            height: 350,
-            child: Column(
-              children: [
-                TextField(
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'একাডেমির নাম খুঁজুন...',
-                    prefixIcon: const Icon(Icons.search, color: Colors.indigo),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+    Get.dialog(
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: StatefulBuilder(
+            builder: (context, setStateDialog) {
+              return SizedBox(
+                width: MediaQuery.of(context).size.width * 0.85,
+                height: MediaQuery.of(context).size.height * 0.5,
+                child: Column(
+                  children: [
+                    const Text(
+                      "একাডেমি বেছে নিন",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.indigo,
+                      ),
                     ),
-                  ),
-                  onChanged: (value) {
-                    setStateDialog(() {
-                      tempSearchList = academyList
-                          .where(
-                            (item) => item['academy_name']
-                                .toString()
-                                .toLowerCase()
-                                .contains(value.toLowerCase()),
-                          )
-                          .toList();
-                    });
-                  },
+                    const SizedBox(height: 12),
+                    TextField(
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'একাডেমির নাম খুঁজুন...',
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.indigo,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 0,
+                          horizontal: 10,
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setStateDialog(() {
+                          tempSearchList = academyList
+                              .where(
+                                (item) => (item['academy_name'] ?? '')
+                                    .toString()
+                                    .toLowerCase()
+                                    .contains(value.toLowerCase()),
+                              )
+                              .toList();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: tempSearchList.isEmpty
+                          ? const Center(child: Text("কোন একাডেমি পাওয়া যায়নি"))
+                          : ListView.builder(
+                              itemCount: tempSearchList.length,
+                              itemBuilder: (context, index) {
+                                final academy = tempSearchList[index];
+                                final String academyName =
+                                    academy['academy_name']?.toString() ?? '';
+                                final String? address = academy['address']
+                                    ?.toString();
+                                final String? logoUrl = academy['logo_url']
+                                    ?.toString();
+                                final String academyId =
+                                    academy['id']?.toString() ?? '';
+
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 2,
+                                  ),
+                                  leading: CircleAvatar(
+                                    radius: 22,
+                                    backgroundColor: Colors.grey.shade200,
+                                    backgroundImage:
+                                        (logoUrl != null &&
+                                            logoUrl.trim().isNotEmpty)
+                                        ? NetworkImage(logoUrl.trim())
+                                        : null,
+                                    child:
+                                        (logoUrl == null ||
+                                            logoUrl.trim().isEmpty)
+                                        ? const Icon(
+                                            Icons.business,
+                                            color: Colors.indigo,
+                                          )
+                                        : null,
+                                  ),
+                                  title: Text(
+                                    academyName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  subtitle:
+                                      (address != null &&
+                                          address.trim().isNotEmpty)
+                                      ? Text(
+                                          address.trim(),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        )
+                                      : null,
+                                  onTap: () {
+                                    setState(() {
+                                      academyController.text = academyName;
+                                      selectedAcademyId = academyId;
+                                    });
+                                    Get.back();
+                                    fetchClassesByAcademyId(academyId);
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: tempSearchList.length,
-                    itemBuilder: (context, index) {
-                      final academy = tempSearchList[index];
-                      return ListTile(
-                        title: Text(academy['academy_name']),
-                        onTap: () {
-                          setState(() {
-                            academyController.text = academy['academy_name'];
-                            selectedAcademyId = academy['id'];
-                          });
-                          Get.back();
-                          fetchClassesByAcademyId(selectedAcademyId!);
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -279,41 +347,63 @@ class _StudentLoginWidgetState extends State<StudentLoginWidget> {
       return;
     }
 
-    Get.defaultDialog(
-      title: "ক্লাস বেছে নিন",
-      content: StatefulBuilder(
-        builder: (context, setStateDialog) {
-          return SizedBox(
-            width: 320,
-            height: 300,
-            child: isClassLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: Colors.indigo),
-                  )
-                : classList.isEmpty
-                ? const Center(
-                    child: Text(
-                      "এই একাডেমিতে কোনো ক্লাস পাওয়া যায়নি",
-                      style: TextStyle(color: Colors.grey),
-                      textAlign: TextAlign.center,
+    Get.dialog(
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: StatefulBuilder(
+            builder: (context, setStateDialog) {
+              return SizedBox(
+                width: MediaQuery.of(context).size.width * 0.85,
+                height: MediaQuery.of(context).size.height * 0.4,
+                child: Column(
+                  children: [
+                    const Text(
+                      "ক্লাস বেছে নিন",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.indigo,
+                      ),
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: classList.length,
-                    itemBuilder: (context, index) {
-                      return ListTile(
-                        title: Text(classList[index]),
-                        onTap: () {
-                          setState(() {
-                            classController.text = classList[index];
-                          });
-                          Get.back();
-                        },
-                      );
-                    },
-                  ),
-          );
-        },
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: isClassLoading
+                          ? const Center(
+                              child: CircularProgressIndicator(
+                                color: Colors.indigo,
+                              ),
+                            )
+                          : classList.isEmpty
+                          ? const Center(
+                              child: Text(
+                                "এই একাডেমিতে কোনো ক্লাস পাওয়া যায়নি",
+                                style: TextStyle(color: Colors.grey),
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: classList.length,
+                              itemBuilder: (context, index) {
+                                return ListTile(
+                                  title: Text(classList[index]),
+                                  onTap: () {
+                                    setState(() {
+                                      classController.text = classList[index];
+                                    });
+                                    Get.back();
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

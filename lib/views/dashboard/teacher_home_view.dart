@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:academy_management/views/dashboard/TeacherRoutineView.dart';
+import 'package:academy_management/views/dashboard/question_create_view.dart';
 import 'package:academy_management/views/dashboard/student_attendance_page_view.dart';
 import 'package:academy_management/views/dashboard/teacher_exam_routine_view.dart';
 import 'package:academy_management/views/dashboard/teacher_profile.dart';
@@ -303,28 +304,130 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications, color: Colors.white),
-            onPressed: () {
-              if (academyId.isNotEmpty) {
-                Get.to(
-                  () => NoticeBoardView(
-                    academyId: academyId,
-                    userRole: 'teacher',
+          // প্রফাইল পিকচার সার্কেল আইকন (বামে ও উপরে সবুজ ডট সহ) এবং ক্লিক লজিক
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 8.0),
+            child: GestureDetector(
+              onTap: () async {
+                if (academyId.isNotEmpty && teacherId.isNotEmpty) {
+                  await Get.to(
+                    () => TeacherProfileView(
+                      teacherId: teacherId,
+                      academyId: academyId,
+                    ),
+                  );
+                  _checkAuthAndFetchData();
+                } else {
+                  Get.snackbar(
+                    "ত্রুটি",
+                    "শিক্ষকের তথ্য লোড হয়নি, কিছুক্ষণ অপেক্ষা করুন।",
+                    backgroundColor: Colors.red,
+                    colorText: Colors.white,
+                  );
+                }
+              },
+              child: Stack(
+                children: [
+                  // প্রফাইল ছবি বা ডিফল্ট আইকন
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: Colors.white,
+                    child: ClipOval(
+                      child:
+                          (photoUrl.isNotEmpty && photoUrl.startsWith('http'))
+                          ? Image.network(
+                              photoUrl,
+                              fit: BoxFit.fill,
+                              width: 36,
+                              height: 36,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(
+                                  Icons.person,
+                                  size: 20,
+                                  color: Colors.teal,
+                                );
+                              },
+                            )
+                          : const Icon(
+                              Icons.person,
+                              size: 20,
+                              color: Colors.teal,
+                            ),
+                    ),
                   ),
-                );
-              } else {
-                Get.snackbar(
-                  "ত্রুটি",
-                  "একাডেমি আইডি পাওয়া যায়নি!",
-                  backgroundColor: Colors.red,
-                  colorText: Colors.white,
-                );
-              }
-            },
+                  // বামে ও উপরে এক্টিভ সবুজ ডট
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    child: Container(
+                      width: 11,
+                      height: 11,
+                      decoration: BoxDecoration(
+                        color: Colors.greenAccent, // সবুজ রঙ
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // নোটিফিকেশন আইকন
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2.0),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.notifications,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                  onPressed: () {
+                    if (academyId.isNotEmpty) {
+                      Get.to(
+                        () => NoticeBoardView(
+                          academyId: academyId,
+                          userRole: 'teacher',
+                        ),
+                      );
+                    } else {
+                      Get.snackbar(
+                        "ত্রুটি",
+                        "একাডেমি আইডি পাওয়া যায়নি!",
+                        backgroundColor: Colors.red,
+                        colorText: Colors.white,
+                      );
+                    }
+                  },
+                ),
+                // ডানে ও উপরে লাল ব্যাজ (এখানে চাইলে সংখ্যা বা শুধু লাল ডট রাখা যাবে)
+                Positioned(
+                  left: 10,
+                  top: 10,
+                  child: Container(
+                    // padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red, // লাল রঙ
+                      shape: BoxShape.circle,
+                      //border: Border.all(color: Colors.teal),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 10,
+                      minHeight: 10,
+                    ),
+                    // যদি সংখ্যা দেখাতে চান যেমন '3', তবে এখানে Text উইজেট দিতে পারেন।
+                    // শুধু ডট রাখতে চাইলে child: null বা ফাঁকা রাখতে পারেন।
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
+
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -348,7 +451,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                   child: (photoUrl.isNotEmpty && photoUrl.startsWith('http'))
                       ? Image.network(
                           photoUrl,
-                          fit: BoxFit.cover,
+                          fit: BoxFit.fill,
                           width: 80,
                           height: 80,
                           loadingBuilder: (context, child, loadingProgress) {
@@ -721,22 +824,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                             }
                           },
                         ),
-                        _buildMenuCard(
-                          title: 'নোটিশ বোর্ড',
-                          icon: Icons.notifications_active,
-                          color: Colors.orange.shade50,
-                          iconColor: Colors.orange.shade800,
-                          onTap: () {
-                            if (academyId.isNotEmpty) {
-                              Get.to(
-                                () => NoticeBoardView(
-                                  academyId: academyId,
-                                  userRole: 'teacher',
-                                ),
-                              );
-                            }
-                          },
-                        ),
+
                         _buildMenuCard(
                           title: 'পরীক্ষার ফলাফল',
                           icon: Icons.assessment,
@@ -802,7 +890,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           },
                         ),
                         _buildMenuCard(
-                          title: 'প্রোফাইল তথ্য',
+                          title: 'পরিক্ষা তৈরি',
                           icon: Icons.person,
                           color: Colors.teal.shade50,
                           iconColor: Colors.teal.shade700,
@@ -815,6 +903,38 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                                 ),
                               );
                               _checkAuthAndFetchData();
+                            }
+                          },
+                        ),
+                        _buildMenuCard(
+                          icon: Icons.quiz_rounded,
+                          title: 'প্রশ্ন তৈরি',
+                          color: Colors.deepPurple.shade50,
+                          iconColor: Colors.deepPurple.shade800,
+                          onTap: () {
+                            // সরাসরি ক্লাসের নিজস্ব academyId এবং teacherId (বা supabase id) ব্যবহার করা হলো
+                            final currentUserId = teacherId.isNotEmpty
+                                ? teacherId
+                                : (supabase.auth.currentUser?.id ?? '');
+
+                            if (academyId.isNotEmpty) {
+                              Get.to(
+                                () => QuestionCreateView(
+                                  academyId: academyId,
+                                  currentUserId: currentUserId,
+                                  currentUserName: teacherName.isNotEmpty
+                                      ? teacherName
+                                      : widget.userName,
+                                  userRole: 'teacher',
+                                ),
+                              );
+                            } else {
+                              Get.snackbar(
+                                "ত্রুটি",
+                                "একাডেমি আইডি পাওয়া যায়নি!",
+                                backgroundColor: Colors.red,
+                                colorText: Colors.white,
+                              );
                             }
                           },
                         ),
