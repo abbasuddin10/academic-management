@@ -10,6 +10,8 @@ class CreateCustomModelTestView extends StatefulWidget {
   final String className;
   final String subjectName;
   final int totalSubjectQuestions;
+  final String? currentUserId;
+  final String? currentUserName;
 
   const CreateCustomModelTestView({
     super.key,
@@ -17,6 +19,8 @@ class CreateCustomModelTestView extends StatefulWidget {
     required this.className,
     required this.subjectName,
     required this.totalSubjectQuestions,
+    this.currentUserId,
+    this.currentUserName,
   });
 
   @override
@@ -134,7 +138,19 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
   void _goToQuestionSelectionPage() async {
     if (selectedChapter == null) return;
 
-    final result = await Get.to(
+    final result = aliasGetToSelectQuestions();
+
+    if (result != null && result is List<String>) {
+      setState(() {
+        manuallySelectedQuestionIds = result as List<String>;
+        questionCountController.text = manuallySelectedQuestionIds.length
+            .toString();
+      });
+    }
+  }
+
+  Future<dynamic> aliasGetToSelectQuestions() async {
+    return await Get.to(
       () => SelectQuestionsView(
         academyId: widget.academyId,
         className: widget.className,
@@ -143,17 +159,9 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
         initiallySelectedIds: manuallySelectedQuestionIds,
       ),
     );
-
-    if (result != null && result is List<String>) {
-      setState(() {
-        manuallySelectedQuestionIds = result;
-        questionCountController.text = manuallySelectedQuestionIds.length
-            .toString();
-      });
-    }
   }
 
-  // মডেল টেস্ট ডাটাবেসে সেভ করার ফাংশন (আপডেটেড with `users` table check)
+  // মডেল টেস্ট ডাটাবেসে সেভ করার ফাংশন
   Future<void> _saveModelTest() async {
     String title = testTitleController.text.trim();
     int? qCount = int.tryParse(questionCountController.text.trim());
@@ -243,50 +251,9 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
         questionIds = selectedQuestions.map((q) => q['id'].toString()).toList();
       }
 
-      // বর্তমান লগইন করা ইউজারের তথ্য বের করা (Auth অথবা users টেবিল থেকে)
-      final authUser = supabase.auth.currentUser;
-      String? creatorId;
-      String? creatorName;
-
-      if (authUser != null) {
-        // সুপার এডমিন বা Auth ইউজার হলে চেক করা যাক তিনি `users` টেবিলে আছেন কিনা, অথবা সরাসরি Auth থেকে
-        creatorId = authUser.id;
-
-        // প্রথমে users টেবিল থেকে খোঁজার চেষ্টা করি এই auth id বা email দিয়ে
-        try {
-          final userRecord = await supabase
-              .from('users')
-              .select('id, full_name')
-              .eq('id', authUser.id)
-              .maybeSingle();
-
-          if (userRecord != null) {
-            creatorId = userRecord['id']?.toString();
-            creatorName = userRecord['full_name']?.toString();
-          } else if (authUser.email != null) {
-            // যদি id দিয়ে না মিলে, ইমেইল দিয়ে ট্রাই করি
-            final userByEmail = await supabase
-                .from('users')
-                .select('id, full_name')
-                .eq('email', authUser.email!)
-                .maybeSingle();
-            if (userByEmail != null) {
-              creatorId = userByEmail['id']?.toString();
-              creatorName = userByEmail['full_name']?.toString();
-            }
-          }
-        } catch (_) {}
-
-        // যদি users টেবিলে নাম না পাওয়া যায়, তবে Auth মেটাডেটা বা ইমেইল থেকে নেবো
-        creatorName ??=
-            authUser.userMetadata?['name'] ?? authUser.email ?? 'Admin/Teacher';
-      } else {
-        // যদি আপনার অ্যাপে শিক্ষকরা অন্য কোনো উপায়ে (যেমন ফোন বা পাসওয়ার্ড দিয়ে custom login করে লোকাল স্টোরেজে বা GetStorage-এ আইডি/নাম সেভ রাখেন) লগইন করেন,
-        // তবে নিচের মতো আপনার লোকাল ডাটা থেকেও নিতে পারেন। উদাহরণস্বরূপ:
-        // creatorId = YourLocalStorage.getTeacherId();
-        // creatorName = YourLocalStorage.getTeacherName();
-        creatorName = 'Teacher';
-      }
+      // সরাসরি উইজেট থেকে প্রাপ্ত ইউজার আইডি ও নাম ব্যবহার করা হচ্ছে (কোনো গ্লোবাল অথ চেক নেই)
+      String creatorId = widget.currentUserId ?? '';
+      String creatorName = widget.currentUserName ?? 'Teacher';
 
       // Supabase-এর exam_schedules টেবিলে ডাটা ইনসার্ট করা
       await supabase.from('exam_schedules').insert({
@@ -300,9 +267,8 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
         'start_time': startDateTime.toIso8601String(),
         'end_time': endDateTime.toIso8601String(),
         'is_active': true,
-        'question_creator_id':
-            creatorId, // ইউজারের আইডি (সুপার এডমিন বা শিক্ষক)
-        'question_creator_name': creatorName, // ইউজারের নাম (full_name)
+        'question_creator_id': creatorId.isEmpty ? null : creatorId,
+        'question_creator_name': creatorName,
       });
 
       Get.back();
@@ -471,8 +437,9 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
                         firstDate: DateTime.now(),
                         lastDate: DateTime(2030),
                       );
-                      if (pickedDate != null)
+                      if (pickedDate != null) {
                         setState(() => startDate = pickedDate);
+                      }
                     },
                     icon: const Icon(Icons.calendar_today, size: 16),
                     label: Text(
@@ -490,8 +457,9 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
                         context: context,
                         initialTime: TimeOfDay.now(),
                       );
-                      if (pickedTime != null)
+                      if (pickedTime != null) {
                         setState(() => startTime = pickedTime);
+                      }
                     },
                     icon: const Icon(Icons.access_time, size: 16),
                     label: Text(
@@ -520,8 +488,9 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
                         firstDate: DateTime.now(),
                         lastDate: DateTime(2030),
                       );
-                      if (pickedDate != null)
+                      if (pickedDate != null) {
                         setState(() => endDate = pickedDate);
+                      }
                     },
                     icon: const Icon(Icons.calendar_today, size: 16),
                     label: Text(
@@ -539,8 +508,9 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
                         context: context,
                         initialTime: TimeOfDay.now(),
                       );
-                      if (pickedTime != null)
+                      if (pickedTime != null) {
                         setState(() => endTime = pickedTime);
+                      }
                     },
                     icon: const Icon(Icons.access_time, size: 16),
                     label: Text(

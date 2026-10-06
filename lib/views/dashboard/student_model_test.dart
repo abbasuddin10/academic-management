@@ -633,6 +633,15 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
+                        'অধ্যায়: $displayChapter',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.indigo.shade700,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
                         'ক্লাস: ${test['class_name'] ?? ''}',
                         style: const TextStyle(
                           fontSize: 11,
@@ -649,15 +658,7 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
                           fontWeight: FontWeight.normal,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'অধ্যায়: $displayChapter',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.indigo.shade700,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+
                       const SizedBox(height: 4),
                       Text(
                         'প্রশ্ন সংখ্যা: $questionCount টি',

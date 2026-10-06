@@ -777,11 +777,17 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
 }
 
 // মূল ModelTestView ক্লাস
-// মূল ModelTestView ক্লাস
 class ModelTestView extends StatefulWidget {
   final String academyId;
+  final String? currentUserId;
+  final String? currentUserName;
 
-  const ModelTestView({super.key, required this.academyId});
+  const ModelTestView({
+    super.key,
+    required this.academyId,
+    this.currentUserId,
+    this.currentUserName,
+  });
 
   @override
   State<ModelTestView> createState() => _ModelTestViewState();
@@ -874,7 +880,6 @@ class _ModelTestViewState extends State<ModelTestView> {
     }
   }
 
-  // মোট প্রশ্নের সংখ্যা বের করার জন্য
   Future<void> _loadTotalQuestionsCount() async {
     if (selectedClass == null || selectedSubject == null) return;
     try {
@@ -893,7 +898,6 @@ class _ModelTestViewState extends State<ModelTestView> {
     }
   }
 
-  // ইউজারদের তৈরি করা বা নির্ধারিত মডেল টেস্টগুলো লোড করার জন্য
   Future<void> _loadModelTests() async {
     if (selectedClass == null || selectedSubject == null) return;
 
@@ -901,8 +905,6 @@ class _ModelTestViewState extends State<ModelTestView> {
     await _loadTotalQuestionsCount();
 
     try {
-      // এখানে exam_schedules বা আপনার মডেল টেস্ট টেবিল থেকে ডেটা ফেচ করা হচ্ছে
-      // যেখানে ইউজার কর্তৃক তৈরিকৃত বা শিডিউল করা মডেল টেস্টগুলো থাকবে
       final response = await supabase
           .from('exam_schedules')
           .select()
@@ -921,7 +923,6 @@ class _ModelTestViewState extends State<ModelTestView> {
             DateTime endDt = DateTime.parse(endTimeStr);
             if (endDt.isBefore(now) && isActiveFromDb) {
               isActiveFromDb = false;
-              // ডেটাবেজে মেয়াদ শেষ হলে এটি আপডেট করে দেওয়া হচ্ছে
               await supabase
                   .from('exam_schedules')
                   .update({'is_active': false})
@@ -930,13 +931,14 @@ class _ModelTestViewState extends State<ModelTestView> {
           }
 
           loadedTests.add({
+            'id': schedule['id'],
             'exam_title': schedule['exam_title'] ?? 'নামবিহীন মডেল টেস্ট',
             'start_time': schedule['start_time'],
             'end_time': endTimeStr,
             'is_active': isActiveFromDb,
-            'question_count':
-                schedule['question_count'] ??
-                0, // যদি টেবিলে কোয়েশ্চেন কাউন্ট থাকে
+            'question_count': schedule['question_count'] ?? 0,
+            'question_creator_id': schedule['question_creator_id'],
+            'question_creator_name': schedule['question_creator_name'],
           });
         }
       }
@@ -952,7 +954,147 @@ class _ModelTestViewState extends State<ModelTestView> {
     }
   }
 
-  Future<void> _setExamSchedule(String testTitle) async {
+  // পরীক্ষার নাম এডিট করার ফাংশন
+  Future<void> _editExamTitle(String oldTitle, dynamic examId) async {
+    final TextEditingController titleController = TextEditingController(
+      text: oldTitle,
+    );
+
+    await Get.dialog(
+      AlertDialog(
+        title: const Text(
+          'পরীক্ষার নাম এডিট করুন',
+          style: TextStyle(fontSize: 16),
+        ),
+        content: TextField(
+          controller: titleController,
+          decoration: const InputDecoration(
+            labelText: 'নতুন নাম',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Get.back(), child: const Text('বাতিল')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.indigo.shade800,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              String newTitle = titleController.text.trim();
+              if (newTitle.isEmpty) {
+                Get.snackbar(
+                  "ত্রুটি",
+                  "নাম খালি রাখা যাবে না।",
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+                return;
+              }
+
+              try {
+                await supabase
+                    .from('exam_schedules')
+                    .update({'exam_title': newTitle})
+                    .eq('id', examId);
+
+                Get.back();
+                Get.snackbar(
+                  "সফল",
+                  "পরীক্ষার নাম সফলভাবে আপডেট করা হয়েছে।",
+                  backgroundColor: Colors.green,
+                  colorText: Colors.white,
+                );
+                _loadModelTests();
+              } catch (e) {
+                debugPrint("Error updating exam title: $e");
+                Get.snackbar(
+                  "ত্রুটি",
+                  "নাম আপডেট করতে সমস্যা হয়েছে: $e",
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+              }
+            },
+            child: const Text('সংরক্ষণ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ডিলেট লজিক ফাংশন
+  Future<void> _deleteExamCard(Map<String, dynamic> test) async {
+    String testTitle = test['exam_title'];
+    dynamic examId = test['id'];
+    dynamic creatorId = test['question_creator_id'];
+    String? creatorName = test['question_creator_name'];
+
+    String? currentUserIdStr = widget.currentUserId?.toString().trim();
+    String? creatorIdStr = creatorId?.toString().trim();
+
+    bool isCreator = false;
+
+    if (currentUserIdStr != null &&
+        creatorIdStr != null &&
+        currentUserIdStr == creatorIdStr) {
+      isCreator = true;
+    } else if (creatorIdStr == null || creatorIdStr.isEmpty) {
+      isCreator = true;
+    }
+
+    if (isCreator) {
+      Get.defaultDialog(
+        title: "পরীক্ষা ডিলিট",
+        middleText: "$testTitle পরীক্ষাটি কি আপনি সত্যিই ডিলিট করতে চান?",
+        textConfirm: "হ্যাঁ, ডিলিট",
+        textCancel: "না",
+        confirmTextColor: Colors.white,
+        buttonColor: Colors.red,
+        onConfirm: () async {
+          Get.back();
+          try {
+            await supabase.from('exam_schedules').delete().eq('id', examId);
+
+            Get.snackbar(
+              "সফল",
+              "পরীক্ষাটি সফলভাবে ডিলিট করা হয়েছে।",
+              backgroundColor: Colors.green,
+              colorText: Colors.white,
+            );
+            _loadModelTests();
+          } catch (e) {
+            debugPrint("Error deleting exam: $e");
+            Get.snackbar(
+              "ত্রুটি",
+              "পরীক্ষা ডিলিট করতে সমস্যা হয়েছে: $e",
+              backgroundColor: Colors.red,
+              colorText: Colors.white,
+            );
+          }
+        },
+      );
+    } else {
+      String nameToShow =
+          (creatorName != null && creatorName.toString().isNotEmpty)
+          ? creatorName
+          : 'অন্য কোনো শিক্ষক';
+
+      Get.defaultDialog(
+        title: "ডিলিট করার অনুমতি নেই",
+        middleText:
+            "এই পরীক্ষাটি আপনি তৈরি করেননি। এটি তৈরি করেছেন: $nameToShow। পরীক্ষাটি ডিলিট করতে চাইলে উনার সাথে যোগাযোগ করুন।",
+        textConfirm: "ঠিক আছে",
+        confirmTextColor: Colors.white,
+        buttonColor: Colors.indigo.shade800,
+        onConfirm: () {
+          Get.back();
+        },
+      );
+    }
+  }
+
+  Future<void> _setExamSchedule(String testTitle, dynamic examId) async {
     DateTime? startDate;
     TimeOfDay? startTime;
 
@@ -1133,10 +1275,7 @@ class _ModelTestViewState extends State<ModelTestView> {
                       'end_time': endDateTime.toIso8601String(),
                       'is_active': true,
                     })
-                    .eq('academy_id', widget.academyId)
-                    .eq('class_name', selectedClass!)
-                    .eq('subject_name', selectedSubject!)
-                    .eq('exam_title', testTitle);
+                    .eq('id', examId);
 
                 Get.back();
                 Get.snackbar(
@@ -1158,7 +1297,7 @@ class _ModelTestViewState extends State<ModelTestView> {
     );
   }
 
-  Future<void> _cancelExam(String testTitle) async {
+  Future<void> _cancelExam(dynamic examId, String testTitle) async {
     Get.defaultDialog(
       title: "পরীক্ষা বাতিল",
       middleText: "$testTitle পরীক্ষাটি কি আপনি সত্যিই বাতিল করতে চান?",
@@ -1172,10 +1311,7 @@ class _ModelTestViewState extends State<ModelTestView> {
           await supabase
               .from('exam_schedules')
               .update({'is_active': false})
-              .eq('academy_id', widget.academyId)
-              .eq('class_name', selectedClass!)
-              .eq('subject_name', selectedSubject!)
-              .eq('exam_title', testTitle);
+              .eq('id', examId);
 
           Get.snackbar(
             "সফল",
@@ -1384,99 +1520,138 @@ class _ModelTestViewState extends State<ModelTestView> {
                                         child: CircularProgressIndicator(),
                                       )
                                     : ListView.builder(
-                                        // এখানে index 0 এ "সকল প্রশ্ন দেখুন" কার্ড এবং বাকিগুলোতে মডেল টেস্টগুলো দেখানো হচ্ছে
                                         itemCount: modelTests.length + 1,
                                         itemBuilder: (context, index) {
                                           if (index == 0) {
-                                            return Card(
-                                              elevation: 2,
+                                            // [SMART DESIGN]: 'সকল প্রশ্ন' কার্ড
+                                            return Container(
                                               margin: const EdgeInsets.only(
-                                                bottom: 12,
+                                                bottom: 14,
                                               ),
-                                              color: Colors.indigo.shade50,
-                                              shape: RoundedRectangleBorder(
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
                                                 borderRadius:
-                                                    BorderRadius.circular(10),
-                                                side: BorderSide(
-                                                  color: Colors.indigo.shade200,
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: Colors.indigo.shade100,
+                                                  width: 1.5,
                                                 ),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.indigo
+                                                        .withOpacity(0.04),
+                                                    blurRadius: 6,
+                                                    offset: const Offset(0, 2),
+                                                  ),
+                                                ],
                                               ),
                                               child: Padding(
-                                                padding: const EdgeInsets.all(
-                                                  12.0,
-                                                ),
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 16,
+                                                      vertical: 14,
+                                                    ),
+                                                child: Row(
                                                   children: [
-                                                    Text(
-                                                      '📚 $selectedSubject - সকল প্রশ্ন',
-                                                      style: TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize: 16,
-                                                        color: Colors
-                                                            .indigo
-                                                            .shade900,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 4),
-                                                    Text(
-                                                      'এই বিষয়ের মোট প্রশ্ন: $totalSubjectQuestions টি',
-                                                      style: TextStyle(
-                                                        fontSize: 13,
-                                                        color: Colors
-                                                            .indigo
-                                                            .shade700,
-                                                      ),
-                                                    ),
-                                                    const SizedBox(height: 12),
-                                                    Row(
-                                                      mainAxisAlignment:
-                                                          MainAxisAlignment.end,
-                                                      children: [
-                                                        ElevatedButton(
-                                                          style: ElevatedButton.styleFrom(
-                                                            backgroundColor:
-                                                                Colors
-                                                                    .indigo
-                                                                    .shade800,
-                                                            foregroundColor:
-                                                                Colors.white,
-                                                            elevation: 0,
-                                                            shape: RoundedRectangleBorder(
-                                                              borderRadius:
-                                                                  BorderRadius.circular(
-                                                                    6,
-                                                                  ),
-                                                            ),
-                                                            padding:
-                                                                const EdgeInsets.symmetric(
-                                                                  horizontal:
-                                                                      12,
-                                                                  vertical: 0,
-                                                                ),
+                                                    Container(
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                            10,
                                                           ),
-                                                          onPressed: () {
-                                                            Get.to(
-                                                              () => AllSubjectQuestionsView(
-                                                                academyId: widget
-                                                                    .academyId,
-                                                                className:
-                                                                    selectedClass!,
-                                                                subjectName:
-                                                                    selectedSubject!,
-                                                              ),
-                                                            );
-                                                          },
-                                                          child: const Text(
+                                                      decoration: BoxDecoration(
+                                                        color: Colors
+                                                            .indigo
+                                                            .shade50,
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              10,
+                                                            ),
+                                                      ),
+                                                      child: Icon(
+                                                        Icons.library_books,
+                                                        color: Colors
+                                                            .indigo
+                                                            .shade800,
+                                                        size: 22,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 14),
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Text(
                                                             'সকল প্রশ্ন দেখুন',
                                                             style: TextStyle(
-                                                              fontSize: 12,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              fontSize: 15,
+                                                              color: Colors
+                                                                  .grey
+                                                                  .shade900,
                                                             ),
                                                           ),
+                                                          const SizedBox(
+                                                            height: 2,
+                                                          ),
+                                                          Text(
+                                                            'মোট প্রশ্ন: $totalSubjectQuestions টি',
+                                                            style: TextStyle(
+                                                              fontSize: 12,
+                                                              color: Colors
+                                                                  .grey
+                                                                  .shade600,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w500,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    ElevatedButton(
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor: Colors
+                                                            .indigo
+                                                            .shade800,
+                                                        foregroundColor:
+                                                            Colors.white,
+                                                        elevation: 0,
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                                8,
+                                                              ),
                                                         ),
-                                                      ],
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 14,
+                                                              vertical: 10,
+                                                            ),
+                                                      ),
+                                                      onPressed: () {
+                                                        Get.to(
+                                                          () => AllSubjectQuestionsView(
+                                                            academyId: widget
+                                                                .academyId,
+                                                            className:
+                                                                selectedClass!,
+                                                            subjectName:
+                                                                selectedSubject!,
+                                                          ),
+                                                        );
+                                                      },
+                                                      child: const Text(
+                                                        'ভিউ করুন',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                      ),
                                                     ),
                                                   ],
                                                 ),
@@ -1486,6 +1661,9 @@ class _ModelTestViewState extends State<ModelTestView> {
 
                                           var test = modelTests[index - 1];
                                           String testTitle = test['exam_title'];
+                                          String? creatorName =
+                                              test['question_creator_name'];
+                                          dynamic examId = test['id'];
                                           int questionCount =
                                               test['question_count'];
 
@@ -1506,28 +1684,37 @@ class _ModelTestViewState extends State<ModelTestView> {
                                               endTimeStr,
                                             );
                                             formattedTimeText =
-                                                'শুরু: ${DateFormat('dd MMM, hh:mm a').format(startDt)}\nশেষ: ${DateFormat('dd MMM, hh:mm a').format(endDt)}';
+                                                'শুরু: ${DateFormat('dd MMM, hh:mm a').format(startDt)}  •  শেষ: ${DateFormat('dd MMM, hh:mm a').format(endDt)}';
                                           }
 
                                           int selectedBtnIndex =
                                               _selectedButtonIndices[testTitle] ??
                                               -1;
 
-                                          return Card(
-                                            elevation: 1,
+                                          // [SMART DESIGN]: মডেল টেস্ট কার্ড (আপনার চাহিদা অনুযায়ী ترتيب করা হয়েছে)
+                                          return Container(
                                             margin: const EdgeInsets.symmetric(
                                               vertical: 6,
                                             ),
-                                            shape: RoundedRectangleBorder(
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
                                               borderRadius:
-                                                  BorderRadius.circular(10),
-                                              side: BorderSide(
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
                                                 color: Colors.grey.shade200,
                                               ),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black
+                                                      .withOpacity(0.02),
+                                                  blurRadius: 4,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ],
                                             ),
                                             child: Padding(
                                               padding: const EdgeInsets.all(
-                                                12.0,
+                                                14.0,
                                               ),
                                               child: Column(
                                                 crossAxisAlignment:
@@ -1539,170 +1726,238 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                             .spaceBetween,
                                                     children: [
                                                       Expanded(
-                                                        child: Text(
-                                                          testTitle,
-                                                          style:
-                                                              const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                fontSize: 16,
+                                                        child: Row(
+                                                          children: [
+                                                            Expanded(
+                                                              child: Text(
+                                                                testTitle,
+                                                                style: const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  fontSize: 15,
+                                                                ),
                                                               ),
+                                                            ),
+                                                            InkWell(
+                                                              onTap: () =>
+                                                                  _editExamTitle(
+                                                                    testTitle,
+                                                                    examId,
+                                                                  ),
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    4,
+                                                                  ),
+                                                              child: Padding(
+                                                                padding:
+                                                                    const EdgeInsets.all(
+                                                                      4.0,
+                                                                    ),
+                                                                child: Icon(
+                                                                  Icons.edit,
+                                                                  size: 16,
+                                                                  color: Colors
+                                                                      .orange
+                                                                      .shade800,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
                                                         ),
                                                       ),
+                                                      const SizedBox(width: 8),
                                                       Container(
                                                         padding:
                                                             const EdgeInsets.symmetric(
                                                               horizontal: 8,
-                                                              vertical: 2,
+                                                              vertical: 3,
                                                             ),
                                                         decoration: BoxDecoration(
                                                           color: isActive
                                                               ? Colors
                                                                     .green
-                                                                    .shade100
+                                                                    .shade50
                                                               : Colors
-                                                                    .red
+                                                                    .grey
                                                                     .shade100,
                                                           borderRadius:
                                                               BorderRadius.circular(
                                                                 6,
                                                               ),
+                                                          border: Border.all(
+                                                            color: isActive
+                                                                ? Colors
+                                                                      .green
+                                                                      .shade200
+                                                                : Colors
+                                                                      .grey
+                                                                      .shade300,
+                                                          ),
                                                         ),
                                                         child: Text(
                                                           isActive
                                                               ? 'Active'
-                                                              : 'টাইম শেষ / ডিঅ্যাক্টিভ',
+                                                              : 'Inactive',
                                                           style: TextStyle(
                                                             fontSize: 10,
                                                             fontWeight:
-                                                                FontWeight.bold,
+                                                                FontWeight.w600,
                                                             color: isActive
                                                                 ? Colors
                                                                       .green
-                                                                      .shade900
+                                                                      .shade800
                                                                 : Colors
-                                                                      .red
-                                                                      .shade900,
+                                                                      .grey
+                                                                      .shade700,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 6),
+                                                  // ১. প্রশ্ন সংখ্যা
+                                                  Text(
+                                                    'প্রশ্ন সংখ্যা: $questionCount টি',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color:
+                                                          Colors.grey.shade700,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  // ২. টাইম ও ডেট
+                                                  Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.schedule,
+                                                        size: 14,
+                                                        color: Colors
+                                                            .grey
+                                                            .shade500,
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      Expanded(
+                                                        child: Text(
+                                                          formattedTimeText,
+                                                          style: TextStyle(
+                                                            fontSize: 11.5,
+                                                            color: Colors
+                                                                .grey
+                                                                .shade700,
+                                                            fontWeight:
+                                                                FontWeight.w500,
                                                           ),
                                                         ),
                                                       ),
                                                     ],
                                                   ),
                                                   const SizedBox(height: 4),
-                                                  Text(
-                                                    'প্রশ্ন সংখ্যা: $questionCount টি',
-                                                    style: TextStyle(
-                                                      fontSize: 13,
-                                                      color:
-                                                          Colors.grey.shade700,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 6),
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.all(8),
-                                                    decoration: BoxDecoration(
-                                                      color: isActive
-                                                          ? Colors.green.shade50
-                                                          : Colors
-                                                                .orange
-                                                                .shade50,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            6,
-                                                          ),
-                                                      border: Border.all(
-                                                        color: isActive
-                                                            ? Colors
-                                                                  .green
-                                                                  .shade200
-                                                            : Colors
-                                                                  .orange
-                                                                  .shade200,
+                                                  // ৩. স্যারের নাম
+                                                  Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.person_outline,
+                                                        size: 14,
+                                                        color: Colors
+                                                            .grey
+                                                            .shade500,
                                                       ),
-                                                    ),
-                                                    child: Row(
-                                                      children: [
-                                                        Icon(
-                                                          Icons.schedule,
-                                                          size: 16,
-                                                          color: isActive
-                                                              ? Colors
-                                                                    .green
-                                                                    .shade700
-                                                              : Colors
-                                                                    .orange
-                                                                    .shade700,
+                                                      const SizedBox(width: 6),
+                                                      Text(
+                                                        'প্রণেতা (স্যার): ${creatorName ?? 'অজানা'}',
+                                                        style: TextStyle(
+                                                          fontSize: 11.5,
+                                                          color: Colors
+                                                              .grey
+                                                              .shade700,
+                                                          fontWeight:
+                                                              FontWeight.w500,
                                                         ),
-                                                        const SizedBox(
-                                                          width: 8,
-                                                        ),
-                                                        Expanded(
-                                                          child: Text(
-                                                            formattedTimeText,
-                                                            style: TextStyle(
-                                                              fontSize: 12,
-                                                              color: isActive
-                                                                  ? Colors
-                                                                        .green
-                                                                        .shade900
-                                                                  : Colors
-                                                                        .orange
-                                                                        .shade900,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w500,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
+                                                      ),
+                                                    ],
                                                   ),
                                                   const SizedBox(height: 12),
+                                                  const Divider(
+                                                    height: 1,
+                                                    color: Color(0xFFF1F5F9),
+                                                  ),
+                                                  const SizedBox(height: 10),
                                                   Row(
                                                     mainAxisAlignment:
                                                         MainAxisAlignment.end,
                                                     children: [
-                                                      if (isActive)
-                                                        OutlinedButton(
-                                                          style: OutlinedButton.styleFrom(
+                                                      TextButton.icon(
+                                                        style: TextButton.styleFrom(
+                                                          foregroundColor:
+                                                              Colors
+                                                                  .red
+                                                                  .shade700,
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 0,
+                                                              ),
+                                                          minimumSize:
+                                                              const Size(0, 32),
+                                                        ),
+                                                        onPressed: () {
+                                                          _deleteExamCard(test);
+                                                        },
+                                                        icon: const Icon(
+                                                          Icons.delete_outline,
+                                                          size: 15,
+                                                        ),
+                                                        label: const Text(
+                                                          'ডিলিট',
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      if (isActive) ...[
+                                                        const SizedBox(
+                                                          width: 4,
+                                                        ),
+                                                        TextButton.icon(
+                                                          style: TextButton.styleFrom(
                                                             foregroundColor:
-                                                                Colors.red,
-                                                            side:
-                                                                const BorderSide(
-                                                                  color: Colors
-                                                                      .red,
-                                                                ),
-                                                            shape: RoundedRectangleBorder(
-                                                              borderRadius:
-                                                                  BorderRadius.circular(
-                                                                    6,
-                                                                  ),
-                                                            ),
+                                                                Colors
+                                                                    .orange
+                                                                    .shade800,
                                                             padding:
                                                                 const EdgeInsets.symmetric(
-                                                                  horizontal:
-                                                                      10,
+                                                                  horizontal: 8,
                                                                   vertical: 0,
+                                                                ),
+                                                            minimumSize:
+                                                                const Size(
+                                                                  0,
+                                                                  32,
                                                                 ),
                                                           ),
                                                           onPressed: () {
                                                             _cancelExam(
+                                                              examId,
                                                               testTitle,
                                                             );
                                                           },
-                                                          child: const Text(
+                                                          icon: const Icon(
+                                                            Icons
+                                                                .stop_circle_outlined,
+                                                            size: 15,
+                                                          ),
+                                                          label: const Text(
                                                             'ক্যান্সেল',
                                                             style: TextStyle(
                                                               fontSize: 12,
                                                             ),
                                                           ),
                                                         ),
-                                                      if (isActive)
-                                                        const SizedBox(
-                                                          width: 6,
-                                                        ),
+                                                      ],
+                                                      const SizedBox(width: 8),
                                                       ElevatedButton(
                                                         style: ElevatedButton.styleFrom(
                                                           backgroundColor:
@@ -1720,14 +1975,16 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                           shape: RoundedRectangleBorder(
                                                             borderRadius:
                                                                 BorderRadius.circular(
-                                                                  6,
+                                                                  8,
                                                                 ),
                                                           ),
                                                           padding:
                                                               const EdgeInsets.symmetric(
-                                                                horizontal: 10,
-                                                                vertical: 0,
+                                                                horizontal: 12,
+                                                                vertical: 8,
                                                               ),
+                                                          minimumSize:
+                                                              const Size(0, 32),
                                                         ),
                                                         onPressed: () {
                                                           setState(() {
@@ -1736,12 +1993,15 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                           });
                                                           _setExamSchedule(
                                                             testTitle,
+                                                            examId,
                                                           );
                                                         },
                                                         child: const Text(
-                                                          'পরীক্ষা শুরু',
+                                                          'সময় নির্ধারণ',
                                                           style: TextStyle(
                                                             fontSize: 12,
+                                                            fontWeight:
+                                                                FontWeight.w600,
                                                           ),
                                                         ),
                                                       ),
@@ -1774,6 +2034,8 @@ class _ModelTestViewState extends State<ModelTestView> {
                         className: selectedClass!,
                         subjectName: selectedSubject!,
                         totalSubjectQuestions: totalSubjectQuestions,
+                        currentUserId: widget.currentUserId,
+                        currentUserName: widget.currentUserName,
                       ),
                     )?.then((_) {
                       _loadModelTests();

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:academy_management/views/dashboard/Model_Test_View.dart';
 import 'package:academy_management/views/dashboard/TeacherRoutineView.dart';
 import 'package:academy_management/views/dashboard/question_create_view.dart';
 import 'package:academy_management/views/dashboard/student_attendance_page_view.dart';
@@ -890,19 +891,29 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           },
                         ),
                         _buildMenuCard(
-                          title: 'পরিক্ষা তৈরি',
-                          icon: Icons.person,
+                          title: 'পরীক্ষা তৈরি',
+                          icon: Icons.assignment_add,
                           color: Colors.teal.shade50,
                           iconColor: Colors.teal.shade700,
-                          onTap: () async {
+                          onTap: () {
+                            // 👈 এখানে একাডেমি আইডি এবং শিক্ষকের আইডি উভয়ই চেক করা হচ্ছে
                             if (academyId.isNotEmpty && teacherId.isNotEmpty) {
-                              await Get.to(
-                                () => TeacherProfileView(
-                                  teacherId: teacherId,
+                              Get.to(
+                                () => ModelTestView(
                                   academyId: academyId,
+                                  currentUserId: teacherId,
+                                  currentUserName: teacherName.isNotEmpty
+                                      ? teacherName
+                                      : widget.userName,
                                 ),
                               );
-                              _checkAuthAndFetchData();
+                            } else {
+                              Get.snackbar(
+                                "অপেক্ষা করুন",
+                                "শিক্ষকের তথ্য লোড হচ্ছে, অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন।",
+                                backgroundColor: Colors.orange,
+                                colorText: Colors.white,
+                              );
                             }
                           },
                         ),
