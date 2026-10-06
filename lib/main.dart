@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart'; // kIsWeb ব্যবহারের জন্য এটি প্রয়োজন
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,8 +12,22 @@ import 'views/dashboard/teacher_home_view.dart'; // শিক্ষক ভিউ
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ১. ফায়ারবেস ইনিশিয়ালাইজ করুন
-  await Firebase.initializeApp();
+  // ১. ফায়ারবেস ইনিশিয়ালাইজেশন (অ্যান্ড্রয়েড এবং ওয়েবের জন্য আলাদা কনফিগারেশন)
+  if (kIsWeb) {
+    await Firebase.initializeApp(
+      options: const FirebaseOptions(
+        apiKey: "AIzaSyCzBC-yibWgIHzy5VTrV6p0qnRB-ExE18",
+        authDomain: "academy-manager-65b2a.firebaseapp.com",
+        projectId: "academy-manager-65b2a",
+        storageBucket: "academy-manager-65b2a.firebasestorage.app",
+        messagingSenderId: "291092236875",
+        appId: "1:291092236875:web:31521e88aa4125ad705bce",
+        measurementId: "G-JJK4PTEWM",
+      ),
+    );
+  } else {
+    await Firebase.initializeApp(); // অ্যান্ড্রয়েডের জন্য
+  }
 
   // সুপাবেস ইনিশিয়ালাইজেশন
   await Supabase.initialize(

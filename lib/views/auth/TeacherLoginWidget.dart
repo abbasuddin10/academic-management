@@ -19,6 +19,7 @@ class _TeacherLoginWidgetState extends State<TeacherLoginWidget> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   bool isTeacherLoading = false;
+  bool _obscurePassword = true; // পাসওয়ার্ড হাইড বা শো করার স্টেট
 
   Future<void> loginUser() async {
     if (!_teacherFormKey.currentState!.validate()) return;
@@ -249,10 +250,21 @@ class _TeacherLoginWidgetState extends State<TeacherLoginWidget> {
           const SizedBox(height: 15),
           TextFormField(
             controller: passwordController,
-            obscureText: true,
+            obscureText: _obscurePassword,
             decoration: InputDecoration(
               labelText: 'পাসওয়ার্ড',
               prefixIcon: const Icon(Icons.lock_outline, color: Colors.teal),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.teal,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

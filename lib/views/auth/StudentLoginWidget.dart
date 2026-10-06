@@ -19,6 +19,7 @@ class _StudentLoginWidgetState extends State<StudentLoginWidget> {
   final TextEditingController rollController = TextEditingController();
   final TextEditingController pinController = TextEditingController();
   bool isStudentLoading = false;
+  bool _obscurePassword = true; // পাসওয়ার্ড হাইড বা শো করার স্টেট
 
   List<Map<String, dynamic>> academyList = [];
   bool isAcademyLoading = true;
@@ -511,13 +512,24 @@ class _StudentLoginWidgetState extends State<StudentLoginWidget> {
           ),
           const SizedBox(height: 15),
 
-          // পিন / পাসওয়ার্ড
+          // পিন / পাসওয়ার্ড (এখানে পাসওয়ার্ড শো/হাইড করার আইকন যুক্ত করা হয়েছে)
           TextFormField(
             controller: pinController,
-            obscureText: true,
+            obscureText: _obscurePassword,
             decoration: InputDecoration(
               labelText: 'পাসওয়ার্ড / পিন',
               prefixIcon: const Icon(Icons.lock, color: Colors.indigo),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                  color: Colors.indigo,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

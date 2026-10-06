@@ -1,4 +1,5 @@
 import 'package:academy_management/views/admin/teachers_view.dart';
+import 'package:academy_management/views/dashboard/Model_Test_View.dart';
 import 'package:academy_management/views/dashboard/OtherIncomeExpenseView.dart';
 import 'package:academy_management/views/dashboard/StudentIdCardVie.dart';
 import 'package:academy_management/views/dashboard/academy_teachers_salary_view.dart';
@@ -11,6 +12,7 @@ import 'package:academy_management/views/dashboard/question_create_view.dart';
 import 'package:academy_management/views/dashboard/student_attendance_page_view.dart';
 import 'package:academy_management/views/dashboard/student_fee_collection_view.dart';
 import 'package:academy_management/views/dashboard/teacher_home_view.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -90,12 +92,20 @@ class _SharedDashboardState extends State<SharedDashboard> {
   }
 
   Future<bool> _checkInternet() async {
+    // ফ্লাটার ওয়েব বা ব্রাউজারের ক্ষেত্রে ডার্ট আইও-এর ইন্টারনেট লুকআপ কাজ করে না,
+    // তাই ওয়েবের ক্ষেত্রে সরাসরি true রিটার্ন করা নিরাপদ।
+    if (kIsWeb) {
+      return true;
+    }
+
     try {
       final result = await InternetAddress.lookup('google.com');
       if (result.isNotEmpty && result[0].rawAddress.isNotEmpty) {
         return true;
       }
     } on SocketException catch (_) {
+      return false;
+    } catch (_) {
       return false;
     }
     return false;
@@ -1265,6 +1275,30 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   color: Colors.purple.shade50,
                   iconColor: Colors.purple.shade800,
                   onTap: () {},
+                ), // মডেল টেস্ট কার্ড (সুপার অ্যাডমিন ও শিক্ষক সবার জন্য)
+                _buildDashboardCard(
+                  icon: Icons.assignment_turned_in_rounded,
+                  title: 'মডেল টেস্ট',
+                  subtitle: 'মডেল টেস্ট পরিচালনা ও খাতা মূল্যায়ন',
+                  color: Colors.brown.shade50,
+                  iconColor: Colors.brown.shade800,
+                  onTap: () async {
+                    final fetchedAcademyId = await _getAcademyIdSafely();
+                    if (fetchedAcademyId != null) {
+                      // মডেল টেস্ট পেজে রাউট করা হলো
+                      await Get.to(
+                        () => ModelTestView(academyId: fetchedAcademyId),
+                      );
+                      _loadStatsInitial();
+                    } else {
+                      Get.snackbar(
+                        "ত্রুটি",
+                        "একাডেমি আইডি পাওয়া যায়নি!",
+                        backgroundColor: Colors.red,
+                        colorText: Colors.white,
+                      );
+                    }
+                  },
                 ),
                 if (isSuperAdmin)
                   _buildDashboardCard(

@@ -2,6 +2,7 @@ import 'package:academy_management/views/auth/login_view.dart';
 import 'package:academy_management/views/dashboard/student_attendance_view.dart';
 import 'package:academy_management/views/dashboard/student_exam_routine_view.dart';
 import 'package:academy_management/views/dashboard/student_fee_details_view.dart';
+import 'package:academy_management/views/dashboard/student_model_test.dart';
 import 'package:academy_management/views/dashboard/student_teachers_view.dart';
 // আপনার তৈরি করা রুটিন পেজটি ইমপোর্ট করুন (ফাইল পাথ ঠিক না থাকলে আপনার প্রজেক্ট অনুযায়ী অ্যাডজাস্ট করে নেবেন)
 import 'package:academy_management/views/dashboard/student_routine_view.dart';
@@ -847,9 +848,30 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            Expanded(child: Container()),
+                            // এখানে খালি কন্টেইনারের বদলে নতুন কার্ড যুক্ত করা হলো
+                            Expanded(
+                              child: _buildFeatureCard(
+                                title: 'মডেল টেস্ট',
+                                icon: Icons.quiz_rounded,
+                                color: Colors.pink,
+                                onTap: () {
+                                  String academyId =
+                                      studentDetails?['academy_id'] ?? '';
+                                  String studentId =
+                                      studentDetails?['id']?.toString() ?? '';
+                                  Get.to(
+                                    () => StudentModelTestView(
+                                      academyId: academyId,
+                                      className: widget.className,
+                                      studentId: studentId,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                           ],
                         ),
+
                         const SizedBox(height: 25),
 
                         // ৩. সর্বশেষ নোটিশসমূহ সেকশন
@@ -1016,7 +1038,8 @@ class _StudentHomeViewState extends State<StudentHomeView> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+        height: 115, // সব কার্ডের নির্দিষ্ট এবং সমান সাইজ বজায় রাখার জন্য
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -1032,18 +1055,20 @@ class _StudentHomeViewState extends State<StudentHomeView> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 28, color: color),
+              child: Icon(icon, size: 24, color: color),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 15,
+                fontSize: 13,
                 fontWeight: FontWeight.bold,
                 color: Colors.black87,
               ),

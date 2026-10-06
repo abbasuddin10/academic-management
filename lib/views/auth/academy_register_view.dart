@@ -17,6 +17,7 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
   final TextEditingController adminNameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  bool _obscurePassword = true; // পাসওয়ার্ড হাইড বা শো করার স্টেট
 
   // প্রতিষ্ঠান তাদের ইচ্ছামমতো ক্লাস নাম ও ক্রম যোগ করার জন্য কন্ট্রোলার লিস্ট
   final List<TextEditingController> classControllers = [
@@ -100,7 +101,7 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
       );
 
       if (authResponse.user != null) {
-        // ২. academies টেবিলে নতুন একাডেমির তথ্য ও ঠিকানা সেভ করা[cite: 7]
+        // ২. academies টেবিলে নতুন একাডেমির তথ্য ও ঠিকানা সেভ করা[cite: 3]
         final academyResponse = await supabase
             .from('academies')
             .insert({
@@ -114,7 +115,7 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
 
         String academyId = academyResponse['id'];
 
-        // ৩. users টেবিলে প্রধান শিক্ষকের তথ্য ও role হিসেবে 'super_admin' সেভ করা[cite: 7]
+        // ৩. users টেবিলে প্রধান শিক্ষকের তথ্য ও role হিসেবে 'super_admin' সেভ করা[cite: 3]
         await supabase.from('users').insert({
           'academy_id': academyId,
           'email': emailController.text.trim(),
@@ -122,7 +123,7 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
           'role': 'super_admin',
         });
 
-        // ৪. ক্লাসের তালিকা এবং সিরিয়াল সুপাবেসের 'classes' টেবিলে সেভ করা[cite: 7]
+        // ৪. ক্লাসের তালিকা এবং সিরিয়াল সুপাবেসের 'classes' টেবিলে সেভ করা[cite: 3]
         for (int i = 0; i < validClasses.length; i++) {
           await supabase.from('classes').insert({
             'academy_id': academyId,
@@ -133,7 +134,7 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
 
         Get.snackbar(
           "সফল হয়েছে!",
-          "একাডেমি এবং ক্লাসের তালিকা সফলভাবে রেজিস্টার্ড হয়েছে। এখন লগইন করুন।[cite: 7]",
+          "একাডেমি এবং ক্লাসের তালিকা সফলভাবে রেজিস্টার্ড হয়েছে। এখন লগইন করুন।",
           backgroundColor: Colors.green,
           colorText: Colors.white,
         );
@@ -240,13 +241,26 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
                   ),
                   const SizedBox(height: 15),
 
-                  // পাসওয়ার্ড
+                  // পাসওয়ার্ড (এখানে পাসওয়ার্ড শো/হাইড করার আইকন যুক্ত করা হয়েছে)
                   TextFormField(
                     controller: passwordController,
-                    obscureText: true,
+                    obscureText: _obscurePassword,
                     decoration: InputDecoration(
                       labelText: 'পাসওয়ার্ড (কমপক্ষে ৬ অক্ষর)',
                       prefixIcon: const Icon(Icons.lock),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: Colors.teal,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
