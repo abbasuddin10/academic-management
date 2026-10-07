@@ -1,4 +1,5 @@
 import 'package:academy_management/views/admin/teachers_view.dart';
+import 'package:academy_management/views/dashboard/Admin_Complaints_View.dart';
 import 'package:academy_management/views/dashboard/Model_Test_View.dart';
 import 'package:academy_management/views/dashboard/OtherIncomeExpenseView.dart';
 import 'package:academy_management/views/dashboard/StudentIdCardVie.dart';
@@ -11,6 +12,7 @@ import 'package:academy_management/views/dashboard/notice_board_view.dart';
 import 'package:academy_management/views/dashboard/question_create_view.dart';
 import 'package:academy_management/views/dashboard/student_attendance_page_view.dart';
 import 'package:academy_management/views/dashboard/student_fee_collection_view.dart';
+import 'package:academy_management/views/dashboard/syllabus_view.dart';
 import 'package:academy_management/views/dashboard/teacher_home_view.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -769,7 +771,81 @@ class _SharedDashboardState extends State<SharedDashboard> {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          // অ্যাপবারের নোটিফিকেশন আইকন (সিন/আনসিন ব্যাজ সহ - শিক্ষক বা এডমিন উভয়ের জন্য)
+          // অভিযোগ দেখার আইকন (এটি শুধুমাত্র সুপার অ্যাডমিন দেখতে পাবে)[cite: 9]
+          // অভিযোগ দেখার আইকন (এটি শুধুমাত্র সুপার অ্যাডমিন দেখতে পাবে)
+          if (isSuperAdmin)
+            FutureBuilder<int>(
+              future: () async {
+                final academyId = await _getAcademyIdSafely();
+                if (academyId == null) return 0;
+
+                // পেন্ডিং অভিযোগগুলোর সংখ্যা বের করার কোড
+                final response = await Supabase.instance.client
+                    .from('complaints')
+                    .select('id')
+                    .eq('academy_id', academyId)
+                    .eq('status', 'Pending');
+
+                return (response as List).length;
+              }(),
+              builder: (context, snapshot) {
+                int pendingCount = snapshot.data ?? 0;
+
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.feedback, color: Colors.white),
+                      tooltip: 'অভিযোগসমূহ',
+                      onPressed: () async {
+                        final academyId = await _getAcademyIdSafely();
+                        if (academyId != null) {
+                          // প্রতিষ্ঠান আইডি সহ পেজটি কল করা হচ্ছে[cite: 4]
+                          Get.to(
+                            () => AdminComplaintsView(academyId: academyId),
+                          );
+                        } else {
+                          Get.snackbar(
+                            "ত্রুটি",
+                            "একাডেমি আইডি পাওয়া যায়নি!",
+                            backgroundColor: Colors.red,
+                            colorText: Colors.white,
+                          );
+                        }
+                      },
+                    ),
+                    // যদি পেন্ডিং অভিযোগ ১ বা তার বেশি থাকে, তবেই ব্যাজ দেখাবে
+                    if (pendingCount > 0)
+                      Positioned(
+                        right: 6,
+                        top: 6,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            '$pendingCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+
+          // অ্যাপবারের নোটিফিকেশন আইকন (সিন/আনসিন ব্যাজ সহ - শিক্ষক বা এডমিন উভয়ের জন্য)[cite: 9]
           Stack(
             alignment: Alignment.center,
             children: [
@@ -824,6 +900,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
           ),
         ],
       ),
+
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -873,15 +950,64 @@ class _SharedDashboardState extends State<SharedDashboard> {
               onTap: () => Navigator.pop(context),
             ),
             const Divider(),
-            // সাইড ড্রয়ারে নতুন বছরের আপডেট বাটন যুক্ত করা হয়েছে
+            // সাইড ড্রয়ারে নতুন বছরের আপডেট অপশন
             ListTile(
               leading: const Icon(Icons.update, color: Colors.teal),
-              title: const Text('নতুন বছরে আপডেট (Year Transition)'),
+              title: const Text('নতুন বছরে আপডেট করুন'),
               onTap: () {
                 Navigator.pop(context);
                 _checkAndShowYearTransitionDialog(context);
               },
             ),
+
+            // ডিভাইডার এবং অন্যান্য প্রয়োজনীয় ফিচারসমূহ
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.settings, color: Colors.teal),
+              title: const Text('সেটিংস'),
+              onTap: () {
+                Navigator.pop(context);
+                // এখানে সেটিংস পেজে রাউট করতে পারেন
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.feedback, color: Colors.teal),
+              title: const Text('ফিডব্যাক'),
+              onTap: () {
+                Navigator.pop(context);
+                // ফিডব্যাক লজিক যুক্ত করতে পারেন
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.privacy_tip, color: Colors.teal),
+              title: const Text('প্রাইভেসি পলিসি'),
+              onTap: () {
+                Navigator.pop(context);
+                // প্রাইভেসি পলিসি লিংক বা পেজ যুক্ত করতে পারেন
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share, color: Colors.teal),
+              title: const Text('অ্যাপ শেয়ার'),
+              onTap: () {
+                Navigator.pop(context);
+                // অ্যাপ শেয়ার লজিক যুক্ত করতে পারেন
+              },
+            ),
+            const Divider(),
+            // একদম নিচে অ্যাপ ভার্সন
+            const ListTile(
+              leading: Icon(Icons.info_outline, color: Colors.grey),
+              title: Text('অ্যাপ ভার্সন', style: TextStyle(color: Colors.grey)),
+              trailing: Text(
+                'v1.0.0',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
@@ -1517,6 +1643,41 @@ class _SharedDashboardState extends State<SharedDashboard> {
                             currentUserId:
                                 currentUserId, // সঠিকভাবে আইডি পাস করা হলো
                             currentUserName: widget.userName,
+                            userRole: widget
+                                .role, // ড্যাশবোর্ডের widget থেকে নাম পাস করা হলো
+                          ),
+                        );
+                        _loadStatsInitial();
+                      } else {
+                        Get.snackbar(
+                          "ত্রুটি",
+                          "একাডেমি আইডি পাওয়া যায়নি!",
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
+                        );
+                      }
+                    },
+                  ),
+                if (isSuperAdmin)
+                  _buildDashboardCard(
+                    icon: Icons.quiz_rounded,
+                    title: 'সিলেবাস তৈরি',
+                    subtitle: 'সিলেবাস তৈরি ও প্রিন্ট',
+                    color: Colors.deepPurple.shade50,
+                    iconColor: Colors.teal.shade800,
+                    onTap: () async {
+                      final fetchedAcademyId = await _getAcademyIdSafely();
+                      final currentUserId =
+                          supabase.auth.currentUser?.id ??
+                          ''; // বর্তমান ইউজারের আইডি বের করা
+
+                      if (fetchedAcademyId != null) {
+                        await Get.to(
+                          () => SyllabusView(
+                            academyId: fetchedAcademyId,
+                            // currentUserId:
+                            //  currentUserId, // সঠিকভাবে আইডি পাস করা হলো
+                            // currentUserName: widget.userName,
                             userRole: widget
                                 .role, // ড্যাশবোর্ডের widget থেকে নাম পাস করা হলো
                           ),

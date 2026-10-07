@@ -430,112 +430,300 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
       ),
 
       drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
+        child: Column(
           children: [
-            UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(color: Colors.teal),
-              accountName: Text(
-                teacherName.isNotEmpty ? teacherName : 'শিক্ষক',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+            // কাস্টম হেডার সেকশন (অ্যাপবারের সাথে মিল রেখে সলিড টিল কালার এবং তথ্য মাঝবরাবর করা হয়েছে)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.only(
+                top: 48,
+                bottom: 20,
+                left: 16,
+                right: 16,
               ),
-              accountEmail: Text(
-                teacherEmail.isNotEmpty ? teacherEmail : '',
-                style: const TextStyle(fontSize: 13),
-              ),
-              currentAccountPicture: ClipOval(
-                child: Container(
-                  color: Colors.white,
-                  child: (photoUrl.isNotEmpty && photoUrl.startsWith('http'))
-                      ? Image.network(
-                          photoUrl,
-                          fit: BoxFit.fill,
-                          width: 80,
-                          height: 80,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return const Center(
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.teal,
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(
+              color:
+                  Colors.teal, // অ্যাপবারের কালারের সাথে হুবহু মিল রাখা হয়েছে
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  CircleAvatar(
+                    radius: 32,
+                    backgroundColor: Colors.white,
+                    child: ClipOval(
+                      child:
+                          (photoUrl.isNotEmpty && photoUrl.startsWith('http'))
+                          ? Image.network(
+                              photoUrl,
+                              fit: BoxFit.fill,
+                              width: 64,
+                              height: 64,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(
+                                  Icons.person,
+                                  size: 32,
+                                  color: Colors.teal,
+                                );
+                              },
+                            )
+                          : const Icon(
                               Icons.person,
-                              size: 40,
+                              size: 32,
                               color: Colors.teal,
-                            );
-                          },
-                        )
-                      : const Icon(Icons.person, size: 40, color: Colors.teal),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    teacherName.isNotEmpty ? teacherName : 'শিক্ষক',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    teacherEmail.isNotEmpty ? teacherEmail : '',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+
+            // ড্রয়ারের মূল মেনু ও অতিরিক্ত অপশনসমূহ
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                children: [
+                  // --- মেইন ফিচারস ---
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: const Icon(Icons.home, color: Colors.teal),
+                    title: const Text(
+                      'হোম',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    onTap: () => Navigator.pop(context),
+                  ),
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: const Icon(Icons.groups, color: Colors.blue),
+                    title: const Text(
+                      'ছাত্রছাত্রী তালিকা',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Get.to(() => const StudentsView(userRole: 'teacher'));
+                    },
+                  ),
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: const Icon(Icons.fact_check, color: Colors.green),
+                    title: const Text(
+                      'ছাত্রছাত্রীদের হাজিরা',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (academyId.isNotEmpty) {
+                        Get.to(
+                          () => StudentAttendancePageView(
+                            academyId: academyId,
+                            teacherName: teacherName.isNotEmpty
+                                ? teacherName
+                                : widget.userName,
+                          ),
+                        );
+                      } else {
+                        Get.snackbar(
+                          "ত্রুটি",
+                          "একাডেমি আইডি পাওয়া যায়নি!",
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
+                        );
+                      }
+                    },
+                  ),
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: const Icon(
+                      Icons.notifications_active,
+                      color: Colors.orange,
+                    ),
+                    title: const Text(
+                      'নোটিশ বোর্ড',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (academyId.isNotEmpty) {
+                        Get.to(
+                          () => NoticeBoardView(
+                            academyId: academyId,
+                            userRole: 'teacher',
+                          ),
+                        );
+                      }
+                    },
+                  ),
+
+                  // --- ডিভাইডার দিয়ে আলাদা সেকশন ---
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: Divider(thickness: 1, color: Colors.grey),
+                  ),
+
+                  // --- এক্সট্রা সেটিংস ও পলিসি সেকশন ---
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: const Icon(
+                      Icons.settings_outlined,
+                      color: Colors.blueGrey,
+                    ),
+                    title: const Text(
+                      'সেটিংস',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Get.snackbar("সেটিংস", "সেটিংস ফিচারটি খুব শীঘ্রই আসছে!");
+                    },
+                  ),
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: const Icon(
+                      Icons.feedback_outlined,
+                      color: Colors.amber,
+                    ),
+                    title: const Text(
+                      'ফিডব্যাক দিন',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Get.snackbar("ফিডব্যাক", "আপনার মতামতের জন্য ধন্যবাদ!");
+                    },
+                  ),
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: const Icon(
+                      Icons.privacy_tip_outlined,
+                      color: Colors.brown,
+                    ),
+                    title: const Text(
+                      'প্রাইভেসি পলিসি',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Get.snackbar(
+                        "প্রাইভেসি পলিসি",
+                        "পলিসি লিংক ব্রাউজারে ওপেন হবে",
+                      );
+                    },
+                  ),
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    leading: const Icon(
+                      Icons.share_outlined,
+                      color: Colors.teal,
+                    ),
+                    title: const Text(
+                      'অ্যাপ শেয়ার করুন',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Get.snackbar(
+                        "শেয়ার",
+                        "প্লে-স্টোর লিংক কপি বা শেয়ার অপশন",
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+            const Divider(height: 1),
+
+            // লগআউট অপশন
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                tileColor: Colors.red.shade50,
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: const Text(
+                  'লগআউট',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                onTap: _logout,
+              ),
+            ),
+
+            // একদম নিচে অ্যাপের ভার্সন প্রদর্শন
+            const Padding(
+              padding: EdgeInsets.only(bottom: 16.0, top: 4.0),
+              child: Text(
+                'App Version: 1.0.0',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home, color: Colors.teal),
-              title: const Text('হোম'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.groups, color: Colors.blue),
-              title: const Text('ছাত্রছাত্রী তালিকা'),
-              onTap: () {
-                Navigator.pop(context);
-                Get.to(() => const StudentsView(userRole: 'teacher'));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.fact_check, color: Colors.green),
-              title: const Text('ছাত্রছাত্রীদের হাজিরা'),
-              onTap: () {
-                Navigator.pop(context);
-                if (academyId.isNotEmpty) {
-                  Get.to(
-                    () => StudentAttendancePageView(
-                      academyId: academyId,
-                      teacherName: teacherName.isNotEmpty
-                          ? teacherName
-                          : widget.userName,
-                    ),
-                  );
-                } else {
-                  Get.snackbar(
-                    "ত্রুটি",
-                    "একাডেমি আইডি পাওয়া যায়নি!",
-                    backgroundColor: Colors.red,
-                    colorText: Colors.white,
-                  );
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.notifications_active,
-                color: Colors.orange,
-              ),
-              title: const Text('নোটিশ বোর্ড'),
-              onTap: () {
-                Navigator.pop(context);
-                if (academyId.isNotEmpty) {
-                  Get.to(
-                    () => NoticeBoardView(
-                      academyId: academyId,
-                      userRole: 'teacher',
-                    ),
-                  );
-                }
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text('লগআউট', style: TextStyle(color: Colors.red)),
-              onTap: _logout,
             ),
           ],
         ),

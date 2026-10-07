@@ -3,11 +3,11 @@ import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
-// আলাদা করা ফাইলটি ইম্পোর্ট করা হলো (আপনার প্রজেক্টের পাথ অনুযায়ী এটি ঠিক করে নেবেন)
+// আলাদা করা ফাইলটি ইম্পোর্ট করা হলো (আপনার প্রজেক্টের পাথ অনুযায়ী এটি ঠিক করে নেবেন)[cite: 21]
 import 'create_custom_model_test_view.dart';
 import 'package:academy_management/views/dashboard/question_create_teacher.dart';
 
-// অধ্যায়ের প্রশ্নগুলো দেখানোর জন্য ডেডিকেটেড পেইজ (সার্চ ফিচার সহ)
+// অধ্যায়ের প্রশ্নগুলো দেখানোর জন্য ডেডিকেটেড পেইজ (সার্চ ফিচার সহ)[cite: 21]
 class ChapterQuestionsView extends StatefulWidget {
   final String academyId;
   final String className;
@@ -391,7 +391,7 @@ class _ChapterQuestionsViewState extends State<ChapterQuestionsView> {
   }
 }
 
-// সকল প্রশ্ন একসাথে দেখানোর জন্য ডেডিকেটেড পেইজ (সার্চ ফিচার সহ)
+// সকল প্রশ্ন একসাথে দেখানোর জন্য ডেডিকেটেড পেইজ (সার্চ ফিচার সহ)[cite: 21]
 class AllSubjectQuestionsView extends StatefulWidget {
   final String academyId;
   final String className;
@@ -776,7 +776,7 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
   }
 }
 
-// মূল ModelTestView ক্লাস
+// মূল ModelTestView ক্লাস[cite: 21]
 class ModelTestView extends StatefulWidget {
   final String academyId;
   final String? currentUserId;
@@ -920,7 +920,7 @@ class _ModelTestViewState extends State<ModelTestView> {
           String? endTimeStr = schedule['end_time'];
 
           if (endTimeStr != null) {
-            DateTime endDt = DateTime.parse(endTimeStr);
+            DateTime endDt = DateTime.parse(endTimeStr).toLocal();
             if (endDt.isBefore(now) && isActiveFromDb) {
               isActiveFromDb = false;
               await supabase
@@ -954,7 +954,7 @@ class _ModelTestViewState extends State<ModelTestView> {
     }
   }
 
-  // পরীক্ষার নাম এডিট করার ফাংশন
+  // পরীক্ষার নাম এডিট করার ফাংশন[cite: 21]
   Future<void> _editExamTitle(String oldTitle, dynamic examId) async {
     final TextEditingController titleController = TextEditingController(
       text: oldTitle,
@@ -1023,7 +1023,7 @@ class _ModelTestViewState extends State<ModelTestView> {
     );
   }
 
-  // ডিলেট লজিক ফাংশন
+  // ডিলেট লজিক ফাংশন[cite: 21]
   Future<void> _deleteExamCard(Map<String, dynamic> test) async {
     String testTitle = test['exam_title'];
     dynamic examId = test['id'];
@@ -1241,6 +1241,7 @@ class _ModelTestViewState extends State<ModelTestView> {
                 return;
               }
 
+              // লোকাল টাইম অনুযায়ী DateTime তৈরি করা
               DateTime startDateTime = DateTime(
                 startDate!.year,
                 startDate!.month,
@@ -1268,6 +1269,45 @@ class _ModelTestViewState extends State<ModelTestView> {
               }
 
               try {
+                // এই ক্লাসে নির্দিষ্ট সময়ে বা overlapping সময়ে অন্য কোনো active model test আছে কিনা চেক করা[cite: 21]
+                final existingSchedules = await supabase
+                    .from('exam_schedules')
+                    .select()
+                    .eq('academy_id', widget.academyId)
+                    .eq('class_name', selectedClass!)
+                    .eq('is_active', true)
+                    .neq('id', examId);
+
+                bool hasConflict = false;
+                for (var schedule in (existingSchedules as List)) {
+                  if (schedule['start_time'] != null &&
+                      schedule['end_time'] != null) {
+                    DateTime existingStart = DateTime.parse(
+                      schedule['start_time'],
+                    ).toLocal();
+                    DateTime existingEnd = DateTime.parse(
+                      schedule['end_time'],
+                    ).toLocal();
+
+                    if (startDateTime.isBefore(existingEnd) &&
+                        endDateTime.isAfter(existingStart)) {
+                      hasConflict = true;
+                      break;
+                    }
+                  }
+                }
+
+                if (hasConflict) {
+                  Get.snackbar(
+                    "সতর্কতা",
+                    "এই ক্লাসে এই নির্দিষ্ট সময়ে বা এর মধ্যে ইতিমধ্যে অন্য একটি মডেল টেস্ট চালু (Active) রয়েছে!",
+                    backgroundColor: Colors.red,
+                    colorText: Colors.white,
+                    duration: const Duration(seconds: 4),
+                  );
+                  return;
+                }
+
                 await supabase
                     .from('exam_schedules')
                     .update({
@@ -1297,35 +1337,73 @@ class _ModelTestViewState extends State<ModelTestView> {
     );
   }
 
-  Future<void> _cancelExam(dynamic examId, String testTitle) async {
-    Get.defaultDialog(
-      title: "পরীক্ষা বাতিল",
-      middleText: "$testTitle পরীক্ষাটি কি আপনি সত্যিই বাতিল করতে চান?",
-      textConfirm: "হ্যাঁ, বাতিল",
-      textCancel: "না",
-      confirmTextColor: Colors.white,
-      buttonColor: Colors.red,
-      onConfirm: () async {
-        Get.back();
-        try {
-          await supabase
-              .from('exam_schedules')
-              .update({'is_active': false})
-              .eq('id', examId);
+  // পরীক্ষা বাতিল করার লজিক (ক্রিয়েটর চেক সহ)
+  Future<void> _cancelExam(Map<String, dynamic> test) async {
+    String testTitle = test['exam_title'];
+    dynamic examId = test['id'];
+    dynamic creatorId = test['question_creator_id'];
+    String? creatorName = test['question_creator_name'];
 
-          Get.snackbar(
-            "সফল",
-            "পরীক্ষাটি সফলভাবে বাতিল করা হয়েছে।",
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-          );
-          _loadModelTests();
-        } catch (e) {
-          debugPrint("Error canceling exam: $e");
-          Get.snackbar("ত্রুটি", "পরীক্ষা বাতিল করতে সমস্যা হয়েছে।");
-        }
-      },
-    );
+    String? currentUserIdStr = widget.currentUserId?.toString().trim();
+    String? creatorIdStr = creatorId?.toString().trim();
+
+    bool isCreator = false;
+
+    if (currentUserIdStr != null &&
+        creatorIdStr != null &&
+        currentUserIdStr == creatorIdStr) {
+      isCreator = true;
+    } else if (creatorIdStr == null || creatorIdStr.isEmpty) {
+      isCreator = true;
+    }
+
+    if (isCreator) {
+      Get.defaultDialog(
+        title: "পরীক্ষা বাতিল",
+        middleText: "$testTitle পরীক্ষাটি কি আপনি সত্যিই বাতিল করতে চান?",
+        textConfirm: "হ্যাঁ, বাতিল",
+        textCancel: "না",
+        confirmTextColor: Colors.white,
+        buttonColor: Colors.red,
+        onConfirm: () async {
+          Get.back();
+          try {
+            await supabase
+                .from('exam_schedules')
+                .update({'is_active': false})
+                .eq('id', examId);
+
+            Get.snackbar(
+              "সফল",
+              "পরীক্ষাটি সফলভাবে বাতিল করা হয়েছে।",
+              backgroundColor: Colors.red,
+              colorText: Colors.white,
+            );
+            _loadModelTests();
+          } catch (e) {
+            debugPrint("Error canceling exam: $e");
+            Get.snackbar("ত্রুটি", "পরীক্ষা বাতিল করতে সমস্যা হয়েছে।");
+          }
+        },
+      );
+    } else {
+      String nameToShow =
+          (creatorName != null && creatorName.toString().isNotEmpty)
+          ? creatorName
+          : 'অন্য কোনো শিক্ষক';
+
+      Get.defaultDialog(
+        title: "বাতিল করার অনুমতি নেই",
+        middleText:
+            "এই পরীক্ষাটি আপনি তৈরি করেননি। এটি তৈরি করেছেন: $nameToShow। পরীক্ষাটি বাতিল করতে চাইলে উনার সাথে যোগাযোগ করুন।",
+        textConfirm: "ঠিক আছে",
+        confirmTextColor: Colors.white,
+        buttonColor: Colors.indigo.shade800,
+        onConfirm: () {
+          Get.back();
+        },
+      );
+    }
   }
 
   @override
@@ -1523,7 +1601,6 @@ class _ModelTestViewState extends State<ModelTestView> {
                                         itemCount: modelTests.length + 1,
                                         itemBuilder: (context, index) {
                                           if (index == 0) {
-                                            // [SMART DESIGN]: 'সকল প্রশ্ন' কার্ড
                                             return Container(
                                               margin: const EdgeInsets.only(
                                                 bottom: 14,
@@ -1677,12 +1754,15 @@ class _ModelTestViewState extends State<ModelTestView> {
                                               'সময় নির্ধারণ করা হয়নি';
                                           if (startTimeStr != null &&
                                               endTimeStr != null) {
+                                            // লোকल টাইমজোন অনুযায়ী কনভার্ট করার জন্য .toLocal() ব্যবহার করা হয়েছে[cite: 21]
                                             DateTime startDt = DateTime.parse(
                                               startTimeStr,
-                                            );
+                                            ).toLocal();
                                             DateTime endDt = DateTime.parse(
                                               endTimeStr,
-                                            );
+                                            ).toLocal();
+
+                                            // ১২ ঘন্টার ফরম্যাট (AM/PM) এবং লোকাল টাইম দেখানোর জন্য[cite: 21]
                                             formattedTimeText =
                                                 'শুরু: ${DateFormat('dd MMM, hh:mm a').format(startDt)}  •  শেষ: ${DateFormat('dd MMM, hh:mm a').format(endDt)}';
                                           }
@@ -1691,7 +1771,6 @@ class _ModelTestViewState extends State<ModelTestView> {
                                               _selectedButtonIndices[testTitle] ??
                                               -1;
 
-                                          // [SMART DESIGN]: মডেল টেস্ট কার্ড (আপনার চাহিদা অনুযায়ী ترتيب করা হয়েছে)
                                           return Container(
                                             margin: const EdgeInsets.symmetric(
                                               vertical: 6,
@@ -1816,7 +1895,6 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                     ],
                                                   ),
                                                   const SizedBox(height: 6),
-                                                  // ১. প্রশ্ন সংখ্যা
                                                   Text(
                                                     'প্রশ্ন সংখ্যা: $questionCount টি',
                                                     style: TextStyle(
@@ -1828,7 +1906,6 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                     ),
                                                   ),
                                                   const SizedBox(height: 4),
-                                                  // ২. টাইম ও ডেট
                                                   Row(
                                                     children: [
                                                       Icon(
@@ -1855,7 +1932,6 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                     ],
                                                   ),
                                                   const SizedBox(height: 4),
-                                                  // ৩. স্যারের নাম
                                                   Row(
                                                     children: [
                                                       Icon(
@@ -1911,7 +1987,7 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                           size: 15,
                                                         ),
                                                         label: const Text(
-                                                          'ডিলিট',
+                                                          'পরিক্ষা ডিলিট করুন',
                                                           style: TextStyle(
                                                             fontSize: 12,
                                                           ),
@@ -1940,9 +2016,8 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                           ),
                                                           onPressed: () {
                                                             _cancelExam(
-                                                              examId,
-                                                              testTitle,
-                                                            );
+                                                              test,
+                                                            ); // এখানে শুধু test পাস করতে হবে
                                                           },
                                                           icon: const Icon(
                                                             Icons
@@ -1950,61 +2025,13 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                             size: 15,
                                                           ),
                                                           label: const Text(
-                                                            'ক্যান্সেল',
+                                                            'পরিক্ষা বাদ দিন',
                                                             style: TextStyle(
                                                               fontSize: 12,
                                                             ),
                                                           ),
                                                         ),
                                                       ],
-                                                      const SizedBox(width: 8),
-                                                      ElevatedButton(
-                                                        style: ElevatedButton.styleFrom(
-                                                          backgroundColor:
-                                                              selectedBtnIndex ==
-                                                                  1
-                                                              ? Colors
-                                                                    .green
-                                                                    .shade700
-                                                              : Colors
-                                                                    .indigo
-                                                                    .shade800,
-                                                          foregroundColor:
-                                                              Colors.white,
-                                                          elevation: 0,
-                                                          shape: RoundedRectangleBorder(
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  8,
-                                                                ),
-                                                          ),
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 12,
-                                                                vertical: 8,
-                                                              ),
-                                                          minimumSize:
-                                                              const Size(0, 32),
-                                                        ),
-                                                        onPressed: () {
-                                                          setState(() {
-                                                            _selectedButtonIndices[testTitle] =
-                                                                1;
-                                                          });
-                                                          _setExamSchedule(
-                                                            testTitle,
-                                                            examId,
-                                                          );
-                                                        },
-                                                        child: const Text(
-                                                          'সময় নির্ধারণ',
-                                                          style: TextStyle(
-                                                            fontSize: 12,
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                          ),
-                                                        ),
-                                                      ),
                                                     ],
                                                   ),
                                                 ],

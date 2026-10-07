@@ -63,10 +63,27 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
             }
           }
 
-          // সাজানো: প্রথমে রানিং (active) এবং পরে ইনঅ্যাক্টিভ (inactive)
+          // সাজানো: প্রথমে রানিং (active) এবং রানিং গুলোর মধ্যে কাছাকাছি সময়ের পরীক্ষা উপরে
           fetchedList.sort((a, b) {
             bool aActive = a['is_active'] ?? false;
             bool bActive = b['is_active'] ?? false;
+
+            if (aActive && bActive) {
+              // উভয়ই রানিং হলে, যার স্টার্ট টাইম কাছাকাছি (আগে) তা উপরে থাকবে
+              String? aStart = a['start_time'];
+              String? bStart = b['start_time'];
+              if (aStart != null && bStart != null) {
+                try {
+                  DateTime aTime = DateTime.parse(aStart);
+                  DateTime bTime = DateTime.parse(bStart);
+                  return aTime.compareTo(bTime);
+                } catch (e) {
+                  return 0;
+                }
+              }
+              return 0;
+            }
+
             if (aActive == bActive) return 0;
             return aActive ? -1 : 1;
           });
@@ -203,7 +220,243 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
     }
   }
 
-  // রেজাল্ট ডায়ালগ
+  // নতুন পেইজ বা পপআপ ডায়ালগ যা "অংশগ্রহণ করুন" এ ক্লিক করলে ছোট আকারে আসবে
+  void _showParticipationDialog(Map<String, dynamic> test) {
+    String examTitle = test['exam_title'] ?? 'পরীক্ষা';
+    String subjectName = test['subject_name'] ?? 'উল্লেখ নেই';
+    String chapterName = test['chapter_name'] ?? 'সম্পূর্ণ বই';
+    String teacherName = test['question_creator_name'] ?? 'নির্ধারিত নেই';
+    String questionCount = test['question_count']?.toString() ?? '০';
+    String totalMarks =
+        test['total_marks']?.toString() ??
+        test['question_count']?.toString() ??
+        '১০';
+
+    String durationText = 'নির্ধারিত নেই';
+    String startTime = test['start_time']?.toString() ?? '';
+    String endTime = test['end_time']?.toString() ?? '';
+    if (startTime.isNotEmpty && endTime.isNotEmpty) {
+      try {
+        DateTime startDt = DateTime.parse(startTime);
+        DateTime endDt = DateTime.parse(endTime);
+        Duration diff = endDt.difference(startDt);
+        int hours = diff.inHours;
+        int minutes = diff.inMinutes % 60;
+        if (hours > 0 && minutes > 0) {
+          durationText = '$hours ঘণ্টা $minutes মিনিট';
+        } else if (hours > 0) {
+          durationText = '$hours ঘণ্টা';
+        } else {
+          durationText = '$minutes মিনিট';
+        }
+      } catch (e) {
+        durationText = 'নির্দিষ্ট সময়';
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 8,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            color: Colors.white,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.quiz_rounded,
+                      color: Colors.teal,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'পরীক্ষার বিবরণ',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Text(
+                          examTitle,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Divider(height: 1, color: Colors.black12),
+              ),
+              _buildPopupDetailRow(Icons.book_rounded, 'বিষয়', subjectName),
+              const SizedBox(height: 10),
+              _buildPopupDetailRow(
+                Icons.bookmark_border_rounded,
+                'অধ্যায়',
+                chapterName,
+              ),
+              const SizedBox(height: 10),
+              _buildPopupDetailRow(
+                Icons.person_outline_rounded,
+                'শিক্ষক / প্রণেতা',
+                teacherName,
+              ),
+              const SizedBox(height: 10),
+              _buildPopupDetailRow(
+                Icons.timer_outlined,
+                'মোট সময়',
+                durationText,
+              ),
+              const SizedBox(height: 10),
+              _buildPopupDetailRow(
+                Icons.help_outline_rounded,
+                'প্রশ্ন সংখ্যা',
+                '$questionCount টি',
+              ),
+              const SizedBox(height: 10),
+              _buildPopupDetailRow(
+                Icons.star_border_rounded,
+                'মোট নম্বর',
+                '$totalMarks মার্কস',
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: Colors.amberAccent,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'পরীক্ষা শুরু করলে নির্দিষ্ট সময়ের মধ্যে শেষ করতে হবে।',
+                        style: TextStyle(fontSize: 11, color: Colors.black87),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(color: Colors.grey.shade300),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text(
+                        'ফিরে যান',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('পরীক্ষা শুরু হচ্ছে...'),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text(
+                        'শুরু করুন',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPopupDetailRow(IconData icon, String title, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: Colors.indigo.shade400),
+        const SizedBox(width: 10),
+        Text(
+          '$title: ',
+          style: const TextStyle(
+            fontSize: 13,
+            color: Colors.black54,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.black87,
+              fontWeight: FontWeight.bold,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
   void _showResultDialog(Map<String, dynamic> test) {
     showDialog(
       context: context,
@@ -223,7 +476,6 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
     );
   }
 
-  // ২য় সুযোগ ডায়ালগ
   void _showRetestDialog(Map<String, dynamic> test) {
     showDialog(
       context: context,
@@ -242,7 +494,6 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
             onPressed: () {
               Navigator.pop(context);
-              // ২য় সুযোগে পরীক্ষা শুরুর লজিক
             },
             child: const Text(
               'শুরু করুন',
@@ -473,9 +724,22 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
     String startTime = test['start_time']?.toString() ?? '';
     String endTime = test['end_time']?.toString() ?? '';
     String formattedStartTime = formatDateTime(startTime);
-    String formattedEndTime = formatDateTime(endTime);
 
-    // পরীক্ষার মোট সময়কাল (Duration) হিসাব করা
+    // পরীক্ষাটি বর্তমানে শুরু হয়েছে কিনা বা চলছে কিনা তা যাচাই করার লজিক
+    bool isExamStartedOrRunning = false;
+    if (startTime.isNotEmpty) {
+      try {
+        DateTime startDt = DateTime.parse(startTime);
+        DateTime now = DateTime.now();
+        // যদি শুরুর সময় বর্তমান সময়ের সমান বা আগের হয় (অর্থাৎ শুরু হয়ে গেছে)
+        if (startDt.isBefore(now) || startDt.isAtSameMomentAs(now)) {
+          isExamStartedOrRunning = true;
+        }
+      } catch (e) {
+        // ইগনোর
+      }
+    }
+
     String durationText = '';
     if (startTime.isNotEmpty && endTime.isNotEmpty) {
       try {
@@ -496,14 +760,12 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
       }
     }
 
-    // অধ্যায়ের নাম চেক করা (না থাকলে "সম্পুর্ন বই" দেখাবে)
     String? chapterName = test['chapter_name'];
     String displayChapter =
         (chapterName != null && chapterName.toString().trim().isNotEmpty)
         ? chapterName.toString()
         : 'সম্পুর্ন বই';
 
-    // প্রশ্ন সংখ্যা ও তৈরি করা স্যারের নাম
     String questionCount = test['question_count']?.toString() ?? '০';
     String creatorName =
         test['question_creator_name']?.toString() ?? 'নির্ধারিত নেই';
@@ -556,8 +818,6 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
               ],
             ),
             const SizedBox(height: 10),
-
-            // স্যারের নাম প্রদর্শন
             Row(
               children: [
                 const Icon(
@@ -577,7 +837,6 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
               ],
             ),
             const SizedBox(height: 6),
-
             if (formattedStartTime.isNotEmpty)
               Row(
                 children: [
@@ -597,8 +856,6 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
                   ),
                 ],
               ),
-
-            // পরীক্ষার সময়কাল (Duration) দেখানোর সেকশন
             if (durationText.isNotEmpty) ...[
               const SizedBox(height: 4),
               Row(
@@ -620,7 +877,6 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
                 ],
               ),
             ],
-
             const SizedBox(height: 12),
             if (startTime.isNotEmpty && isActive)
               ExamCountdownCard(targetTimeStr: startTime),
@@ -658,7 +914,6 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
                           fontWeight: FontWeight.normal,
                         ),
                       ),
-
                       const SizedBox(height: 4),
                       Text(
                         'প্রশ্ন সংখ্যা: $questionCount টি',
@@ -672,25 +927,28 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                // লজিক আপডেট: পরীক্ষা শুরু হয়ে গেলে বা রানিং থাকলেই কেবল "অংশগ্রহণ করুন" বাটন দেখাবে
                 isActive
-                    ? ElevatedButton(
-                        onPressed: () {},
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                        ),
-                        child: const Text(
-                          'অংশগ্রহণ করুন',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      )
+                    ? (isExamStartedOrRunning
+                          ? ElevatedButton(
+                              onPressed: () => _showParticipationDialog(test),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                              ),
+                              child: const Text(
+                                'অংশগ্রহণ করুন',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink()) // শুরু না হলে বাটন দেখাবে না
                     : Row(
                         children: [
                           Container(

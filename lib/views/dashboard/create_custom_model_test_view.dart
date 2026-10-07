@@ -48,6 +48,7 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
   TimeOfDay? endTime;
 
   bool isSaving = false;
+  bool _isProcessRunning = false; // ডাবল ক্লিক বা রেস কন্ডিশন প্রতিরোধের জন্য
 
   @override
   void initState() {
@@ -56,6 +57,13 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
       text: '${widget.subjectName} মডেল টেস্ট',
     );
     _loadChapters();
+  }
+
+  @override
+  void dispose() {
+    testTitleController.dispose();
+    questionCountController.dispose();
+    super.dispose();
   }
 
   // নির্দিষ্ট একাডেমি, ক্লাস ও বিষয়ের অধ্যায় এবং প্রতি অধ্যায়ের প্রশ্ন সংখ্যা লোড করা
@@ -121,7 +129,6 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
         List fetchedList = response ?? [];
         setState(() {
           selectedChapterQuestionCount = fetchedList.length;
-          // বাই ডিফল্ট অধ্যায়ের সব প্রশ্ন সিলেক্টেড থাকবে
           manuallySelectedQuestionIds = fetchedList
               .map((q) => q['id'].toString())
               .toList();
@@ -138,11 +145,11 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
   void _goToQuestionSelectionPage() async {
     if (selectedChapter == null) return;
 
-    final result = aliasGetToSelectQuestions();
+    final result = await aliasGetToSelectQuestions();
 
     if (result != null && result is List<String>) {
       setState(() {
-        manuallySelectedQuestionIds = result as List<String>;
+        manuallySelectedQuestionIds = result;
         questionCountController.text = manuallySelectedQuestionIds.length
             .toString();
       });
@@ -161,61 +168,239 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
     );
   }
 
-  // মডেল টেস্ট ডাটাবেসে সেভ করার ফাংশন
-  Future<void> _saveModelTest() async {
-    String title = testTitleController.text.trim();
-    int? qCount = int.tryParse(questionCountController.text.trim());
+  // নির্দিষ্ট ক্লাসের জন্য সিলেক্ট করা সময় ও তারিখে ইতিমধ্যে কোনো পরীক্ষা আছে কি না তা UTC টাইমজোনে নিখুঁতভাবে চেক করার ফাংশন
+  Future<void> _checkScheduleAndSave() async {
+    if (_isProcessRunning || isSaving) return;
 
-    if (title.isEmpty || qCount == null || qCount <= 0) {
-      Get.snackbar(
-        "সতর্কতা",
-        "দয়া করে সঠিক নাম এবং প্রশ্ন সংখ্যা দিন।",
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
-      );
-      return;
-    }
+    setState(() {
+      _isProcessRunning = true;
+      isSaving = true;
+    });
 
-    if (startDate == null ||
-        startTime == null ||
-        endDate == null ||
-        endTime == null) {
-      Get.snackbar(
-        "সতর্কতা",
-        "দয়া করে শুরু এবং শেষের তারিখ ও সময় সিলেক্ট করুন।",
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
-      );
-      return;
-    }
+    try {
+      String title = testTitleController.text.trim();
+      int? qCount = int.tryParse(questionCountController.text.trim());
 
-    DateTime startDateTime = DateTime(
-      startDate!.year,
-      startDate!.month,
-      startDate!.day,
-      startTime!.hour,
-      startTime!.minute,
-    );
-    DateTime endDateTime = DateTime(
-      endDate!.year,
-      endDate!.month,
-      endDate!.day,
-      endTime!.hour,
-      endTime!.minute,
-    );
+      if (title.isEmpty || qCount == null || qCount <= 0) {
+        Get.snackbar(
+          "সতর্কতা",
+          "দয়া করে সঠিক নাম এবং প্রশ্ন সংখ্যা দিন।",
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+        );
+        return;
+      }
 
-    if (endDateTime.isBefore(startDateTime)) {
+      if (startDate == null ||
+          startTime == null ||
+          endDate == null ||
+          endTime == null) {
+        Get.snackbar(
+          "সতর্কতা",
+          "দয়া করে শুরু এবং শেষের তারিখ ও সময় সিলেক্ট করুন।",
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      // ইউজার যে লোকাল টাইম সিলেক্ট করেছে তাকে UTC-তে রূপান্তর করা[cite: 20]
+      DateTime startDateTime = DateTime(
+        startDate!.year,
+        startDate!.month,
+        startDate!.day,
+        startTime!.hour,
+        startTime!.minute,
+      ).toUtc();
+
+      DateTime endDateTime = DateTime(
+        endDate!.year,
+        endDate!.month,
+        endDate!.day,
+        endTime!.hour,
+        endTime!.minute,
+      ).toUtc();
+
+      if (endDateTime.isBefore(startDateTime)) {
+        Get.snackbar(
+          "ত্রুটি",
+          "শেষের সময় শুরুর সময়ের আগে হতে পারে না।",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      // সুপাবেস থেকে বর্তমান একাডেমি ও ক্লাসের শুধুমাত্র সক্রিয় (is_active = true) পরীক্ষাগুলো আনা[cite: 20]
+      final response = await supabase
+          .from('exam_schedules')
+          .select()
+          .eq('academy_id', widget.academyId)
+          .eq('class_name', widget.className)
+          .eq('is_active', true);
+
+      List existingExams = response ?? [];
+      List<Map<String, dynamic>> conflictingExams = [];
+
+      for (var exam in existingExams) {
+        // ডাটাবেজের সময়কে পার্স করে UTC-তে রূপান্তর করা[cite: 20]
+        DateTime dbStart = DateTime.parse(exam['start_time']).toUtc();
+        DateTime dbEnd = DateTime.parse(exam['end_time']).toUtc();
+
+        // ওভারল্যাপ বা কনফ্লিক্ট চেক[cite: 20]
+        if (startDateTime.isBefore(dbEnd) && endDateTime.isAfter(dbStart)) {
+          conflictingExams.add(exam);
+        }
+      }
+
+      if (conflictingExams.isNotEmpty) {
+        _showConflictDialog(conflictingExams);
+        return;
+      }
+
+      // কোনো কনফ্লিক্ট না থাকলে সেভ হবে[cite: 20]
+      await _saveModelTest(startDateTime, endDateTime, qCount, title);
+    } catch (e) {
+      debugPrint("Error checking schedule: $e");
       Get.snackbar(
         "ত্রুটি",
-        "শেষের সময় শুরুর সময়ের আগে হতে পারে না।",
+        "পরীক্ষার সময় যাচাই করতে সমস্যা হয়েছে: $e",
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
-      return;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessRunning = false;
+          isSaving = false;
+        });
+      }
     }
+  }
 
-    setState(() => isSaving = true);
+  // বিস্তারিত কারণসহ কনফ্লিক্ট পপআপ দেখানোর ফাংশন
+  void _showConflictDialog(List<Map<String, dynamic>> conflicts) {
+    Get.dialog(
+      AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: const [
+            Icon(Icons.error_outline, color: Colors.red, size: 28),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'মডেল টেস্ট তৈরি করা সম্ভব নয়!',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Text(
+                  'কারণ: একই শ্রেণিতে (Class: ${widget.className}) এই নির্দিষ্ট সময়ে ইতিমধ্যে অন্য একটি পরীক্ষা বা মডেল টেস্ট নির্ধারিত রয়েছে। ছাত্রছাত্রীরা একই সময়ে দুটি পরীক্ষায় অংশগ্রহণ করতে পারে না।',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.red.shade900,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'বিদ্যমান conflicting পরীক্ষা(গুলো):',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: conflicts.length,
+                  itemBuilder: (context, index) {
+                    var exam = conflicts[index];
+                    String examTitle = exam['exam_title'] ?? 'মডেল টেস্ট';
+                    String subject = exam['subject_name'] ?? '';
+                    String creator = exam['question_creator_name'] ?? 'শিক্ষক';
 
+                    // লোকাল টাইম পার্স করা
+                    DateTime sTime = DateTime.parse(
+                      exam['start_time'],
+                    ).toLocal();
+                    DateTime eTime = DateTime.parse(exam['end_time']).toLocal();
+                    String formattedStart = DateFormat(
+                      'dd MMM, yyyy - hh:mm a',
+                    ).format(sTime);
+                    String formattedEnd = DateFormat('hh:mm a').format(eTime);
+
+                    return Card(
+                      color: Colors.grey.shade100,
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '• $examTitle ($subject)',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'প্রণেতা: $creator',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            Text(
+                              'সময়: $formattedStart হতে $formattedEnd',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.red,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.indigo.shade800,
+            ),
+            onPressed: () => Get.back(),
+            child: const Text('ঠিক আছে', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // মডেল টেস্ট ডাটাবেসে সেভ করার মূল ফাংশন
+  Future<void> _saveModelTest(
+    DateTime startDateTime,
+    DateTime endDateTime,
+    int qCount,
+    String title,
+  ) async {
     try {
       List<String> questionIds = [];
 
@@ -242,7 +427,6 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
             backgroundColor: Colors.red,
             colorText: Colors.white,
           );
-          setState(() => isSaving = false);
           return;
         }
 
@@ -251,11 +435,10 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
         questionIds = selectedQuestions.map((q) => q['id'].toString()).toList();
       }
 
-      // সরাসরি উইজেট থেকে প্রাপ্ত ইউজার আইডি ও নাম ব্যবহার করা হচ্ছে (কোনো গ্লোবাল অথ চেক নেই)
       String creatorId = widget.currentUserId ?? '';
       String creatorName = widget.currentUserName ?? 'Teacher';
 
-      // Supabase-এর exam_schedules টেবিলে ডাটা ইনসার্ট করা
+      // Supabase-এর exam_schedules টেবিলে সঠিক ISO ফরম্যাটে ডাটা ইনসার্ট করা হলো[cite: 20]
       await supabase.from('exam_schedules').insert({
         'academy_id': widget.academyId,
         'class_name': widget.className,
@@ -286,8 +469,6 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
-    } finally {
-      setState(() => isSaving = false);
     }
   }
 
@@ -532,9 +713,18 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                onPressed: isSaving ? null : _saveModelTest,
+                onPressed: (_isProcessRunning || isSaving)
+                    ? null
+                    : _checkScheduleAndSave,
                 child: isSaving
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
                     : const Text(
                         'মডেল টেস্ট তৈরি করুন',
                         style: TextStyle(
@@ -551,7 +741,7 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
   }
 }
 
-// ২. আলাদা পেজ: প্রশ্ন এবং সঠিক উত্তর সহ লিস্ট দেখানোর এবং টিক দিয়ে সিলেক্ট করার পেজ
+// ২. আলাদা পেজ: প্রশ্ন সিলেক্ট করার পেজ
 class SelectQuestionsView extends StatefulWidget {
   final String academyId;
   final String className;
