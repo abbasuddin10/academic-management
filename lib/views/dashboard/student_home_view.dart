@@ -1,4 +1,5 @@
 import 'package:academy_management/views/auth/login_view.dart';
+import 'package:academy_management/views/dashboard/Student_Result_View.dart';
 import 'package:academy_management/views/dashboard/student_attendance_view.dart';
 import 'package:academy_management/views/dashboard/student_complaint_view.dart';
 import 'package:academy_management/views/dashboard/student_exam_routine_view.dart';
@@ -1219,7 +1220,31 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                                 title: 'রেজাল্ট দেখুন',
                                 icon: Icons.insert_chart_rounded,
                                 color: Colors.orange,
-                                onTap: () {},
+                                onTap: () {
+                                  String academyId =
+                                      studentDetails?['academy_id'] ?? '';
+                                  String className = widget.className;
+                                  String studentRoll = widget.roll;
+
+                                  if (academyId.isEmpty || className.isEmpty) {
+                                    Get.snackbar(
+                                      "ত্রুটি",
+                                      "প্রতিষ্ঠানের তথ্য পাওয়া যায়নি!",
+                                      backgroundColor: Colors.red,
+                                      colorText: Colors.white,
+                                    );
+                                    return;
+                                  }
+
+                                  Get.to(
+                                    () => StudentResultView(
+                                      academyId: academyId,
+                                      className: className,
+                                      studentRoll: studentRoll,
+                                      studentName: widget.studentName,
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                             const SizedBox(width: 12),
