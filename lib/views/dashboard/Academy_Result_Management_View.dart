@@ -12,12 +12,14 @@ class AcademyResultManagementView extends StatefulWidget {
   final String academyId;
   final String? currentUserId;
   final String? currentUserName;
+  final bool isReadOnly; // নতুন যোগ করা হয়েছে (শিক্ষকদের জন্য true হবে)
 
   const AcademyResultManagementView({
     super.key,
     required this.academyId,
     this.currentUserId,
     this.currentUserName,
+    this.isReadOnly = false, // ডিফল্টভাবে সুপার এডমিনের জন্য false
   });
 
   @override
@@ -149,7 +151,7 @@ class _AcademyResultManagementViewState
       debugPrint("Error loading students: $e");
       Get.snackbar(
         "ত্রুটি",
-        "ছাত্রছাত্রীদের তালিকা লোড করতে সমস্যা হয়েছে।",
+        "ছাত্রছাত্রীদের তালিকা লোড করতে সমস্যা হয়েছে.",
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
@@ -420,7 +422,6 @@ class _AcademyResultManagementViewState
     }
   }
 
-  // ৫. পূরণকৃত এক্সেল ফাইল আপলোড এবং JSONB ফরম্যাটে সুপাবেসে সেভ (Upsert) করার ফাংশন
   // ৫. পূরণকৃত এক্সেল ফাইল আপলোড এবং JSONB ফরম্যাটে সুপাবেসে সেভ (Upsert) করার ফাংশন
   Future<void> _uploadAndProcessExcel() async {
     if (selectedExam == null || selectedClass == null) {
@@ -763,58 +764,636 @@ class _AcademyResultManagementViewState
     }
   }
 
-  // ভিউ রেজাল্ট ডায়ালগ ফাংশন
+  // --- হেল্পার মেথডসমূহ (Student_Result_View এর আদলে তৈরি) ---
+  Set<String> _extractSubjects(Map<String, dynamic> resultData) {
+    Set<String> subjects = {};
+    for (String key in resultData.keys) {
+      if (key.endsWith('_cq') ||
+          key.endsWith('_mcq') ||
+          key.endsWith('_practical')) {
+        String sub = key.substring(0, key.lastIndexOf('_'));
+        subjects.add(sub);
+      }
+    }
+    return subjects;
+  }
+
+  String _calculateSubjectPosition(
+    List<Map<String, dynamic>> allClassExamResults,
+    String subject,
+    double myTotalMark,
+  ) {
+    List<double> allSubjectTotals = [];
+    for (var res in allClassExamResults) {
+      if (res['result_data'] is Map) {
+        Map<String, dynamic> rData = Map<String, dynamic>.from(
+          res['result_data'],
+        );
+        double cq =
+            double.tryParse(rData['${subject}_cq']?.toString() ?? '0') ?? 0;
+        double mcq =
+            double.tryParse(rData['${subject}_mcq']?.toString() ?? '0') ?? 0;
+        double practical =
+            double.tryParse(rData['${subject}_practical']?.toString() ?? '0') ??
+            0;
+        double total = cq + mcq + practical;
+        if (total > 0) {
+          allSubjectTotals.add(total);
+        }
+      }
+    }
+
+    if (myTotalMark <= 0 || allSubjectTotals.isEmpty) return '-';
+
+    allSubjectTotals.sort((a, b) => b.compareTo(a));
+    int rank = 1;
+    for (double mark in allSubjectTotals) {
+      if (myTotalMark < mark) {
+        rank++;
+      } else {
+        break;
+      }
+    }
+
+    if (rank == 1) return '1st';
+    if (rank == 2) return '2nd';
+    if (rank == 3) return '3rd';
+    return '${rank}th';
+  }
+
+  String _calculateExamMeritPosition(
+    List<Map<String, dynamic>> allClassExamResults,
+    String studentRoll,
+  ) {
+    if (allClassExamResults.isEmpty) return '-';
+
+    Map<String, double> studentTotalMarksMap = {};
+    for (var res in allClassExamResults) {
+      String roll = res['roll']?.toString().trim() ?? '';
+      if (roll.isEmpty) continue;
+
+      if (res['result_data'] is Map) {
+        Map<String, dynamic> rData = Map<String, dynamic>.from(
+          res['result_data'],
+        );
+        Set<String> subs = _extractSubjects(rData);
+        double totalObtained = 0;
+        for (var sub in subs) {
+          double cq =
+              double.tryParse(rData['${sub}_cq']?.toString() ?? '0') ?? 0;
+          double mcq =
+              double.tryParse(rData['${sub}_mcq']?.toString() ?? '0') ?? 0;
+          double practical =
+              double.tryParse(rData['${sub}_practical']?.toString() ?? '0') ??
+              0;
+          totalObtained += (cq + mcq + practical);
+        }
+        studentTotalMarksMap[roll] = totalObtained;
+      }
+    }
+
+    if (!studentTotalMarksMap.containsKey(studentRoll.trim())) return '-';
+
+    double myScore = studentTotalMarksMap[studentRoll.trim()]!;
+    List<double> allScores = studentTotalMarksMap.values.toList();
+    allScores.sort((a, b) => b.compareTo(a));
+
+    int rank = 1;
+    for (double score in allScores) {
+      if (myScore < score) {
+        rank++;
+      } else {
+        break;
+      }
+    }
+
+    if (rank == 1) return '1st';
+    if (rank == 2) return '2nd';
+    if (rank == 3) return '3rd';
+    return '${rank}th';
+  }
+
+  Map<String, dynamic> _calculateExamPercentage(
+    Map<String, dynamic> examResult,
+  ) {
+    Map<String, dynamic> resultData = {};
+    Map<String, dynamic> fullMarksData = {};
+
+    if (examResult['result_data'] is Map) {
+      resultData = Map<String, dynamic>.from(examResult['result_data']);
+    }
+    if (examResult['full_marks_data'] is Map) {
+      fullMarksData = Map<String, dynamic>.from(examResult['full_marks_data']);
+    }
+
+    Set<String> subjects = _extractSubjects(resultData);
+    double totalObtained = 0;
+    double totalFullMarks = 0;
+
+    for (var sub in subjects) {
+      double cq =
+          double.tryParse(resultData['${sub}_cq']?.toString() ?? '0') ?? 0;
+      double mcq =
+          double.tryParse(resultData['${sub}_mcq']?.toString() ?? '0') ?? 0;
+      double practical =
+          double.tryParse(resultData['${sub}_practical']?.toString() ?? '0') ??
+          0;
+
+      totalObtained += (cq + mcq + practical);
+      double subFullMark =
+          double.tryParse(fullMarksData[sub]?.toString() ?? '100') ?? 100;
+      totalFullMarks += subFullMark;
+    }
+
+    if (totalFullMarks <= 0) {
+      return {'progressValue': 0.0, 'percentageStr': '0%'};
+    }
+
+    double percentage = (totalObtained / totalFullMarks);
+    if (percentage > 1.0) percentage = 1.0;
+
+    String percentageStr = '${(percentage * 100).toStringAsFixed(0)}%';
+    return {'progressValue': percentage, 'percentageStr': percentageStr};
+  }
+
+  Widget _buildProgressIndicator(
+    String title,
+    double value,
+    String percentage,
+  ) {
+    return Container(
+      width: 80,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(
+        children: [
+          SizedBox(
+            width: 48,
+            height: 48,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CircularProgressIndicator(
+                  value: value,
+                  backgroundColor: Colors.blue.shade100,
+                  color: const Color(0xFF1B365D),
+                  strokeWidth: 4.5,
+                ),
+                Center(
+                  child: Text(
+                    percentage,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1B365D),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ভিউ রেজাল্ট পেজ (পপআপের পরিবর্তে নিচ থেকে সম্পূর্ণ স্ক্রিনে স্লাইড হয়ে আসার জন্য Get.to ব্যবহার করা হয়েছে)
   Future<void> _openViewResultDialog(
     Map<String, dynamic> student,
     Map<String, dynamic>? studentResult,
   ) async {
-    String roll = student['roll']?.toString() ?? '';
+    String roll = student['roll']?.toString().trim() ?? '';
     String studentName = student['name'] ?? '';
 
-    Get.dialog(
-      AlertDialog(
-        title: Text(
-          '$studentName (রোল: $roll) - ফলাফল বিবরণী',
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+    // সুপাবেস থেকে উক্ত ক্লাসের ঐ শিক্ষার্থীর সকল পরীক্ষার রেজাল্ট ফেচ করা
+    List<Map<String, dynamic>> studentAllExamsList = [];
+    List<Map<String, dynamic>> classAllResultsList = [];
+
+    try {
+      if (selectedClass != null) {
+        final res = await supabase
+            .from('exam_results')
+            .select()
+            .eq('academy_id', widget.academyId)
+            .eq('class_name', selectedClass!);
+
+        classAllResultsList = List<Map<String, dynamic>>.from(res);
+        studentAllExamsList = classAllResultsList
+            .where((r) => r['roll']?.toString().trim() == roll)
+            .toList();
+      }
+    } catch (e) {
+      debugPrint("Error fetching student exams for view page: $e");
+    }
+
+    if (studentAllExamsList.isEmpty &&
+        studentResult != null &&
+        studentResult.isNotEmpty) {
+      studentAllExamsList.add({
+        'exam_title': selectedExam ?? 'পরীক্ষা',
+        'result_data': studentResult,
+      });
+    }
+
+    // পপআপের বদলে Get.to দিয়ে নিচ থেকে উপরে ফুল স্ক্রিন পেজ ওপেন করার ব্যবস্থা
+    Get.to(
+      () => Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: Text('$studentName (রোল: $roll)'),
+          backgroundColor: const Color(0xFF1B365D),
+          foregroundColor: Colors.white,
         ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: studentResult == null || studentResult.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(16.0),
+        body: studentAllExamsList.isEmpty
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24.0),
                   child: Text(
-                    'এই শিক্ষার্থীর কোনো ফলাফল পাওয়া যায়নি।',
-                    style: TextStyle(color: Colors.grey),
+                    'এই শিক্ষার্থীর কোনো পরীক্ষার ফলাফল পাওয়া যায়নি।',
+                    style: TextStyle(color: Colors.grey, fontSize: 14),
                     textAlign: TextAlign.center,
                   ),
-                )
-              : ListView(
-                  shrinkWrap: true,
-                  children: studentResult.entries.map((entry) {
-                    return ListTile(
-                      dense: true,
-                      title: Text(
-                        entry.key.toUpperCase(),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      trailing: Text(
-                        entry.value.toString(),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                ),
+              )
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // প্রগ্রেস ওভারভিউ কার্ড
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'একাডেমিক প্রগ্রেস ওভারভিউ',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1B365D),
+                          ),
                         ),
+                        const SizedBox(height: 12),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: studentAllExamsList.map((examRes) {
+                              String title = examRes['exam_title'] ?? 'পরীক্ষা';
+                              Map<String, dynamic> calc =
+                                  _calculateExamPercentage(examRes);
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10.0,
+                                ),
+                                child: _buildProgressIndicator(
+                                  title,
+                                  calc['progressValue'],
+                                  calc['percentageStr'],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // পরীক্ষার টেবিলগুলো
+                  ...studentAllExamsList.map((examRes) {
+                    String examTitle = examRes['exam_title'] ?? 'পরীক্ষা';
+                    Map<String, dynamic> resultData = {};
+                    if (examRes['result_data'] is Map) {
+                      resultData = Map<String, dynamic>.from(
+                        examRes['result_data'],
+                      );
+                    }
+                    Set<String> subjects = _extractSubjects(resultData);
+
+                    List<Map<String, dynamic>> examClassResults =
+                        classAllResultsList
+                            .where(
+                              (r) => r['exam_title']?.toString() == examTitle,
+                            )
+                            .toList();
+
+                    String meritPosition = _calculateExamMeritPosition(
+                      examClassResults,
+                      roll,
+                    );
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 24.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                examTitle,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1B365D),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.indigo.shade50,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: Colors.indigo.shade200,
+                                  ),
+                                ),
+                                child: Text(
+                                  'মেরিট: $meritPosition',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1B365D),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          subjects.isEmpty
+                              ? const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                                  child: Text(
+                                    'নম্বর এন্ট্রি করা হয়নি',
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                )
+                              : Table(
+                                  border: TableBorder.all(
+                                    color: Colors.blueGrey.shade300,
+                                    width: 1,
+                                  ),
+                                  columnWidths: const {
+                                    0: FlexColumnWidth(2.5),
+                                    1: FlexColumnWidth(1.0),
+                                    2: FlexColumnWidth(1.0),
+                                    3: FlexColumnWidth(1.2),
+                                    4: FlexColumnWidth(1.2),
+                                    5: FlexColumnWidth(1.0),
+                                  },
+                                  children: [
+                                    TableRow(
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF1B365D),
+                                      ),
+                                      children: const [
+                                        Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 8,
+                                          ),
+                                          child: Text(
+                                            'বিষয়',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 4,
+                                          ),
+                                          child: Text(
+                                            'CQ',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 4,
+                                          ),
+                                          child: Text(
+                                            'MCQ',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 4,
+                                          ),
+                                          child: Text(
+                                            'Prac',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 4,
+                                          ),
+                                          child: Text(
+                                            'Total',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 4,
+                                          ),
+                                          child: Text(
+                                            'Pos',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    ...subjects.toList().asMap().entries.map((
+                                      entry,
+                                    ) {
+                                      String sub = entry.value;
+                                      bool isEven = entry.key % 2 == 0;
+
+                                      double cq =
+                                          double.tryParse(
+                                            resultData['${sub}_cq']
+                                                    ?.toString() ??
+                                                '0',
+                                          ) ??
+                                          0;
+                                      double mcq =
+                                          double.tryParse(
+                                            resultData['${sub}_mcq']
+                                                    ?.toString() ??
+                                                '0',
+                                          ) ??
+                                          0;
+                                      double practical =
+                                          double.tryParse(
+                                            resultData['${sub}_practical']
+                                                    ?.toString() ??
+                                                '0',
+                                          ) ??
+                                          0;
+                                      double total = cq + mcq + practical;
+
+                                      String position =
+                                          _calculateSubjectPosition(
+                                            examClassResults,
+                                            sub,
+                                            total,
+                                          );
+
+                                      return TableRow(
+                                        decoration: BoxDecoration(
+                                          color: isEven
+                                              ? Colors.blue.shade50.withOpacity(
+                                                  0.5,
+                                                )
+                                              : Colors.white,
+                                        ),
+                                        children: [
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                              horizontal: 8,
+                                            ),
+                                            child: Text(
+                                              sub.toUpperCase(),
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                              horizontal: 4,
+                                            ),
+                                            child: Text(
+                                              '$cq',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                              horizontal: 4,
+                                            ),
+                                            child: Text(
+                                              '$mcq',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                              horizontal: 4,
+                                            ),
+                                            child: Text(
+                                              '$practical',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                              horizontal: 4,
+                                            ),
+                                            child: Text(
+                                              '$total',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                              horizontal: 4,
+                                            ),
+                                            child: Text(
+                                              position,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.indigo,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                        ],
+                                      );
+                                    }),
+                                  ],
+                                ),
+                        ],
                       ),
                     );
-                  }).toList(),
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('বন্ধ করুন'),
-          ),
-        ],
+                  }),
+                ],
+              ),
       ),
+      transition: Transition.downToUp, // নিচ থেকে উপরে স্লাইড হয়ে আসবে
+      duration: const Duration(milliseconds: 300),
     );
   }
 
@@ -882,7 +1461,6 @@ class _AcademyResultManagementViewState
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // ফিল্টার সেকশন এবং পরীক্ষার নাম ও ক্লাস সিলেক্ট করার পর দৃশ্যমান 'ডাউনলোড' ও 'আপলোড' বাটন
                 Container(
                   padding: const EdgeInsets.all(16.0),
                   decoration: BoxDecoration(
@@ -899,7 +1477,6 @@ class _AcademyResultManagementViewState
                     children: [
                       Row(
                         children: [
-                          // ১. পরীক্ষার নাম
                           Expanded(
                             child: Container(
                               padding: const EdgeInsets.symmetric(
@@ -946,7 +1523,6 @@ class _AcademyResultManagementViewState
                             ),
                           ),
                           const SizedBox(width: 12),
-                          // ২. ক্লাস সিলেক্ট
                           Expanded(
                             child: Container(
                               padding: const EdgeInsets.symmetric(
@@ -998,9 +1574,9 @@ class _AcademyResultManagementViewState
                           ),
                         ],
                       ),
-
-                      // যদি পরীক্ষা এবং ক্লাস উভয়ই সিলেক্ট করা হয়, তবে বক্স দুটির নিচে 'ডাউনলোড' ও 'আপলোড' বাটন ভিজিবল হবে
-                      if (selectedExam != null && selectedClass != null) ...[
+                      if (!widget.isReadOnly &&
+                          selectedExam != null &&
+                          selectedClass != null) ...[
                         const SizedBox(height: 12),
                         Row(
                           children: [
@@ -1059,8 +1635,6 @@ class _AcademyResultManagementViewState
                     ],
                   ),
                 ),
-
-                // স্টুডেন্টদের তালিকা
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -1164,7 +1738,6 @@ class _AcademyResultManagementViewState
                                           String? imageUrl =
                                               student['image_url'];
 
-                                          // কার্ডে সুপাবেস থেকে আনা ঐ ছাত্রের রেজাল্ট ডেটা
                                           var studentResult =
                                               studentResultsMap[studentRoll];
                                           bool hasResult =
@@ -1253,27 +1826,44 @@ class _AcademyResultManagementViewState
                                                           ],
                                                         ),
                                                       ),
-                                                      // রেজাল্ট স্ট্যাটাস ব্যাজ
-                                                      Container(
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 8,
-                                                              vertical: 4,
-                                                            ),
-                                                        decoration: BoxDecoration(
-                                                          color: hasResult
-                                                              ? Colors
-                                                                    .green
-                                                                    .shade50
-                                                              : Colors
-                                                                    .orange
-                                                                    .shade50,
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                8,
-                                                              ),
+                                                      if (widget.isReadOnly)
+                                                        IconButton(
+                                                          icon: const Icon(
+                                                            Icons.visibility,
+                                                            color:
+                                                                Colors.indigo,
+                                                            size: 24,
+                                                          ),
+                                                          tooltip:
+                                                              'রেজাল্ট দেখুন',
+                                                          onPressed: () {
+                                                            _openViewResultDialog(
+                                                              student,
+                                                              studentResult,
+                                                            );
+                                                          },
                                                         ),
-                                                      ),
+                                                      if (!widget.isReadOnly)
+                                                        Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 4,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color: hasResult
+                                                                ? Colors
+                                                                      .green
+                                                                      .shade50
+                                                                : Colors
+                                                                      .orange
+                                                                      .shade50,
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  8,
+                                                                ),
+                                                          ),
+                                                        ),
                                                     ],
                                                   ),
                                                   const Divider(height: 16),
@@ -1350,99 +1940,101 @@ class _AcademyResultManagementViewState
                                                       ),
                                                     ],
                                                   ),
-                                                  const SizedBox(height: 12),
-
-                                                  // কার্ডের নিচে দুটি বাটন: ভিউ রেজাল্ট ও রেজাল্ট এডিট
-                                                  Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: OutlinedButton.icon(
-                                                          style: OutlinedButton.styleFrom(
-                                                            foregroundColor:
-                                                                Colors
+                                                  if (!widget.isReadOnly) ...[
+                                                    const SizedBox(height: 12),
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                          child: OutlinedButton.icon(
+                                                            style: OutlinedButton.styleFrom(
+                                                              foregroundColor:
+                                                                  Colors
+                                                                      .indigo
+                                                                      .shade800,
+                                                              side: BorderSide(
+                                                                color: Colors
                                                                     .indigo
                                                                     .shade800,
-                                                            side: BorderSide(
-                                                              color: Colors
-                                                                  .indigo
-                                                                  .shade800,
-                                                            ),
-                                                            shape: RoundedRectangleBorder(
-                                                              borderRadius:
-                                                                  BorderRadius.circular(
-                                                                    8,
+                                                              ),
+                                                              shape: RoundedRectangleBorder(
+                                                                borderRadius:
+                                                                    BorderRadius.circular(
+                                                                      8,
+                                                                    ),
+                                                              ),
+                                                              padding:
+                                                                  const EdgeInsets.symmetric(
+                                                                    vertical: 8,
                                                                   ),
                                                             ),
-                                                            padding:
-                                                                const EdgeInsets.symmetric(
-                                                                  vertical: 8,
-                                                                ),
-                                                          ),
-                                                          onPressed: () {
-                                                            _openViewResultDialog(
-                                                              student,
-                                                              studentResult,
-                                                            );
-                                                          },
-                                                          icon: const Icon(
-                                                            Icons.visibility,
-                                                            size: 16,
-                                                          ),
-                                                          label: const Text(
-                                                            'ভিউ রেজাল্ট',
-                                                            style: TextStyle(
-                                                              fontSize: 12,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
+                                                            onPressed: () {
+                                                              _openViewResultDialog(
+                                                                student,
+                                                                studentResult,
+                                                              );
+                                                            },
+                                                            icon: const Icon(
+                                                              Icons.visibility,
+                                                              size: 16,
+                                                            ),
+                                                            label: const Text(
+                                                              'ভিউ রেজাল্ট',
+                                                              style: TextStyle(
+                                                                fontSize: 12,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                              ),
                                                             ),
                                                           ),
                                                         ),
-                                                      ),
-                                                      const SizedBox(width: 10),
-                                                      Expanded(
-                                                        child: ElevatedButton.icon(
-                                                          style: ElevatedButton.styleFrom(
-                                                            backgroundColor:
-                                                                Colors
-                                                                    .indigo
-                                                                    .shade800,
-                                                            foregroundColor:
-                                                                Colors.white,
-                                                            elevation: 0,
-                                                            shape: RoundedRectangleBorder(
-                                                              borderRadius:
-                                                                  BorderRadius.circular(
-                                                                    8,
+                                                        const SizedBox(
+                                                          width: 10,
+                                                        ),
+                                                        Expanded(
+                                                          child: ElevatedButton.icon(
+                                                            style: ElevatedButton.styleFrom(
+                                                              backgroundColor:
+                                                                  Colors
+                                                                      .indigo
+                                                                      .shade800,
+                                                              foregroundColor:
+                                                                  Colors.white,
+                                                              elevation: 0,
+                                                              shape: RoundedRectangleBorder(
+                                                                borderRadius:
+                                                                    BorderRadius.circular(
+                                                                      8,
+                                                                    ),
+                                                              ),
+                                                              padding:
+                                                                  const EdgeInsets.symmetric(
+                                                                    vertical: 8,
                                                                   ),
                                                             ),
-                                                            padding:
-                                                                const EdgeInsets.symmetric(
-                                                                  vertical: 8,
-                                                                ),
-                                                          ),
-                                                          onPressed: () {
-                                                            _openEditResultDialog(
-                                                              student,
-                                                            );
-                                                          },
-                                                          icon: const Icon(
-                                                            Icons.edit,
-                                                            size: 16,
-                                                          ),
-                                                          label: const Text(
-                                                            'রেজাল্ট এডিট',
-                                                            style: TextStyle(
-                                                              fontSize: 12,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
+                                                            onPressed: () {
+                                                              _openEditResultDialog(
+                                                                student,
+                                                              );
+                                                            },
+                                                            icon: const Icon(
+                                                              Icons.edit,
+                                                              size: 16,
+                                                            ),
+                                                            label: const Text(
+                                                              'রেজাল্ট এডিট',
+                                                              style: TextStyle(
+                                                                fontSize: 12,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                              ),
                                                             ),
                                                           ),
                                                         ),
-                                                      ),
-                                                    ],
-                                                  ),
+                                                      ],
+                                                    ),
+                                                  ],
                                                 ],
                                               ),
                                             ),

@@ -1221,20 +1221,13 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                                 icon: Icons.insert_chart_rounded,
                                 color: Colors.orange,
                                 onTap: () {
+                                  // studentDetails থেকে academy_id না পেলে বিকল্প সমাধান
                                   String academyId =
-                                      studentDetails?['academy_id'] ?? '';
+                                      studentDetails?['academy_id']
+                                          ?.toString() ??
+                                      '';
                                   String className = widget.className;
                                   String studentRoll = widget.roll;
-
-                                  if (academyId.isEmpty || className.isEmpty) {
-                                    Get.snackbar(
-                                      "ত্রুটি",
-                                      "প্রতিষ্ঠানের তথ্য পাওয়া যায়নি!",
-                                      backgroundColor: Colors.red,
-                                      colorText: Colors.white,
-                                    );
-                                    return;
-                                  }
 
                                   Get.to(
                                     () => StudentResultView(

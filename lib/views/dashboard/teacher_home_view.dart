@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:academy_management/views/dashboard/Academy_Result_Management_View.dart';
 import 'package:academy_management/views/dashboard/Model_Test_View.dart';
 import 'package:academy_management/views/dashboard/TeacherRoutineView.dart';
 import 'package:academy_management/views/dashboard/question_create_view.dart';
@@ -1020,12 +1021,27 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           color: Colors.indigo.shade50,
                           iconColor: Colors.indigo.shade700,
                           onTap: () {
-                            Get.snackbar(
-                              "তথ্য",
-                              "ফলাফল সেকশনটি শীঘ্রই আসছে",
-                              backgroundColor: Colors.indigo,
-                              colorText: Colors.white,
-                            );
+                            // এখানে একাডেমি আইডি এবং isReadOnly: true পাস করা হলো
+                            if (academyId.isNotEmpty) {
+                              Get.to(
+                                () => AcademyResultManagementView(
+                                  academyId: academyId,
+                                  currentUserId: teacherId,
+                                  currentUserName: teacherName.isNotEmpty
+                                      ? teacherName
+                                      : widget.userName,
+                                  isReadOnly:
+                                      true, // শিক্ষকের জন্য এটি রিড-অনলি বা সীমিত মোড হবে
+                                ),
+                              );
+                            } else {
+                              Get.snackbar(
+                                "ত্রুটি",
+                                "একাডেমি আইডি পাওয়া যায়নি!",
+                                backgroundColor: Colors.red,
+                                colorText: Colors.white,
+                              );
+                            }
                           },
                         ),
                         _buildMenuCard(

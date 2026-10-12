@@ -37,29 +37,51 @@ class _StudentResultViewState extends State<StudentResultView> {
   // সুপাবেস থেকে একই শ্রেণির সকল ছাত্রছাত্রীর রেজাল্ট ফেচ করে সাবজেক্ট পজিশন হিসাব করা
   Future<void> _fetchStudentAndClassResults() async {
     try {
-      // ১. ওই নির্দিষ্ট ক্লাসের এবং প্রতিষ্ঠানের সকল ছাত্রছাত্রীর রেজাল্ট ফেচ করা[cite: 9]
-      final classResponse = await supabase
-          .from('exam_results')
-          .select()
-          .eq('academy_id', widget.academyId)
-          .eq('class_name', widget.className);
+      String cleanAcademyId = widget.academyId.trim();
+      String cleanClass = widget.className.trim();
+      String cleanRoll = widget.studentRoll.toString().trim();
+
+      // ১. প্রথমে সরাসরি exam_results টেবিল থেকে সব ডেটা ফেচ করা (যাতে ফিল্টারিং মিসিং না হয়)
+      final response = await supabase.from('exam_results').select();
 
       List<Map<String, dynamic>> allClassResults =
-          List<Map<String, dynamic>>.from(classResponse);
+          List<Map<String, dynamic>>.from(response);
 
-      // পরীক্ষা অনুযায়ী সকল ছাত্রের রেজাল্ট গ্রুপ করা[cite: 9]
+      // ২. যদি academyId থাকে তবে তা দিয়ে ফিল্টার করা, না থাকলে বাইপাস করা
+      if (cleanAcademyId.isNotEmpty) {
+        allClassResults = allClassResults.where((r) {
+          String dbAcademyId = r['academy_id']?.toString().trim() ?? '';
+          return dbAcademyId == cleanAcademyId;
+        }).toList();
+      }
+
+      // ৩. ক্লাসের নাম দিয়ে ফিল্টার করা (বাংলা বানানের ছোটখাটো পার্থক্য এড়াতে কন্টেইন চেক)
+      if (cleanClass.isNotEmpty) {
+        List<Map<String, dynamic>> classFiltered = allClassResults.where((r) {
+          String dbClass =
+              r['class_name']?.toString().trim().toLowerCase() ?? '';
+          String targetClass = cleanClass.toLowerCase();
+          return dbClass.contains(targetClass) || targetClass.contains(dbClass);
+        }).toList();
+
+        // যদি ক্লাস ফিল্টারে ডেটা পাওয়া যায় তবে সেটাই ব্যবহার করা হবে, নতুবা সব ডেটা রাখা হবে
+        if (classFiltered.isNotEmpty) {
+          allClassResults = classFiltered;
+        }
+      }
+
+      // পরীক্ষা অনুযায়ী সকল ছাত্রের রেজাল্ট গ্রুপ করা
       Map<String, List<Map<String, dynamic>>> groupedByExam = {};
       for (var row in allClassResults) {
         String examTitle = row['exam_title']?.toString() ?? '';
         groupedByExam.putIfAbsent(examTitle, () => []).add(row);
       }
 
-      // ২. ওই ছাত্রের নিজের রেজাল্ট ফিল্টার করা[cite: 9]
-      List<Map<String, dynamic>> myResults = allClassResults
-          .where(
-            (r) => r['roll']?.toString().trim() == widget.studentRoll.trim(),
-          )
-          .toList();
+      // ৪. সুনির্দিষ্ট শিক্ষার্থীর রোল দিয়ে তার নিজের রেজাল্ট ফিল্টার করা
+      List<Map<String, dynamic>> myResults = allClassResults.where((r) {
+        String dbRoll = r['roll']?.toString().trim() ?? '';
+        return dbRoll == cleanRoll;
+      }).toList();
 
       if (mounted) {
         setState(() {

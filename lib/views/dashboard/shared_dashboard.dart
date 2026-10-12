@@ -1,9 +1,12 @@
 import 'package:academy_management/views/admin/teachers_view.dart';
+import 'package:academy_management/views/dashboard/AcademyAiAssistantView.dart';
 import 'package:academy_management/views/dashboard/Academy_Result_Management_View.dart';
 import 'package:academy_management/views/dashboard/Admin_Complaints_View.dart';
+import 'package:academy_management/views/dashboard/ExamSeatPlanView.dart';
 import 'package:academy_management/views/dashboard/Model_Test_View.dart';
 import 'package:academy_management/views/dashboard/OtherIncomeExpenseView.dart';
 import 'package:academy_management/views/dashboard/StudentIdCardVie.dart';
+import 'package:academy_management/views/dashboard/SuperAdminManagementView.dart';
 import 'package:academy_management/views/dashboard/academy_teachers_salary_view.dart';
 import 'package:academy_management/views/dashboard/admit_card_view.dart';
 import 'package:academy_management/views/dashboard/attendance_page_view.dart';
@@ -19,6 +22,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'dart:async';
@@ -792,7 +796,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
               _isEnglish ? 'BN' : 'EN',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: 15,
                 color: Colors.white,
               ),
             ),
@@ -873,167 +877,160 @@ class _SharedDashboardState extends State<SharedDashboard> {
                 );
               },
             ),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_active_outlined),
-                onPressed: () async {
-                  final academyId = await _getAcademyIdSafely();
-                  if (academyId != null) {
-                    await Get.to(
-                      () => NoticeBoardView(
-                        academyId: academyId,
-                        userRole: widget.role,
-                      ),
-                    );
-                    _fetchUnreadNoticeCount();
-                  } else {
-                    Get.snackbar(
-                      _isEnglish ? "Error" : "ত্রুটি",
-                      _isEnglish
-                          ? "Academy ID not found!"
-                          : "একাডেমি আইডি পাওয়া যায়নি!",
-                      backgroundColor: Colors.red,
-                      colorText: Colors.white,
-                    );
-                  }
-                },
-              ),
-              if (_unreadNoticeCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 18,
-                      minHeight: 18,
-                    ),
-                    child: Text(
-                      '$_unreadNoticeCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          ),
         ],
       ),
       drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
+        child: Column(
           children: [
-            UserAccountsDrawerHeader(
-              accountName: Text(
-                widget.userName,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-              accountEmail: Text(widget.role.toUpperCase()),
-              currentAccountPicture: const CircleAvatar(
-                backgroundColor: Colors.white,
-                child: Icon(Icons.person, size: 45, color: Colors.teal),
-              ),
-              decoration: const BoxDecoration(color: Colors.teal),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home, color: Colors.teal),
-              title: Text(_isEnglish ? 'Home Dashboard' : 'হোম ড্যাশবোর্ড'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.campaign, color: Colors.teal),
-              title: Text(_isEnglish ? 'Notice Board' : 'নোটিশ বোর্ড'),
-              onTap: () async {
-                Navigator.pop(context);
-                final fetchedAcademyId = await _getAcademyIdSafely();
-                if (fetchedAcademyId != null) {
-                  Get.to(
-                    () => NoticeBoardView(
-                      academyId: fetchedAcademyId,
-                      userRole: widget.role,
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  UserAccountsDrawerHeader(
+                    accountName: Text(
+                      widget.userName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
                     ),
-                  );
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.account_balance_wallet,
-                color: Colors.teal,
+                    accountEmail: Text(widget.role.toUpperCase()),
+                    currentAccountPicture: const CircleAvatar(
+                      backgroundColor: Colors.white,
+                      child: Icon(Icons.person, size: 45, color: Colors.teal),
+                    ),
+                    decoration: const BoxDecoration(color: Colors.teal),
+                  ),
+
+                  ListTile(
+                    leading: const Icon(
+                      Icons.system_update_tv_rounded,
+                      color: Colors.teal,
+                    ),
+                    title: Text(
+                      _isEnglish
+                          ? 'students list (Excel)'
+                          : 'ছাত্রছাত্রীদের তালিকা(এক্সেল)',
+                    ),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final fetchedAcademyId = await _getAcademyIdSafely();
+                      if (fetchedAcademyId != null) {
+                        Get.to(
+                          () => NoticeBoardView(
+                            academyId: fetchedAcademyId,
+                            userRole: widget.role,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.account_balance_wallet,
+                      color: Colors.teal,
+                    ),
+                    title: Text(
+                      _isEnglish
+                          ? 'Salary & Accounts'
+                          : 'একাডেমি হিসাব(এক্সেল)',
+                    ),
+                    onTap: () => Navigator.pop(context),
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.update, color: Colors.teal),
+                    title: Text(
+                      _isEnglish
+                          ? 'Update to New Year'
+                          : 'নতুন বছরে আপডেট করুন',
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _checkAndShowYearTransitionDialog(context);
+                    },
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.settings, color: Colors.teal),
+                    title: Text(_isEnglish ? 'Settings' : 'সেটিংস'),
+                    onTap: () => Navigator.pop(context),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.feedback, color: Colors.teal),
+                    title: Text(_isEnglish ? 'Feedback' : 'ফিডব্যাক'),
+                    onTap: () => Navigator.pop(context),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.privacy_tip, color: Colors.teal),
+                    title: Text(
+                      _isEnglish ? 'Privacy Policy' : 'প্রাইভেসি পলিসি',
+                    ),
+                    onTap: () => Navigator.pop(context),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.share, color: Colors.teal),
+                    title: Text(_isEnglish ? 'Share App' : 'অ্যাপ শেয়ার'),
+                    onTap: () => Navigator.pop(context),
+                  ),
+                  const Divider(),
+                  // ডেভেলপারের সাথে যোগাযোগের অপশন (সংশোধিত)
+                  ListTile(
+                    leading: const Icon(Icons.mail_outline, color: Colors.teal),
+                    title: Text(
+                      _isEnglish
+                          ? 'Contact Developer'
+                          : 'ডেভেলপারের সাথে যোগাযোগ',
+                    ),
+                    onTap: () async {
+                      final Uri emailUri = Uri(
+                        scheme: 'mailto',
+                        path: 'abbas.zhsust@gmail.com',
+                        query:
+                            'subject=Developer Support & Feedback&body=Hi Abbas, I want to contact you regarding the Academy Management App.',
+                      );
+
+                      try {
+                        await launchUrl(
+                          emailUri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      } catch (e) {
+                        Get.snackbar(
+                          "ত্রুটি",
+                          "ইমেইল অ্যাপ ওপেন করা সম্ভব হয়নি: $e",
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
+                        );
+                      }
+                    },
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(Icons.logout, color: Colors.red),
+                    title: Text(
+                      _isEnglish ? 'Logout' : 'লগআউট',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                    onTap: () async {
+                      Get.offAll(() => const LoginView());
+                    },
+                  ),
+                ],
               ),
-              title: Text(_isEnglish ? 'Salary & Accounts' : 'বেতন ও হিসাব'),
-              onTap: () => Navigator.pop(context),
             ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.update, color: Colors.teal),
-              title: Text(
-                _isEnglish ? 'Update to New Year' : 'নতুন বছরে আপডেট করুন',
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _checkAndShowYearTransitionDialog(context);
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.settings, color: Colors.teal),
-              title: Text(_isEnglish ? 'Settings' : 'সেটিংস'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.feedback, color: Colors.teal),
-              title: Text(_isEnglish ? 'Feedback' : 'ফিডব্যাক'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.privacy_tip, color: Colors.teal),
-              title: Text(_isEnglish ? 'Privacy Policy' : 'প্রাইভেসি পলিসি'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.share, color: Colors.teal),
-              title: Text(_isEnglish ? 'Share App' : 'অ্যাপ শেয়ার'),
-              onTap: () => Navigator.pop(context),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.info_outline, color: Colors.grey),
-              title: Text(
-                _isEnglish ? 'App Version' : 'অ্যাপ ভার্সন',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              trailing: const Text(
-                'v1.0.0',
+            // একেবারে নিচে মাঝখানে শুধু ভার্সন সংখ্যা
+            const Padding(
+              padding: EdgeInsets.only(bottom: 16.0),
+              child: Text(
+                '1.0.0',
                 style: TextStyle(
                   color: Colors.grey,
                   fontWeight: FontWeight.bold,
+                  fontSize: 13,
                 ),
+                textAlign: TextAlign.center,
               ),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: Text(
-                _isEnglish ? 'Logout' : 'লগআউট',
-                style: const TextStyle(color: Colors.red),
-              ),
-              onTap: () async {
-                Get.offAll(() => const LoginView());
-              },
             ),
           ],
         ),
@@ -1734,7 +1731,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   ),
                 if (isSuperAdmin)
                   _buildDashboardCard(
-                    icon: Icons.quiz_rounded,
+                    icon: Icons.merge_outlined,
                     title: _isEnglish ? 'Syllabus Create' : 'সিলেবাস তৈরি',
                     color: Colors.deepPurple.shade50,
                     iconColor: Colors.teal.shade800,
@@ -1746,6 +1743,64 @@ class _SharedDashboardState extends State<SharedDashboard> {
                           () => SyllabusView(
                             academyId: fetchedAcademyId,
                             userRole: widget.role,
+                          ),
+                        );
+                        _loadStatsInitial();
+                      } else {
+                        Get.snackbar(
+                          _isEnglish ? "Error" : "ত্রুটি",
+                          _isEnglish
+                              ? "Academy ID not found!"
+                              : "একাডেমি আইডি পাওয়া যায়নি!",
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
+                        );
+                      }
+                    },
+                  ),
+                if (isSuperAdmin)
+                  _buildDashboardCard(
+                    icon: Icons.filter_4_rounded,
+                    title: _isEnglish
+                        ? 'Seat Number Create'
+                        : 'সিট নাম্বার তৈরি',
+                    color: Colors.deepPurple.shade50,
+                    iconColor: Colors.teal.shade800,
+                    onTap: () async {
+                      final fetchedAcademyId = await _getAcademyIdSafely();
+
+                      if (fetchedAcademyId != null) {
+                        await Get.to(
+                          () => ExamSeatPlanView(
+                            academyId: fetchedAcademyId,
+                            //userRole: widget.role,
+                          ),
+                        );
+                        _loadStatsInitial();
+                      } else {
+                        Get.snackbar(
+                          _isEnglish ? "Error" : "ত্রুটি",
+                          _isEnglish
+                              ? "Academy ID not found!"
+                              : "একাডেমি আইডি পাওয়া যায়নি!",
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
+                        );
+                      }
+                    },
+                  ),
+                if (isSuperAdmin)
+                  _buildDashboardCard(
+                    icon: Icons.assistant_rounded,
+                    title: _isEnglish ? 'AI Assistant' : 'AI Assistant',
+                    color: Colors.lightBlue.shade50,
+                    iconColor: Colors.lightBlue.shade800,
+                    onTap: () async {
+                      final fetchedAcademyId = await _getAcademyIdSafely();
+                      if (fetchedAcademyId != null) {
+                        await Get.to(
+                          () => AcademyAiAssistantView(
+                            academyId: fetchedAcademyId,
                           ),
                         );
                         _loadStatsInitial();
