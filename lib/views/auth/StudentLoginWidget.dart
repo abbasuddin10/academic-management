@@ -163,6 +163,10 @@ class _StudentLoginWidgetState extends State<StudentLoginWidget> {
         await prefs.setString('student_class', className);
         await prefs.setString('student_roll', roll);
 
+        // 🔥 অত্যন্ত গুরুত্বপূর্ণ: academy_id এবং student_id সঠিকভাবে সেভ করা হলো
+        await prefs.setString('student_academy_id', selectedAcademyId!);
+        await prefs.setString('student_id', studentId);
+
         Get.offAll(
           () => StudentHomeView(
             studentName: studentName,

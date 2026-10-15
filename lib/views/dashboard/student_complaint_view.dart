@@ -1,5 +1,7 @@
+import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StudentComplaintView extends StatefulWidget {
@@ -31,6 +33,37 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
 
   bool _isAnonymous = true;
   bool _isSubmitting = false;
+
+  // ফিক্সড ব্যানার অ্যাডের জন্য ভেরিয়েবল
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // পেজ ওপেন হওয়ার সাথে সাথে ইন্টারস্টিশিয়াল অ্যাড লোড করা শুরু করা[cite: 17]
+    AdService.loadInterstitialAd();
+
+    // বটমে ফিক্সড ব্যানার অ্যাড লোড করা[cite: 17]
+    _bannerAd = AdService.createBannerAd()
+      ..load().then((_) {
+        if (mounted) {
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _bannerAd
+        ?.dispose(); // মেমোরি লিক রোধ করতে ব্যানার অ্যাড ডিসপোজ করা[cite: 17]
+    _titleController.dispose();
+    _detailsController.dispose();
+    super.dispose();
+  }
 
   Future<void> _submitComplaint() async {
     if (widget.studentId.isEmpty || widget.academyId.isEmpty) {
@@ -126,8 +159,14 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
       buttonColor: Colors.indigo,
       cancelTextColor: Colors.black54,
       onConfirm: () {
-        Get.back();
-        _submitComplaint();
+        Get.back(); // ডায়ালগ বন্ধ করা[cite: 17]
+
+        // পপআপে কনফার্ম করার পর শর্ত ছাড়া সরাসরি অ্যাড দেখাবে, দেখা শেষ হলে সুপাবেসে ডাটা সাবমিট হবে
+        AdService.showForcedAd(
+          onComplete: () {
+            _submitComplaint();
+          },
+        );
       },
     );
   }
@@ -278,7 +317,7 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                                               ),
                                             ),
                                           ),
-                                          // শুধু পেন্ডিং থাকলেই ডিলিট আইকন দেখাবে
+                                          // শুধু পেন্ডিং থাকলেই ডিলিট আইকন দেখাবে[cite: 17]
                                           if (status == 'Pending') ...[
                                             const SizedBox(width: 8),
                                             IconButton(
@@ -302,7 +341,7 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                                                       Colors.white,
                                                   buttonColor: Colors.red,
                                                   onConfirm: () async {
-                                                    Get.back(); // ডায়ালগ বন্ধ
+                                                    Get.back(); // ডায়ালগ বন্ধ[cite: 17]
                                                     try {
                                                       await Supabase
                                                           .instance
@@ -316,7 +355,7 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
 
                                                       setStateSheet(
                                                         () {},
-                                                      ); // শিট রিফ্রেশ
+                                                      ); // শিট রিফ্রেশ[cite: 17]
                                                       Get.snackbar(
                                                         'সফল',
                                                         'অভিযোগটি সফলভাবে মুছে ফেলা হয়েছে।',
@@ -380,13 +419,6 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
       ),
       isScrollControlled: true,
     );
-  }
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _detailsController.dispose();
-    super.dispose();
   }
 
   @override
@@ -601,6 +633,16 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
           ),
         ),
       ),
+
+      // পেজের বোটমে ফিক্সড ব্যানার অ্যাড দেখানোর অংশ[cite: 17]
+      bottomNavigationBar: _isBannerAdLoaded && _bannerAd != null
+          ? Container(
+              alignment: Alignment.center,
+              width: _bannerAd!.size.width.toDouble(),
+              height: _bannerAd!.size.height.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
+            )
+          : const SizedBox.shrink(),
     );
   }
 }

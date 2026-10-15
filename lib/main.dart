@@ -8,9 +8,11 @@ import 'views/auth/login_view.dart';
 import 'views/dashboard/shared_dashboard.dart';
 import 'views/dashboard/student_home_view.dart';
 import 'views/dashboard/teacher_home_view.dart'; // শিক্ষক ভিউ ইমপোর্ট করা হলো
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await MobileAds.instance.initialize();
 
   // ১. ফায়ারবেস ইনিশিয়ালাইজেশন (অ্যান্ড্রয়েড এবং ওয়েবের জন্য আলাদা কনফিগারেশন)
   if (kIsWeb) {

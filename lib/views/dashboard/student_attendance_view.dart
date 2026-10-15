@@ -1,4 +1,6 @@
+import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -24,10 +26,30 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
   int totalAbsent = 0;
   Map<String, int> monthlyPresentMap = {};
 
+  // ফিক্সড ব্যানার অ্যাডের জন্য ভেরিয়েবল
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
+
   @override
   void initState() {
     super.initState();
     fetchAttendanceHistory();
+
+    // বটমে ফিক্সড ব্যানার অ্যাড লোড করা
+    _bannerAd = AdService.createBannerAd()
+      ..load().then((_) {
+        if (mounted) {
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose(); // মেমোরি লিক রোধ করতে ব্যানার অ্যাড ডিসপোজ করা
+    super.dispose();
   }
 
   // ব্যাকগ্রাউন্ডে ডাটা ফেচ করার ফাংশন
@@ -416,6 +438,16 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
           ),
         ),
       ),
+
+      // পেজের বোটমে ফিক্সড ব্যানার অ্যাড দেখানোর অংশ
+      bottomNavigationBar: _isBannerAdLoaded && _bannerAd != null
+          ? Container(
+              alignment: Alignment.center,
+              width: _bannerAd!.size.width.toDouble(),
+              height: _bannerAd!.size.height.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
+            )
+          : const SizedBox.shrink(),
     );
   }
 

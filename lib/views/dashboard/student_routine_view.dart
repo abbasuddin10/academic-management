@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -22,6 +24,10 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
   List<Map<String, dynamic>> routineList = [];
   Timer? _timer;
   DateTime _now = DateTime.now();
+
+  // ফিক্সড ব্যানার অ্যাডের জন্য ভেরিয়েবল
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
 
   final Map<int, String> _weekdaysMap = {
     DateTime.saturday: 'শনিবার',
@@ -48,6 +54,16 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
     super.initState();
     _checkInternetAndFetchRoutine();
 
+    // বটমে ফিক্সড ব্যানার অ্যাড লোড করা
+    _bannerAd = AdService.createBannerAd()
+      ..load().then((_) {
+        if (mounted) {
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        }
+      });
+
     // প্রতি ১ সেকেন্ড পরপর টাইমার রান করবে যাতে রানিং ক্লাসের লাইভ কাউন্টডাউন দেখায়
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
@@ -61,6 +77,7 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
   @override
   void dispose() {
     _timer?.cancel();
+    _bannerAd?.dispose(); // মেমোরি লিক রোধ করতে ব্যানার অ্যাড ডিসপোজ করা
     super.dispose();
   }
 
@@ -551,6 +568,16 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
           ),
         ],
       ),
+
+      // পেজের বোটমে ফিক্সড ব্যানার অ্যাড দেখানোর অংশ
+      bottomNavigationBar: _isBannerAdLoaded && _bannerAd != null
+          ? Container(
+              alignment: Alignment.center,
+              width: _bannerAd!.size.width.toDouble(),
+              height: _bannerAd!.size.height.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
+            )
+          : const SizedBox.shrink(),
     );
   }
 }

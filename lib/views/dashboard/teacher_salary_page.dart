@@ -1,6 +1,7 @@
+import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 class TeacherSalaryPageView extends StatefulWidget {
   final String academyId;
@@ -29,10 +30,33 @@ class _TeacherSalaryPageViewState extends State<TeacherSalaryPageView> {
   double totalPaid = 0.0;
   double dueSalary = 0.0;
 
+  BannerAd? _bannerAd; // 👈 ব্যানার অ্যাড ভেরিয়েবল
+  bool _isBannerAdLoaded = false;
+
   @override
   void initState() {
     super.initState();
+    AdService.loadInterstitialAd(); // 👈 ইন্টারস্টিশিয়াল অ্যাড লোড[cite: 2]
+    _initBannerAd(); // 👈 ব্যানার অ্যাড ইনিশিয়ালাইজ
     _fetchTeacherSalaryAndHistory();
+  }
+
+  // 👈 ব্যানার অ্যাড সেটআপ ফাংশন[cite: 2]
+  void _initBannerAd() {
+    _bannerAd = AdService.createBannerAd()
+      ..load().then((_) {
+        if (mounted) {
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose(); // 👈 ব্যানার অ্যাড ডিসপোজ
+    super.dispose();
   }
 
   // অ্যাডমিনের লজিক অনুযায়ী সুপারবেজ থেকে শিক্ষকের বেতন, বকেয়া এবং পেমেন্ট হিস্ট্রি হিসাব করার ফাংশন
@@ -112,6 +136,15 @@ class _TeacherSalaryPageViewState extends State<TeacherSalaryPageView> {
       }
       print("Error fetching salary history: $e");
     }
+  }
+
+  // 👈 সব ইতিহাস দেখানোর আগে অ্যাড দেখানোর ফাংশন[cite: 2]
+  void _onShowAllHistoryClicked() {
+    AdService.showForcedAd(
+      onComplete: () {
+        _showAllSalaryHistory();
+      },
+    );
   }
 
   // পূর্ববর্তী সকল বেতনের ইতিহাস দেখার পপআপ (অ্যাডমিন প্যানেলের স্টাইলে)
@@ -216,148 +249,169 @@ class _TeacherSalaryPageViewState extends State<TeacherSalaryPageView> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: RefreshIndicator(
-        onRefresh: _fetchTeacherSalaryAndHistory,
-        child: Column(
-          children: [
-            // উপরে সামারি কার্ড (স্বয়ংক্রিয় হিসাব দেখাবে)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Colors.teal,
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(24),
-                  bottomRight: Radius.circular(24),
-                ),
-              ),
+      body: Column(
+        children: [
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _fetchTeacherSalaryAndHistory,
               child: Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildSummaryCard(
-                        'মাসের বেতন',
-                        '৳${monthlySalary.toStringAsFixed(0)}',
-                        Colors.white,
-                      ),
-                      _buildSummaryCard(
-                        'পরিশোধিত',
-                        '৳${totalPaid.toStringAsFixed(0)}',
-                        Colors.greenAccent,
-                      ),
-                      _buildSummaryCard(
-                        'বকেয়া বেতন',
-                        '৳${dueSalary.toStringAsFixed(0)}',
-                        Colors.orangeAccent,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // হিস্ট্রি সেকশনের শিরোনাম এবং সব ইতিহাস দেখার বাটন
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'সর্বশেষ পেমেন্ট ইতিহাস',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _showAllSalaryHistory,
-                    child: const Text(
-                      'সব ইতিহাস →',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.teal,
-                        fontWeight: FontWeight.bold,
+                  // উপরে সামারি কার্ড (স্বয়ংক্রিয় হিসাব দেখাবে)
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: const BoxDecoration(
+                      color: Colors.teal,
+                      borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(24),
+                        bottomRight: Radius.circular(24),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 4),
-
-            // পেমেন্ট হিস্ট্রি লিস্ট
-            Expanded(
-              child: isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: Colors.teal),
-                    )
-                  : salaryHistoryList.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'কোনো পেমেন্ট হিস্ট্রি পাওয়া যায়নি।',
-                        style: TextStyle(color: Colors.grey, fontSize: 14),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: salaryHistoryList.length,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemBuilder: (context, index) {
-                        final item = salaryHistoryList[index];
-                        double amount =
-                            double.tryParse(
-                              item['amount']?.toString() ?? '0',
-                            ) ??
-                            0.0;
-                        String monthStr = item['month'] ?? 'মাস উল্লেখ নেই';
-                        String paymentDate = item['payment_date'] ?? '';
-
-                        return Card(
-                          elevation: 1,
-                          margin: const EdgeInsets.symmetric(vertical: 6),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: Colors.teal.shade50,
-                              child: const Icon(
-                                Icons.payments,
-                                color: Colors.teal,
-                              ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildSummaryCard(
+                              'মাসের বেতন',
+                              '৳${monthlySalary.toStringAsFixed(0)}',
+                              Colors.white,
                             ),
-                            title: Text(
-                              'মাস: $monthStr',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
+                            _buildSummaryCard(
+                              'পরিশোধিত',
+                              '৳${totalPaid.toStringAsFixed(0)}',
+                              Colors.greenAccent,
+                            ),
+                            _buildSummaryCard(
+                              'বকেয়া বেতন',
+                              '৳${dueSalary.toStringAsFixed(0)}',
+                              Colors.orangeAccent,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // হিস্ট্রি সেকশনের শিরোনাম এবং সব ইতিহাস দেখার বাটন
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'সর্বশেষ পেমেন্ট ইতিহাস',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        TextButton(
+                          onPressed:
+                              _onShowAllHistoryClicked, // 👈 এখানে আপডেট করা হয়েছে[cite: 2]
+                          child: const Text(
+                            'সব ইতিহাস →',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.teal,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // পেমেন্ট হিস্ট্রি লিস্ট
+                  Expanded(
+                    child: isLoading
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.teal,
+                            ),
+                          )
+                        : salaryHistoryList.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'কোনো পেমেন্ট হিস্ট্রি পাওয়া যায়নি।',
+                              style: TextStyle(
+                                color: Colors.grey,
                                 fontSize: 14,
                               ),
                             ),
-                            subtitle: Text(
-                              paymentDate.isNotEmpty
-                                  ? 'প্রদানের তারিখ: $paymentDate'
-                                  : '',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                            trailing: Text(
-                              '+ ৳${amount.toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                color: Colors.green,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                              ),
-                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: salaryHistoryList.length,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            itemBuilder: (context, index) {
+                              final item = salaryHistoryList[index];
+                              double amount =
+                                  double.tryParse(
+                                    item['amount']?.toString() ?? '0',
+                                  ) ??
+                                  0.0;
+                              String monthStr =
+                                  item['month'] ?? 'মাস উল্লেখ নেই';
+                              String paymentDate = item['payment_date'] ?? '';
+
+                              return Card(
+                                elevation: 1,
+                                margin: const EdgeInsets.symmetric(vertical: 6),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: Colors.teal.shade50,
+                                    child: const Icon(
+                                      Icons.payments,
+                                      color: Colors.teal,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    'মাস: $monthStr',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    paymentDate.isNotEmpty
+                                        ? 'প্রদানের তারিখ: $paymentDate'
+                                        : '',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  trailing: Text(
+                                    '+ ৳${amount.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      color: Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
-                    ),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+          // 👈 স্ক্রিনের নিচে ফিক্সড ব্যানার অ্যাড উইজেট[cite: 2]
+          if (_isBannerAdLoaded && _bannerAd != null)
+            Container(
+              alignment: Alignment.center,
+              width: _bannerAd!.size.width.toDouble(),
+              height: _bannerAd!.size.height.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
+            ),
+        ],
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:academy_management/services/ad_service.dart';
 import 'package:academy_management/views/dashboard/Academy_Result_Management_View.dart';
 import 'package:academy_management/views/dashboard/Model_Test_View.dart';
 import 'package:academy_management/views/dashboard/TeacherRoutineView.dart';
@@ -12,6 +13,7 @@ import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart'; // 👈 অ্যাড প্যাকেজ ইমপোর্ট
 import '../auth/login_view.dart';
 import '../student/students_view.dart';
 import 'attendance_page_view.dart';
@@ -44,6 +46,9 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
   Timer? _timer;
   DateTime _now = DateTime.now();
 
+  BannerAd? _bannerAd; // 👈 ব্যানার অ্যাড ভেরিয়েবল
+  bool _isBannerAdLoaded = false;
+
   final Map<int, String> _weekdaysMap = {
     DateTime.saturday: 'শনিবার',
     DateTime.sunday: 'রবিবার',
@@ -61,6 +66,9 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
     super.initState();
     _checkInternetAndFetchData();
 
+    AdService.loadInterstitialAd(); // 👈 ইন্টারস্টিশিয়াল অ্যাড লোড করা হলো[cite: 2]
+    _initBannerAd(); // 👈 ব্যানার অ্যাড ইনিশিয়ালাইজ
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -70,9 +78,22 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
     });
   }
 
+  // 👈 ব্যানার অ্যাড সেটআপ ফাংশন[cite: 2]
+  void _initBannerAd() {
+    _bannerAd = AdService.createBannerAd()
+      ..load().then((_) {
+        if (mounted) {
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        }
+      });
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
+    _bannerAd?.dispose(); // 👈 ব্যানার অ্যাড ডিসপোজ
     super.dispose();
   }
 
@@ -936,9 +957,16 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           icon: Icons.groups,
                           color: Colors.blue.shade50,
                           iconColor: Colors.blue.shade700,
-                          onTap: () => Get.to(
-                            () => const StudentsView(userRole: 'teacher'),
-                          ),
+                          onTap: () {
+                            AdService.showAdWithTracking(
+                              onComplete: () {
+                                // 👈 অ্যাড উইথ ট্র্যাকিং (সর্বোচ্চ ৩টি দৈনিক)[cite: 2]
+                                Get.to(
+                                  () => const StudentsView(userRole: 'teacher'),
+                                );
+                              },
+                            );
+                          },
                         ),
                         _buildMenuCard(
                           title: 'ছাত্রছাত্রীদের হাজিরা',
@@ -946,23 +974,27 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           color: Colors.green.shade50,
                           iconColor: Colors.green.shade700,
                           onTap: () {
-                            if (academyId.isNotEmpty) {
-                              Get.to(
-                                () => StudentAttendancePageView(
-                                  academyId: academyId,
-                                  teacherName: teacherName.isNotEmpty
-                                      ? teacherName
-                                      : widget.userName,
-                                ),
-                              );
-                            } else {
-                              Get.snackbar(
-                                "ত্রুটি",
-                                "একাডেমি আইডি পাওয়া যায়নি!",
-                                backgroundColor: Colors.red,
-                                colorText: Colors.white,
-                              );
-                            }
+                            AdService.showAdWithTracking(
+                              onComplete: () {
+                                if (academyId.isNotEmpty) {
+                                  Get.to(
+                                    () => StudentAttendancePageView(
+                                      academyId: academyId,
+                                      teacherName: teacherName.isNotEmpty
+                                          ? teacherName
+                                          : widget.userName,
+                                    ),
+                                  );
+                                } else {
+                                  Get.snackbar(
+                                    "ত্রুটি",
+                                    "একাডেমি আইডি পাওয়া যায়নি!",
+                                    backgroundColor: Colors.red,
+                                    colorText: Colors.white,
+                                  );
+                                }
+                              },
+                            );
                           },
                         ),
                         _buildMenuCard(
@@ -971,21 +1003,25 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           color: Colors.teal.shade50,
                           iconColor: Colors.teal.shade700,
                           onTap: () {
-                            if (academyId.isNotEmpty) {
-                              Get.to(
-                                () => AttendancePageView(
-                                  academyId: academyId,
-                                  userRole: 'teacher',
-                                ),
-                              );
-                            } else {
-                              Get.snackbar(
-                                "ত্রুটি",
-                                "একাডেমি আইডি পাওয়া যায়নি!",
-                                backgroundColor: Colors.red,
-                                colorText: Colors.white,
-                              );
-                            }
+                            AdService.showAdWithTracking(
+                              onComplete: () {
+                                if (academyId.isNotEmpty) {
+                                  Get.to(
+                                    () => AttendancePageView(
+                                      academyId: academyId,
+                                      userRole: 'teacher',
+                                    ),
+                                  );
+                                } else {
+                                  Get.snackbar(
+                                    "ত্রুটি",
+                                    "একাডেমি আইডি পাওয়া যায়নি!",
+                                    backgroundColor: Colors.red,
+                                    colorText: Colors.white,
+                                  );
+                                }
+                              },
+                            );
                           },
                         ),
                         _buildMenuCard(
@@ -994,24 +1030,29 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           color: Colors.purple.shade50,
                           iconColor: Colors.purple.shade700,
                           onTap: () {
-                            if (academyId.isNotEmpty && teacherId.isNotEmpty) {
-                              Get.to(
-                                () => TeacherRoutineView(
-                                  academyId: academyId,
-                                  teacherId: teacherId,
-                                  teacherName: teacherName.isNotEmpty
-                                      ? teacherName
-                                      : widget.userName,
-                                ),
-                              );
-                            } else {
-                              Get.snackbar(
-                                "ত্রুটি",
-                                "শিক্ষকের আইডি বা একাডেমি আইডি পাওয়া যায়নি!",
-                                backgroundColor: Colors.red,
-                                colorText: Colors.white,
-                              );
-                            }
+                            AdService.showAdWithTracking(
+                              onComplete: () {
+                                if (academyId.isNotEmpty &&
+                                    teacherId.isNotEmpty) {
+                                  Get.to(
+                                    () => TeacherRoutineView(
+                                      academyId: academyId,
+                                      teacherId: teacherId,
+                                      teacherName: teacherName.isNotEmpty
+                                          ? teacherName
+                                          : widget.userName,
+                                    ),
+                                  );
+                                } else {
+                                  Get.snackbar(
+                                    "ত্রুটি",
+                                    "শিক্ষকের আইডি বা একাডেমি আইডি পাওয়া যায়নি!",
+                                    backgroundColor: Colors.red,
+                                    colorText: Colors.white,
+                                  );
+                                }
+                              },
+                            );
                           },
                         ),
 
@@ -1021,27 +1062,29 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           color: Colors.indigo.shade50,
                           iconColor: Colors.indigo.shade700,
                           onTap: () {
-                            // এখানে একাডেমি আইডি এবং isReadOnly: true পাস করা হলো
-                            if (academyId.isNotEmpty) {
-                              Get.to(
-                                () => AcademyResultManagementView(
-                                  academyId: academyId,
-                                  currentUserId: teacherId,
-                                  currentUserName: teacherName.isNotEmpty
-                                      ? teacherName
-                                      : widget.userName,
-                                  isReadOnly:
-                                      true, // শিক্ষকের জন্য এটি রিড-অনলি বা সীমিত মোড হবে
-                                ),
-                              );
-                            } else {
-                              Get.snackbar(
-                                "ত্রুটি",
-                                "একাডেমি আইডি পাওয়া যায়নি!",
-                                backgroundColor: Colors.red,
-                                colorText: Colors.white,
-                              );
-                            }
+                            AdService.showAdWithTracking(
+                              onComplete: () {
+                                if (academyId.isNotEmpty) {
+                                  Get.to(
+                                    () => AcademyResultManagementView(
+                                      academyId: academyId,
+                                      currentUserId: teacherId,
+                                      currentUserName: teacherName.isNotEmpty
+                                          ? teacherName
+                                          : widget.userName,
+                                      isReadOnly: true,
+                                    ),
+                                  );
+                                } else {
+                                  Get.snackbar(
+                                    "ত্রুটি",
+                                    "একাডেমি আইডি পাওয়া যায়নি!",
+                                    backgroundColor: Colors.red,
+                                    colorText: Colors.white,
+                                  );
+                                }
+                              },
+                            );
                           },
                         ),
                         _buildMenuCard(
@@ -1050,20 +1093,24 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           color: Colors.cyan.shade50,
                           iconColor: Colors.cyan.shade700,
                           onTap: () {
-                            if (academyId.isNotEmpty) {
-                              Get.to(
-                                () => TeacherExamRoutineView(
-                                  academyId: academyId,
-                                ),
-                              );
-                            } else {
-                              Get.snackbar(
-                                "ত্রুটি",
-                                "একাডেমি আইডি পাওয়া যায়নি!",
-                                backgroundColor: Colors.red,
-                                colorText: Colors.white,
-                              );
-                            }
+                            AdService.showAdWithTracking(
+                              onComplete: () {
+                                if (academyId.isNotEmpty) {
+                                  Get.to(
+                                    () => TeacherExamRoutineView(
+                                      academyId: academyId,
+                                    ),
+                                  );
+                                } else {
+                                  Get.snackbar(
+                                    "ত্রুটি",
+                                    "একাডেমি আইডি পাওয়া যায়নি!",
+                                    backgroundColor: Colors.red,
+                                    colorText: Colors.white,
+                                  );
+                                }
+                              },
+                            );
                           },
                         ),
 
@@ -1073,25 +1120,29 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           color: const Color.fromARGB(255, 236, 238, 249),
                           iconColor: const Color.fromARGB(255, 7, 120, 165),
                           onTap: () {
-                            if (academyId.isNotEmpty &&
-                                teacherEmail.isNotEmpty &&
-                                teacherId.isNotEmpty) {
-                              Get.to(
-                                () => TeacherSalaryPageView(
-                                  academyId: academyId,
-                                  teacherEmail: teacherEmail,
-                                  teacherName: teacherName,
-                                  teacherId: teacherId,
-                                ),
-                              );
-                            } else {
-                              Get.snackbar(
-                                "ত্রুটি",
-                                "শিক্ষকের তথ্য লোড হয়নি, কিছুক্ষণ অপেক্ষা করুন।",
-                                backgroundColor: Colors.red,
-                                colorText: Colors.white,
-                              );
-                            }
+                            AdService.showAdWithTracking(
+                              onComplete: () {
+                                if (academyId.isNotEmpty &&
+                                    teacherEmail.isNotEmpty &&
+                                    teacherId.isNotEmpty) {
+                                  Get.to(
+                                    () => TeacherSalaryPageView(
+                                      academyId: academyId,
+                                      teacherEmail: teacherEmail,
+                                      teacherName: teacherName,
+                                      teacherId: teacherId,
+                                    ),
+                                  );
+                                } else {
+                                  Get.snackbar(
+                                    "ত্রুটি",
+                                    "শিক্ষকের তথ্য লোড হয়নি, কিছুক্ষণ অপেক্ষা করুন।",
+                                    backgroundColor: Colors.red,
+                                    colorText: Colors.white,
+                                  );
+                                }
+                              },
+                            );
                           },
                         ),
                         _buildMenuCard(
@@ -1100,25 +1151,29 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           color: Colors.teal.shade50,
                           iconColor: Colors.teal.shade700,
                           onTap: () {
-                            // 👈 এখানে একাডেমি আইডি এবং শিক্ষকের আইডি উভয়ই চেক করা হচ্ছে
-                            if (academyId.isNotEmpty && teacherId.isNotEmpty) {
-                              Get.to(
-                                () => ModelTestView(
-                                  academyId: academyId,
-                                  currentUserId: teacherId,
-                                  currentUserName: teacherName.isNotEmpty
-                                      ? teacherName
-                                      : widget.userName,
-                                ),
-                              );
-                            } else {
-                              Get.snackbar(
-                                "অপেক্ষা করুন",
-                                "শিক্ষকের তথ্য লোড হচ্ছে, অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন।",
-                                backgroundColor: Colors.orange,
-                                colorText: Colors.white,
-                              );
-                            }
+                            AdService.showAdWithTracking(
+                              onComplete: () {
+                                if (academyId.isNotEmpty &&
+                                    teacherId.isNotEmpty) {
+                                  Get.to(
+                                    () => ModelTestView(
+                                      academyId: academyId,
+                                      currentUserId: teacherId,
+                                      currentUserName: teacherName.isNotEmpty
+                                          ? teacherName
+                                          : widget.userName,
+                                    ),
+                                  );
+                                } else {
+                                  Get.snackbar(
+                                    "অপেক্ষা করুন",
+                                    "শিক্ষকের তথ্য লোড হচ্ছে, অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন।",
+                                    backgroundColor: Colors.orange,
+                                    colorText: Colors.white,
+                                  );
+                                }
+                              },
+                            );
                           },
                         ),
                         _buildMenuCard(
@@ -1127,30 +1182,33 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           color: Colors.deepPurple.shade50,
                           iconColor: Colors.deepPurple.shade800,
                           onTap: () {
-                            // সরাসরি ক্লাসের নিজস্ব academyId এবং teacherId (বা supabase id) ব্যবহার করা হলো
-                            final currentUserId = teacherId.isNotEmpty
-                                ? teacherId
-                                : (supabase.auth.currentUser?.id ?? '');
+                            AdService.showAdWithTracking(
+                              onComplete: () {
+                                final currentUserId = teacherId.isNotEmpty
+                                    ? teacherId
+                                    : (supabase.auth.currentUser?.id ?? '');
 
-                            if (academyId.isNotEmpty) {
-                              Get.to(
-                                () => QuestionCreateView(
-                                  academyId: academyId,
-                                  currentUserId: currentUserId,
-                                  currentUserName: teacherName.isNotEmpty
-                                      ? teacherName
-                                      : widget.userName,
-                                  userRole: 'teacher',
-                                ),
-                              );
-                            } else {
-                              Get.snackbar(
-                                "ত্রুটি",
-                                "একাডেমি আইডি পাওয়া যায়নি!",
-                                backgroundColor: Colors.red,
-                                colorText: Colors.white,
-                              );
-                            }
+                                if (academyId.isNotEmpty) {
+                                  Get.to(
+                                    () => QuestionCreateView(
+                                      academyId: academyId,
+                                      currentUserId: currentUserId,
+                                      currentUserName: teacherName.isNotEmpty
+                                          ? teacherName
+                                          : widget.userName,
+                                      userRole: 'teacher',
+                                    ),
+                                  );
+                                } else {
+                                  Get.snackbar(
+                                    "ত্রুটি",
+                                    "একাডেমি আইডি পাওয়া যায়নি!",
+                                    backgroundColor: Colors.red,
+                                    colorText: Colors.white,
+                                  );
+                                }
+                              },
+                            );
                           },
                         ),
                       ],
@@ -1249,6 +1307,14 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
               ),
             ),
           ),
+          // 👈 বটমে ফিক্সড ব্যানার অ্যাড উইজেট[cite: 2]
+          if (_isBannerAdLoaded && _bannerAd != null)
+            Container(
+              alignment: Alignment.center,
+              width: _bannerAd!.size.width.toDouble(),
+              height: _bannerAd!.size.height.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
+            ),
         ],
       ),
     );

@@ -1,8 +1,10 @@
+import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 class NoticeBoardView extends StatefulWidget {
   final String academyId;
@@ -24,13 +26,35 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
   List<Map<String, dynamic>> noticesList = [];
   List<String> availableClasses = [];
 
+  BannerAd? _bannerAd; // 👈 ব্যানার অ্যাড ভেরিয়েবল[cite: 2]
+  bool _isBannerAdLoaded = false;
+
   @override
   void initState() {
     super.initState();
+    _initBannerAd(); // 👈 ব্যানার অ্যাড ইনিশিয়ালাইজ[cite: 2]
     _fetchNotices();
     if (widget.userRole == 'super_admin') {
       _fetchClasses();
     }
+  }
+
+  // 👈 ব্যানার অ্যাড সেটআপ ফাংশন[cite: 2]
+  void _initBannerAd() {
+    _bannerAd = AdService.createBannerAd()
+      ..load().then((_) {
+        if (mounted) {
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose(); // 👈 ব্যানার অ্যাড ডিসপোজ
+    super.dispose();
   }
 
   Future<void> _fetchClasses() async {
@@ -152,11 +176,9 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                   const SizedBox(height: 12),
 
                   // ফাইল বা ইমেজ সিলেক্ট করার বাটন
-                  // ফাইল বা ইমেজ সিলেক্ট করার বাটন
                   OutlinedButton.icon(
                     onPressed: () async {
                       try {
-                        // প্ল্যাটফর্ম প্রপার্টি ছাড়া সরাসরি pickFiles কল করা
                         FilePickerResult? result = await FilePicker.pickFiles(
                           type: FileType.custom,
                           allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
@@ -307,7 +329,7 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                   'target_type': targetType,
                   'target_class': selectedClass,
                   'created_by': widget.userRole,
-                  'file_url': fileUrl, // ডাটাবেজে ফাইলের লিংক সেভ হবে
+                  'file_url': fileUrl,
                 });
 
                 Get.back(); // লোডিং বন্ধ
@@ -335,6 +357,18 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
     );
   }
 
+  // 👈 প্রতি ৪টি কার্ড পর পর ব্যানার অ্যাড দেখানোর হেল্পার উইজেট[cite: 2, 8]
+  Widget _buildBannerAdItem() {
+    final BannerAd bannerAd = AdService.createBannerAd()..load();
+    return Container(
+      alignment: Alignment.center,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      width: bannerAd.size.width.toDouble(),
+      height: bannerAd.size.height.toDouble(),
+      child: AdWidget(ad: bannerAd),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isAdmin = (widget.userRole == 'super_admin');
@@ -356,135 +390,172 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
               ),
             )
           : null,
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.teal))
-          : noticesList.isEmpty
-          ? const Center(
-              child: Text(
-                'এই মুহূর্তে কোনো নোটিশ নেই।',
-                style: TextStyle(color: Colors.grey, fontSize: 15),
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: _fetchNotices,
-              child: ListView.builder(
-                itemCount: noticesList.length,
-                padding: const EdgeInsets.all(12),
-                itemBuilder: (context, index) {
-                  final notice = noticesList[index];
-                  String targetText = '';
-                  String tType = notice['target_type'] ?? '';
-                  if (tType == 'all_students')
-                    targetText = 'প্রাপক: সকল ছাত্র-ছাত্রী';
-                  else if (tType == 'class')
-                    targetText = 'প্রাপক ক্লাস: ${notice['target_class']}';
-                  else if (tType == 'teachers')
-                    targetText = 'প্রাপক: সকল শিক্ষক';
-                  else
-                    targetText = 'প্রাপক: সকলের জন্য';
-
-                  String? fileUrl = notice['file_url'];
-
-                  return Card(
-                    elevation: 2,
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+      body: Column(
+        children: [
+          Expanded(
+            child: isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: Colors.teal),
+                  )
+                : noticesList.isEmpty
+                ? const Center(
+                    child: Text(
+                      'এই মুহূর্তে কোনো নোটিশ নেই।',
+                      style: TextStyle(color: Colors.grey, fontSize: 15),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.campaign,
-                                color: Colors.teal,
-                                size: 22,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  notice['title'] ?? '',
+                  )
+                : RefreshIndicator(
+                    onRefresh: _fetchNotices,
+                    child: ListView.builder(
+                      itemCount:
+                          noticesList.length +
+                          (noticesList.isNotEmpty
+                              ? (noticesList.length ~/ 4)
+                              : 0),
+                      padding: const EdgeInsets.all(12),
+                      itemBuilder: (context, index) {
+                        // 👈 প্রতি ৪টি কার্ড পর পর ব্যানার অ্যাড রেন্ডার করার হিসাব[cite: 8]
+                        int realIndex = index;
+                        for (int i = 0; i <= index; i++) {
+                          if (i > 0 && (i + 1) % 5 == 0) {
+                            if (index == i) {
+                              return _buildBannerAdItem();
+                            }
+                            realIndex--;
+                          }
+                        }
+
+                        if (realIndex >= noticesList.length) {
+                          return const SizedBox.shrink();
+                        }
+
+                        final notice = noticesList[realIndex];
+                        String targetText = '';
+                        String tType = notice['target_type'] ?? '';
+                        if (tType == 'all_students')
+                          targetText = 'প্রাপক: সকল ছাত্র-ছাত্রী';
+                        else if (tType == 'class')
+                          targetText =
+                              'প্রাপক ক্লাস: ${notice['target_class']}';
+                        else if (tType == 'teachers')
+                          targetText = 'প্রাপক: সকল শিক্ষক';
+                        else
+                          targetText = 'প্রাপক: সকলের জন্য';
+
+                        String? fileUrl = notice['file_url'];
+
+                        return Card(
+                          elevation: 2,
+                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.campaign,
+                                      color: Colors.teal,
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        notice['title'] ?? '',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  notice['description'] ?? '',
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Colors.black87,
+                                    fontSize: 13,
+                                    color: Colors.black54,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            notice['description'] ?? '',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.black54,
-                            ),
-                          ),
 
-                          // যদি ফাইল বা ইমেজ থাকে তবে ডাউনলোডের বা দেখার বাটন দেখাবে
-                          if (fileUrl != null && fileUrl.isNotEmpty) ...[
-                            const SizedBox(height: 10),
-                            OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.teal,
-                                side: const BorderSide(color: Colors.teal),
-                              ),
-                              onPressed: () {
-                                // এখানে সরাসরি ব্রাউজারে বা Get.to দিয়ে ফাইল ওপেন করা যাবে
-                                // যেমন: launchUrl(Uri.parse(fileUrl));
-                              },
-                              icon: const Icon(Icons.download, size: 18),
-                              label: const Text('সংযুক্ত ফাইল/ডকুমেন্ট দেখুন'),
-                            ),
-                          ],
-
-                          const Divider(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.teal.shade50,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  targetText,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.teal.shade800,
-                                    fontWeight: FontWeight.bold,
+                                // যদি ফাইল বা ইমেজ থাকে তবে ডাউনলোডের বা দেখার বাটন দেখাবে
+                                if (fileUrl != null && fileUrl.isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: Colors.teal,
+                                      side: const BorderSide(
+                                        color: Colors.teal,
+                                      ),
+                                    ),
+                                    onPressed: () {},
+                                    icon: const Icon(Icons.download, size: 18),
+                                    label: const Text(
+                                      'সংযুক্ত ফাইল/ডকুমেন্ট দেখুন',
+                                    ),
                                   ),
+                                ],
+
+                                const Divider(height: 16),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.teal.shade50,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        targetText,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.teal.shade800,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      notice['created_at'] != null
+                                          ? notice['created_at']
+                                                .toString()
+                                                .substring(0, 10)
+                                          : '',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              Text(
-                                notice['created_at'] != null
-                                    ? notice['created_at'].toString().substring(
-                                        0,
-                                        10,
-                                      )
-                                    : '',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
+                  ),
+          ),
+          // 👈 স্ক্রিনের নিচে ফিক্সড ব্যানার অ্যাড উইজেট[cite: 2]
+          if (_isBannerAdLoaded && _bannerAd != null)
+            Container(
+              alignment: Alignment.center,
+              width: _bannerAd!.size.width.toDouble(),
+              height: _bannerAd!.size.height.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
             ),
+        ],
+      ),
     );
   }
 }

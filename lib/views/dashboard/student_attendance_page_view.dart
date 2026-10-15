@@ -1,9 +1,11 @@
+import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 class StudentAttendancePageView extends StatefulWidget {
   final String academyId;
@@ -46,6 +48,7 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
   @override
   void initState() {
     super.initState();
+    AdService.loadInterstitialAd(); // 👈 অ্যাড লোড করা হলো[cite: 2]
     _initConnectivityAndCheck();
   }
 
@@ -229,13 +232,22 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
 
   Future<void> _syncPendingDataToSupabase() async {
     Get.snackbar(
-      "অনлайн",
+      "অনলাইন",
       "ইন্টারনেট সংযোগ পাওয়া গেছে, ডাটা সিঙ্ক করা হচ্ছে...",
       backgroundColor: Colors.blue,
       colorText: Colors.white,
       duration: const Duration(seconds: 2),
     );
     await _loadAttendanceForCurrentClass();
+  }
+
+  // 👈 এড দেখানোর পর ডাটা সুপাবেসে সেভ করার ফাংশন
+  void _onSaveButtonPressed() {
+    AdService.showForcedAd(
+      onComplete: () {
+        _saveAttendance();
+      },
+    );
   }
 
   Future<void> _saveAttendance() async {
@@ -607,7 +619,8 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
         padding: const EdgeInsets.all(12),
         color: Colors.white,
         child: ElevatedButton(
-          onPressed: _saveAttendance,
+          onPressed:
+              _onSaveButtonPressed, // 👈 এখানে এড দেখানোর মেথড যুক্ত করা হয়েছে[cite: 2, 5]
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.green,
             foregroundColor: Colors.white,

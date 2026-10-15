@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
@@ -24,10 +26,30 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
   List<Map<String, dynamic>> modelTestList = [];
   bool isReminderSet = false; // রিমাইন্ডার সেট আছে কিনা তা ট্র্যাক করার জন্য
 
+  // ফিক্সড ব্যানার অ্যাডের জন্য ভেরিয়েবল
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
+
   @override
   void initState() {
     super.initState();
     fetchModelTests();
+
+    // বটমে ফিক্সড ব্যানার অ্যাড লোড করা
+    _bannerAd = AdService.createBannerAd()
+      ..load().then((_) {
+        if (mounted) {
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose(); // মেমোরি লিক রোধ করতে ব্যানার অ্যাড ডিসপোজ করা
+    super.dispose();
   }
 
   Future<void> fetchModelTests() async {
@@ -654,6 +676,16 @@ class _StudentModelTestViewState extends State<StudentModelTestView> {
           ],
         ),
       ),
+
+      // পেজের বোটমে ফিক্সড ব্যানার অ্যাড দেখানোর অংশ
+      bottomNavigationBar: _isBannerAdLoaded && _bannerAd != null
+          ? Container(
+              alignment: Alignment.center,
+              width: _bannerAd!.size.width.toDouble(),
+              height: _bannerAd!.size.height.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
+            )
+          : const SizedBox.shrink(),
     );
   }
 

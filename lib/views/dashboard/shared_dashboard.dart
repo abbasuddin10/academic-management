@@ -6,16 +6,19 @@ import 'package:academy_management/views/dashboard/ExamSeatPlanView.dart';
 import 'package:academy_management/views/dashboard/Model_Test_View.dart';
 import 'package:academy_management/views/dashboard/OtherIncomeExpenseView.dart';
 import 'package:academy_management/views/dashboard/StudentIdCardVie.dart';
-import 'package:academy_management/views/dashboard/SuperAdminManagementView.dart';
+import 'package:academy_management/views/dashboard/academy_accounts_excel_view.dart';
 import 'package:academy_management/views/dashboard/academy_teachers_salary_view.dart';
 import 'package:academy_management/views/dashboard/admit_card_view.dart';
 import 'package:academy_management/views/dashboard/attendance_page_view.dart';
 import 'package:academy_management/views/dashboard/class_routine_view.dart';
+import 'package:academy_management/views/dashboard/developer_profile_view.dart';
 import 'package:academy_management/views/dashboard/exam_routine_view.dart';
 import 'package:academy_management/views/dashboard/notice_board_view.dart';
 import 'package:academy_management/views/dashboard/question_create_view.dart';
 import 'package:academy_management/views/dashboard/student_attendance_page_view.dart';
 import 'package:academy_management/views/dashboard/student_fee_collection_view.dart';
+import 'package:academy_management/views/dashboard/students_file_download.dart';
+import 'package:academy_management/views/dashboard/subscription_plan_view.dart';
 import 'package:academy_management/views/dashboard/syllabus_view.dart';
 import 'package:academy_management/views/dashboard/teacher_home_view.dart';
 import 'package:flutter/foundation.dart';
@@ -886,20 +889,118 @@ class _SharedDashboardState extends State<SharedDashboard> {
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  UserAccountsDrawerHeader(
-                    accountName: Text(
-                      widget.userName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-                    accountEmail: Text(widget.role.toUpperCase()),
-                    currentAccountPicture: const CircleAvatar(
-                      backgroundColor: Colors.white,
-                      child: Icon(Icons.person, size: 45, color: Colors.teal),
-                    ),
+                  // ড্রয়ারের কাস্টম হেডার (প্রোফাইল + সাবস্ক্রিপশন ইনফো)[cite: 5]
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 45, 16, 16),
                     decoration: const BoxDecoration(color: Colors.teal),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const CircleAvatar(
+                              radius: 28,
+                              backgroundColor: Colors.white,
+                              child: Icon(
+                                Icons.person,
+                                size: 35,
+                                color: Colors.teal,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.userName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: Colors.white,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    widget.role.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.white.withOpacity(0.8),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        // সাবস্ক্রিপশন স্ট্যাটাস কার্ড[cite: 5]
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const [
+                                  Text(
+                                    'প্ল্যান: প্রিমিয়াম (০০০)',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'মেয়াদ শেষ: লাইফটাইম',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.amber,
+                                  foregroundColor: Colors.black87,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 0,
+                                  ),
+                                  minimumSize: const Size(60, 28),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  Get.to(() => const SubscriptionPlanView());
+                                },
+                                child: const Text(
+                                  'আপগ্রেড',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
 
                   ListTile(
@@ -909,18 +1010,26 @@ class _SharedDashboardState extends State<SharedDashboard> {
                     ),
                     title: Text(
                       _isEnglish
-                          ? 'students list (Excel)'
+                          ? 'Students List (Excel)'
                           : 'ছাত্রছাত্রীদের তালিকা(এক্সেল)',
                     ),
                     onTap: () async {
-                      Navigator.pop(context);
+                      Navigator.pop(context); // ড্রয়ার বন্ধ করবে
                       final fetchedAcademyId = await _getAcademyIdSafely();
                       if (fetchedAcademyId != null) {
                         Get.to(
-                          () => NoticeBoardView(
+                          () => StudentsFileDownloadView(
                             academyId: fetchedAcademyId,
-                            userRole: widget.role,
                           ),
+                        );
+                      } else {
+                        Get.snackbar(
+                          _isEnglish ? "Error" : "ত্রুটি",
+                          _isEnglish
+                              ? "Academy ID not found!"
+                              : "একাডেমি আইডি পাওয়া যায়নি!",
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
                         );
                       }
                     },
@@ -935,7 +1044,26 @@ class _SharedDashboardState extends State<SharedDashboard> {
                           ? 'Salary & Accounts'
                           : 'একাডেমি হিসাব(এক্সেল)',
                     ),
-                    onTap: () => Navigator.pop(context),
+                    onTap: () async {
+                      Navigator.pop(context); // ড্রয়ার বন্ধ করবে
+                      final fetchedAcademyId = await _getAcademyIdSafely();
+                      if (fetchedAcademyId != null) {
+                        Get.to(
+                          () => AcademyAccountsExcelView(
+                            academyId: fetchedAcademyId,
+                          ),
+                        );
+                      } else {
+                        Get.snackbar(
+                          _isEnglish ? "Error" : "ত্রুটি",
+                          _isEnglish
+                              ? "Academy ID not found!"
+                              : "একাডেমি আইডি পাওয়া যায়নি!",
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
+                        );
+                      }
+                    },
                   ),
                   const Divider(),
                   ListTile(
@@ -974,7 +1102,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
                     onTap: () => Navigator.pop(context),
                   ),
                   const Divider(),
-                  // ডেভেলপারের সাথে যোগাযোগের অপশন (সংশোধিত)
+                  // ডেভেলপারের সাথে যোগাযোগের অপشن (আপডেট করা হয়েছে)[cite: 5]
                   ListTile(
                     leading: const Icon(Icons.mail_outline, color: Colors.teal),
                     title: Text(
@@ -982,27 +1110,11 @@ class _SharedDashboardState extends State<SharedDashboard> {
                           ? 'Contact Developer'
                           : 'ডেভেলপারের সাথে যোগাযোগ',
                     ),
-                    onTap: () async {
-                      final Uri emailUri = Uri(
-                        scheme: 'mailto',
-                        path: 'abbas.zhsust@gmail.com',
-                        query:
-                            'subject=Developer Support & Feedback&body=Hi Abbas, I want to contact you regarding the Academy Management App.',
-                      );
-
-                      try {
-                        await launchUrl(
-                          emailUri,
-                          mode: LaunchMode.externalApplication,
-                        );
-                      } catch (e) {
-                        Get.snackbar(
-                          "ত্রুটি",
-                          "ইমেইল অ্যাপ ওপেন করা সম্ভব হয়নি: $e",
-                          backgroundColor: Colors.red,
-                          colorText: Colors.white,
-                        );
-                      }
+                    onTap: () {
+                      Navigator.pop(context); // ড্রয়ার বন্ধ করবে[cite: 5]
+                      Get.to(
+                        () => const DeveloperProfileView(),
+                      ); // ডেভেলপার প্রোফাইল পেজে নিয়ে যাবে
                     },
                   ),
                   const Divider(),
@@ -1019,7 +1131,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
                 ],
               ),
             ),
-            // একেবারে নিচে মাঝখানে শুধু ভার্সন সংখ্যা
+            // একেবারে নিচে মাঝখানে শুধু ভার্সন সংখ্যা[cite: 5]
             const Padding(
               padding: EdgeInsets.only(bottom: 16.0),
               child: Text(

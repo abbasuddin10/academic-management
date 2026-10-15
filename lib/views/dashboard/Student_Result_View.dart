@@ -1,4 +1,7 @@
+import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StudentResultView extends StatefulWidget {
@@ -25,63 +28,87 @@ class _StudentResultViewState extends State<StudentResultView> {
   List<Map<String, dynamic>> myExamResultsList = [];
   Map<String, List<Map<String, dynamic>>> classAllExamResultsMap = {};
 
-  // কোন পরীক্ষার টেবিল হাইড থাকবে সেটি ট্র্যাক করার জন্য সেট
   final Set<String> hiddenExamTitles = {};
+
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _fetchStudentAndClassResults();
+
+    _bannerAd = AdService.createBannerAd()
+      ..load().then((_) {
+        if (mounted) {
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        }
+      });
   }
 
-  // সুপাবেস থেকে একই শ্রেণির সকল ছাত্রছাত্রীর রেজাল্ট ফেচ করে সাবজেক্ট পজিশন হিসাব করা
+  @override
+  void dispose() {
+    _bannerAd?.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchStudentAndClassResults() async {
     try {
       String cleanAcademyId = widget.academyId.trim();
-      String cleanClass = widget.className.trim();
       String cleanRoll = widget.studentRoll.toString().trim();
+      int? rollInt = int.tryParse(cleanRoll);
 
-      // ১. প্রথমে সরাসরি exam_results টেবিল থেকে সব ডেটা ফেচ করা (যাতে ফিল্টারিং মিসিং না হয়)
-      final response = await supabase.from('exam_results').select();
-
-      List<Map<String, dynamic>> allClassResults =
-          List<Map<String, dynamic>>.from(response);
-
-      // ২. যদি academyId থাকে তবে তা দিয়ে ফিল্টার করা, না থাকলে বাইপাস করা
-      if (cleanAcademyId.isNotEmpty) {
-        allClassResults = allClassResults.where((r) {
-          String dbAcademyId = r['academy_id']?.toString().trim() ?? '';
-          return dbAcademyId == cleanAcademyId;
-        }).toList();
+      // যদি widget থেকে academyId ফাঁকা আসে, SharedPreferences থেকে নেওয়া
+      if (cleanAcademyId.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        cleanAcademyId = prefs.getString('student_academy_id') ?? '';
       }
 
-      // ৩. ক্লাসের নাম দিয়ে ফিল্টার করা (বাংলা বানানের ছোটখাটো পার্থক্য এড়াতে কন্টেইন চেক)
-      if (cleanClass.isNotEmpty) {
-        List<Map<String, dynamic>> classFiltered = allClassResults.where((r) {
-          String dbClass =
-              r['class_name']?.toString().trim().toLowerCase() ?? '';
-          String targetClass = cleanClass.toLowerCase();
-          return dbClass.contains(targetClass) || targetClass.contains(dbClass);
-        }).toList();
+      debugPrint(
+        "Final Fetch -> Academy ID: '$cleanAcademyId', Roll: '$cleanRoll'",
+      );
 
-        // যদি ক্লাস ফিল্টারে ডেটা পাওয়া যায় তবে সেটাই ব্যবহার করা হবে, নতুবা সব ডেটা রাখা হবে
-        if (classFiltered.isNotEmpty) {
-          allClassResults = classFiltered;
+      if (cleanAcademyId.isEmpty) {
+        debugPrint("Error: Academy ID is completely empty!");
+        setState(() => isLoading = false);
+        return;
+      }
+
+      // 🔥 শুধুমাত্র academy_id দিয়ে সুপাবেস থেকে ডাটা এনে কোডের ভেতরে রোল মেলানো (যাতে ক্লাস নেম বা টাইপ মিসম্যাচের সমস্যা না হয়)
+      final response = await supabase
+          .from('exam_results')
+          .select()
+          .eq('academy_id', cleanAcademyId);
+
+      List<Map<String, dynamic>> allAcademyResults =
+          List<Map<String, dynamic>>.from(response);
+      debugPrint(
+        "Total rows fetched from Supabase: ${allAcademyResults.length}",
+      );
+
+      List<Map<String, dynamic>> myResults = [];
+      for (var row in allAcademyResults) {
+        String dbRoll = row['roll']?.toString().trim() ?? '';
+        int? dbRollInt = int.tryParse(dbRoll);
+
+        if (dbRoll == cleanRoll ||
+            dbRoll == cleanRoll.replaceAll(RegExp(r'^0+'), '') ||
+            (rollInt != null && dbRollInt != null && rollInt == dbRollInt)) {
+          myResults.add(row);
         }
       }
 
-      // পরীক্ষা অনুযায়ী সকল ছাত্রের রেজাল্ট গ্রুপ করা
-      Map<String, List<Map<String, dynamic>>> groupedByExam = {};
-      for (var row in allClassResults) {
-        String examTitle = row['exam_title']?.toString() ?? '';
-        groupedByExam.putIfAbsent(examTitle, () => []).add(row);
-      }
+      debugPrint("Matched personal results count: ${myResults.length}");
 
-      // ৪. সুনির্দিষ্ট শিক্ষার্থীর রোল দিয়ে তার নিজের রেজাল্ট ফিল্টার করা
-      List<Map<String, dynamic>> myResults = allClassResults.where((r) {
-        String dbRoll = r['roll']?.toString().trim() ?? '';
-        return dbRoll == cleanRoll;
-      }).toList();
+      Map<String, List<Map<String, dynamic>>> groupedByExam = {};
+      for (var row in allAcademyResults) {
+        String examTitle = row['exam_title']?.toString().trim() ?? '';
+        if (examTitle.isNotEmpty) {
+          groupedByExam.putIfAbsent(examTitle, () => []).add(row);
+        }
+      }
 
       if (mounted) {
         setState(() {
@@ -91,7 +118,7 @@ class _StudentResultViewState extends State<StudentResultView> {
         });
       }
     } catch (e) {
-      debugPrint("Error fetching results: $e");
+      debugPrint("Error fetching student results: $e");
       if (mounted) {
         setState(() {
           isLoading = false;
@@ -100,7 +127,6 @@ class _StudentResultViewState extends State<StudentResultView> {
     }
   }
 
-  // সাবজেক্টের নামসমূহ আলাদা করার জন্য হেল্পার ফাংশন[cite: 9]
   Set<String> _extractSubjects(Map<String, dynamic> resultData) {
     Set<String> subjects = {};
     for (String key in resultData.keys) {
@@ -114,7 +140,6 @@ class _StudentResultViewState extends State<StudentResultView> {
     return subjects;
   }
 
-  // ওই নির্দিষ্ট বিষয়ের ওপর শ্রেণিতে শিক্ষার্থীর পজিশন/মেধা ক্রম হিসাব করার ফাংশন[cite: 9]
   String _calculateSubjectPosition(
     String examTitle,
     String subject,
@@ -149,7 +174,6 @@ class _StudentResultViewState extends State<StudentResultView> {
       return '-';
     }
 
-    // নম্বর বড় থেকে ছোট অনুযায়ী সর্ট করা[cite: 9]
     allSubjectTotals.sort((a, b) => b.compareTo(a));
 
     int rank = 1;
@@ -161,14 +185,12 @@ class _StudentResultViewState extends State<StudentResultView> {
       }
     }
 
-    // ইংরেজি পজিশন সাফিক্স (যেমন: 1st, 2nd, 3rd)[cite: 9]
     if (rank == 1) return '1st';
     if (rank == 2) return '2nd';
     if (rank == 3) return '3rd';
     return '${rank}th';
   }
 
-  // সুপাবেসের ডেটা থেকে নির্দিষ্ট পরীক্ষায় উক্ত শিক্ষার্থীর ক্লাসের মধ্যে সার্বিক মেরিট পজিশন হিসাব করা
   String _calculateExamMeritPosition(String examTitle) {
     List<Map<String, dynamic>> examClassResults =
         classAllExamResultsMap[examTitle] ?? [];
@@ -209,7 +231,6 @@ class _StudentResultViewState extends State<StudentResultView> {
 
     double myScore = studentTotalMarksMap[widget.studentRoll.trim()]!;
 
-    // সকল ছাত্রছাত্রীর মোট নম্বরগুলো লিস্টে নিয়ে সর্ট করা
     List<double> allScores = studentTotalMarksMap.values.toList();
     allScores.sort((a, b) => b.compareTo(a));
 
@@ -228,7 +249,6 @@ class _StudentResultViewState extends State<StudentResultView> {
     return '${rank}th';
   }
 
-  // পরীক্ষার প্রাপ্ত নম্বর ও full_marks_data থেকে পার্সেন্টেজ হিসাব করার ফাংশন
   Map<String, dynamic> _calculateExamPercentage(
     Map<String, dynamic> examResult,
   ) {
@@ -280,17 +300,8 @@ class _StudentResultViewState extends State<StudentResultView> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('পরীক্ষার ফলাফল'),
-        backgroundColor: const Color(0xFF1B365D), // গাঢ় নীল থিম[cite: 9]
-        foregroundColor: Colors.white,
-      ),
-      // নিচে AI Assist ফ্লোটিং বাটন[cite: 9]
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // পরবর্তীতে জেমিনি চ্যাট বা প্ল্যানিং লজিক এখানে যুক্ত করা হবে[cite: 9]
-        },
         backgroundColor: const Color(0xFF1B365D),
-        icon: const Icon(Icons.auto_awesome, color: Colors.white),
-        label: const Text('AI Assist', style: TextStyle(color: Colors.white)),
+        foregroundColor: Colors.white,
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -304,7 +315,6 @@ class _StudentResultViewState extends State<StudentResultView> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // ডিজাইনের একেবারে উপরে ডাইনামিক প্রগ্রেস ওভারভিউ কার্ড
                 if (myExamResultsList.isNotEmpty)
                   Container(
                     margin: const EdgeInsets.only(bottom: 20),
@@ -353,7 +363,6 @@ class _StudentResultViewState extends State<StudentResultView> {
                     ),
                   ),
 
-                // মূল পরীক্ষার রেজাল্ট টেবিল লিস্ট[cite: 9]
                 ...myExamResultsList.asMap().entries.map((mapEntry) {
                   final examResult = mapEntry.value;
                   String examTitle = examResult['exam_title'] ?? 'পরীক্ষা';
@@ -367,8 +376,6 @@ class _StudentResultViewState extends State<StudentResultView> {
 
                   Set<String> subjects = _extractSubjects(resultData);
                   bool isHidden = hiddenExamTitles.contains(examTitle);
-
-                  // নির্দিষ্ট পরীক্ষার মেরিট পজিশন হিসাব করা
                   String meritPosition = _calculateExamMeritPosition(examTitle);
 
                   return Padding(
@@ -376,7 +383,6 @@ class _StudentResultViewState extends State<StudentResultView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // পরীক্ষার শিরোনাম এবং তার সামনে মেরিট পজিশন এবং টেবিল হাইড/শো বাটন
                         InkWell(
                           onTap: () {
                             setState(() {
@@ -447,8 +453,6 @@ class _StudentResultViewState extends State<StudentResultView> {
                           ),
                         ),
                         const SizedBox(height: 6),
-
-                        // যদি হাইড করা না থাকে তবেই টেবিলটি দৃশ্যমান হবে[cite: 9]
                         if (!isHidden) ...[
                           subjects.isEmpty
                               ? const Padding(
@@ -467,19 +471,14 @@ class _StudentResultViewState extends State<StudentResultView> {
                                     width: 1,
                                   ),
                                   columnWidths: const {
-                                    0: FlexColumnWidth(2.5), // বিষয়[cite: 9]
-                                    1: FlexColumnWidth(1.0), // CQ[cite: 9]
-                                    2: FlexColumnWidth(1.0), // MCQ[cite: 9]
-                                    3: FlexColumnWidth(
-                                      1.2,
-                                    ), // Practical[cite: 9]
-                                    4: FlexColumnWidth(1.2), // Total[cite: 9]
-                                    5: FlexColumnWidth(
-                                      1.0,
-                                    ), // Position[cite: 9]
+                                    0: FlexColumnWidth(2.5),
+                                    1: FlexColumnWidth(1.0),
+                                    2: FlexColumnWidth(1.0),
+                                    3: FlexColumnWidth(1.2),
+                                    4: FlexColumnWidth(1.2),
+                                    5: FlexColumnWidth(1.0),
                                   },
                                   children: [
-                                    // গাঢ় নীল কালারের হেডার রো[cite: 9]
                                     TableRow(
                                       decoration: const BoxDecoration(
                                         color: Color(0xFF1B365D),
@@ -576,7 +575,6 @@ class _StudentResultViewState extends State<StudentResultView> {
                                         ),
                                       ],
                                     ),
-                                    // হালকা নীল ও সাদা কালারের অল্টারনেটিভ ডাটা রো[cite: 9]
                                     ...subjects.toList().asMap().entries.map((
                                       entry,
                                     ) {
@@ -606,8 +604,6 @@ class _StudentResultViewState extends State<StudentResultView> {
                                           0;
 
                                       double total = cq + mcq + practical;
-
-                                      // শ্রেণিভিত্তিক পজিশন হিসাব[cite: 9]
                                       String position =
                                           _calculateSubjectPosition(
                                             examTitle,
@@ -719,10 +715,17 @@ class _StudentResultViewState extends State<StudentResultView> {
                 }),
               ],
             ),
+      bottomNavigationBar: _isBannerAdLoaded && _bannerAd != null
+          ? Container(
+              alignment: Alignment.center,
+              width: _bannerAd!.size.width.toDouble(),
+              height: _bannerAd!.size.height.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
+            )
+          : const SizedBox.shrink(),
     );
   }
 
-  // প্রগ্রেস ইন্ডিকেটর উইজেট তৈরির হেল্পার মেথড (সার্কেলের মধ্যে পার্সেন্টেজ দেখানোর জন্য আপডেট করা)
   Widget _buildProgressIndicator(
     String title,
     double value,

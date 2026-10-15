@@ -163,6 +163,12 @@ class _AcademyResultManagementViewState
   // সুপাবেস থেকে নির্দিষ্ট পরীক্ষার রেজাল্ট ফেচ করার ফাংশন
   Future<void> _loadExamResultsForClass() async {
     if (selectedClass == null || selectedExam == null) return;
+
+    // নতুন পরীক্ষা সিলেক্ট করার সাথে সাথে আগের ম্যাপ ক্লিয়ার করে দেওয়া
+    setState(() {
+      studentResultsMap.clear();
+    });
+
     try {
       final resultsResponse = await supabase
           .from('exam_results')
@@ -1511,8 +1517,10 @@ class _AcademyResultManagementViewState
                                     );
                                   }).toList(),
                                   onChanged: (String? newValue) async {
+                                    // পরীক্ষা চেঞ্জ করার সাথে সাথে পুরোনো রেজাল্ট ম্যাপ ক্লিয়ার করা
                                     setState(() {
                                       selectedExam = newValue;
+                                      studentResultsMap.clear();
                                     });
                                     if (selectedClass != null) {
                                       await _loadExamResultsForClass();
@@ -1700,6 +1708,32 @@ class _AcademyResultManagementViewState
                                 ],
                               ),
                               const SizedBox(height: 12),
+                              // যদি এই পরীক্ষার নামে কোনো রেজাল্ট না থাকে তবে টেক্সট বা নোটিশ দেখানোর অংশ
+                              if (!isLoadingStudents &&
+                                  filteredStudentsList.isNotEmpty &&
+                                  studentResultsMap.isEmpty) ...[
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.orange.shade200,
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'এখন এই পরীক্ষার নামে এই ক্লাশে কোনো রেজাল্ট পাওয়া যায়নি।',
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
                               Expanded(
                                 child: isLoadingStudents
                                     ? const Center(

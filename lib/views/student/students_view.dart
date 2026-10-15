@@ -1,6 +1,8 @@
+import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'add_student_view.dart';
 
 class StudentsView extends StatefulWidget {
@@ -253,6 +255,18 @@ class _StudentsViewState extends State<StudentsView> {
     );
   }
 
+  // ব্যানার অ্যাড তৈরি করার হেল্পার উইজেট (প্রতি ২টা কার্ড পর পর দেখানোর জন্য)
+  Widget _buildBannerAdItem() {
+    final BannerAd bannerAd = AdService.createBannerAd()..load();
+    return Container(
+      alignment: Alignment.center,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      width: bannerAd.size.width.toDouble(),
+      height: bannerAd.size.height.toDouble(),
+      child: AdWidget(ad: bannerAd),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -390,9 +404,28 @@ class _StudentsViewState extends State<StudentsView> {
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                    itemCount: _filteredStudents.length,
+                    itemCount:
+                        _filteredStudents.length +
+                        (_filteredStudents.isNotEmpty
+                            ? (_filteredStudents.length ~/ 2)
+                            : 0),
                     itemBuilder: (context, index) {
-                      final student = _filteredStudents[index];
+                      // প্রতি ২ টা কার্ড পর পর ব্যানার অ্যাড দেখানোর হিসাব
+                      int realIndex = index;
+                      for (int i = 0; i <= index; i++) {
+                        if (i > 0 && (i + 1) % 3 == 0) {
+                          if (index == i) {
+                            return _buildBannerAdItem();
+                          }
+                          realIndex--;
+                        }
+                      }
+
+                      if (realIndex >= _filteredStudents.length) {
+                        return const SizedBox.shrink();
+                      }
+
+                      final student = _filteredStudents[realIndex];
                       final studentId = student['id'].toString();
                       final studentName = student['name'] ?? 'নামহীন';
                       final studentPassword =

@@ -1,6 +1,8 @@
+import 'package:academy_management/services/ad_service.dart';
 import 'package:academy_management/views/dashboard/AcademyQRCodeView.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
@@ -39,10 +41,43 @@ class _AttendancePageViewState extends State<AttendancePageView> {
   List<String> _pastDatesList = [];
   bool _isProcessingScan = false;
 
+  // ব্যানার অ্যাড সংক্রান্ত ভেরিয়েবল
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
+  BannerAd? _inListBannerAd;
+  bool _isInListBannerAdLoaded = false;
+
   @override
   void initState() {
     super.initState();
     _fetchAcademyDataAndUsers();
+
+    // বটমে ফিক্সড ব্যানার অ্যাড লোড করা
+    _bannerAd = AdService.createBannerAd()
+      ..load().then((_) {
+        if (mounted) {
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        }
+      });
+
+    // লিস্টের মাঝে দেখানোর জন্য ব্যানার অ্যাড লোড করা
+    _inListBannerAd = AdService.createBannerAd()
+      ..load().then((_) {
+        if (mounted) {
+          setState(() {
+            _isInListBannerAdLoaded = true;
+          });
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _bannerAd?.dispose();
+    _inListBannerAd?.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchAcademyDataAndUsers({bool isBackground = false}) async {
@@ -89,7 +124,6 @@ class _AttendancePageViewState extends State<AttendancePageView> {
 
       DateTime now = DateTime.now();
       String todayDate = DateFormat('yyyy-MM-dd').format(now);
-      // সঠিক UTC টাইম তৈরি করে ডাটাবেসে পাঠানোর জন্য
       String checkInTimeStr = DateTime.now().toUtc().toIso8601String();
 
       _pastDatesList = [];
@@ -367,7 +401,8 @@ class _AttendancePageViewState extends State<AttendancePageView> {
     }
   }
 
-  void _openScanner() {
+  // "হাজিরা নিতে স্ক্যান করুন" এ ক্লিক করলে প্রথমে showForcedAd দেখাবে, তারপর স্ক্যানার ওপেন হবে
+  void _onScanButtonPressed() {
     if (_savedLocation == null ||
         _savedLatitude == null ||
         _savedLongitude == null) {
@@ -380,6 +415,14 @@ class _AttendancePageViewState extends State<AttendancePageView> {
       return;
     }
 
+    AdService.showForcedAd(
+      onComplete: () {
+        _openScanner();
+      },
+    );
+  }
+
+  void _openScanner() {
     Get.to(
       () => Scaffold(
         appBar: AppBar(
@@ -563,7 +606,6 @@ class _AttendancePageViewState extends State<AttendancePageView> {
             ? 'Late'
             : 'Present';
 
-        // সঠিক UTC টাইম সেভ করার কোড (কোনো অতিরিক্ত ঘণ্টা যোগ করা হয়নি)
         String checkInTimeStr = DateTime.now().toUtc().toIso8601String();
 
         try {
@@ -698,7 +740,6 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                           size: 40,
                           color: Colors.teal,
                         ),
-
                         const SizedBox(height: 4),
                         Text(
                           _savedLocation != null
@@ -723,12 +764,23 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                           ),
                           icon: const Icon(Icons.camera_alt),
                           label: const Text('হাজিরা নিতে স্ক্যান করুন'),
-                          onPressed: _openScanner,
+                          onPressed: _onScanButtonPressed,
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 20),
+
+                  // কার্ডগুলোর মাঝে ইন-লিস্ট ব্যানার অ্যাড প্রদর্শনের অংশ
+                  if (_isInListBannerAdLoaded && _inListBannerAd != null) ...[
+                    Container(
+                      alignment: Alignment.center,
+                      height: _inListBannerAd!.size.height.toDouble(),
+                      margin: const EdgeInsets.only(bottom: 20),
+                      child: AdWidget(ad: _inListBannerAd!),
+                    ),
+                  ],
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -781,7 +833,6 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                               DateTime parsedTime = DateTime.parse(
                                 attendance['check_in_time'],
                               );
-                              // সঠিক বাংলাদেশ সময় দেখানোর জন্য
                               DateTime bdTime = parsedTime.isUtc
                                   ? parsedTime.add(const Duration(hours: 6))
                                   : parsedTime;
@@ -974,6 +1025,16 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                 ],
               ),
             ),
+
+      // পেজের বোটমে ফিক্সড ব্যানার অ্যাড দেখানোর অংশ
+      bottomNavigationBar: _isBannerAdLoaded && _bannerAd != null
+          ? Container(
+              alignment: Alignment.center,
+              width: _bannerAd!.size.width.toDouble(),
+              height: _bannerAd!.size.height.toDouble(),
+              child: AdWidget(ad: _bannerAd!),
+            )
+          : const SizedBox.shrink(),
     );
   }
 }
