@@ -187,14 +187,16 @@ class _ExamSeatPlanViewState extends State<ExamSeatPlanView>
       if (examList.isNotEmpty) {
         selectedExam = examList.first;
       }
-    
+
       final response = await supabase
           .from('students')
           .select('*')
           .eq('academy_id', widget.academyId);
 
       final List studentList = response as List;
-      allStudents = studentList.map((e) => Map<String, dynamic>.from(e)).toList();
+      allStudents = studentList
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
 
       groupedStudents.clear();
       Map<String, int> counts = {};
@@ -222,7 +224,7 @@ class _ExamSeatPlanViewState extends State<ExamSeatPlanView>
       classList.sort(_compareClassNames);
       classList.insert(0, 'সব ক্লাস');
       classCounts = counts;
-        } catch (e) {
+    } catch (e) {
       Get.snackbar(
         "ত্রুটি",
         "ডাটা লোড করতে সমস্যা হয়েছে: $e",
@@ -1129,14 +1131,14 @@ class _DynamicSeatPlanContent extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 1.5, vertical: 0.3),
             decoration: BoxDecoration(border: Border.all(width: 0.3)),
             child: const Text(
-              'সতর্কবার্তা: পরীক্ষায় অসাধু উপায় অবলম্বন করলে বা গার্ডের অকারেন্স পেলে পরীক্ষা বাতিলসহ শাস্তিমূলক ব্যবস্থা নেওয়া হবে।',
+              'সতর্কবার্তা: পরীক্ষায় অসদুপায় অবলম্বন সম্পূর্ণ নিষিদ্ধ। অসাধু উপায় অবলম্বন করলে পরীক্ষা বাতিলসহ কঠোর শাস্তিমূলক ব্যবস্থা নেওয়া হবে।',
               style: TextStyle(
                 fontSize: 3.8,
                 fontWeight: FontWeight.bold,
                 color: Colors.black,
               ),
               textAlign: TextAlign.center,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),
