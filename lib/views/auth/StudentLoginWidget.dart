@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:academy_management/views/dashboard/student_home_view.dart';
+import 'package:academy_management/views/student/student_home_view.dart';
 
 class StudentLoginWidget extends StatefulWidget {
   const StudentLoginWidget({super.key});
@@ -564,3 +564,4 @@ class _StudentLoginWidgetState extends State<StudentLoginWidget> {
     );
   }
 }
+

@@ -58,7 +58,7 @@ class _AddStudentViewState extends State<AddStudentView> {
       final userData = await supabase
           .from('users')
           .select('academy_id')
-          .eq('email', currentUserEmail!)
+          .eq('email', currentUserEmail)
           .single();
 
       final academyId = userData['academy_id'];
@@ -269,18 +269,23 @@ class _AddStudentViewState extends State<AddStudentView> {
   void _handleAttemptSubmit() {
     List<String> missingFields = [];
 
-    if (_nameController.text.trim().isEmpty)
+    if (_nameController.text.trim().isEmpty) {
       missingFields.add('শিক্ষার্থীর নাম');
-    if (_fatherNameController.text.trim().isEmpty)
+    }
+    if (_fatherNameController.text.trim().isEmpty) {
       missingFields.add('পিতার নাম');
-    if (_selectedClass == null || _selectedClass == '+ নতুন শ্রেণি যোগ করুন')
+    }
+    if (_selectedClass == null || _selectedClass == '+ নতুন শ্রেণি যোগ করুন') {
       missingFields.add('শ্রেণি');
+    }
     if (_rollController.text.trim().isEmpty) missingFields.add('রোল নাম্বার');
-    if (_phoneController.text.trim().isEmpty)
+    if (_phoneController.text.trim().isEmpty) {
       missingFields.add('মোবাইল নাম্বার');
+    }
     if (_feeController.text.trim().isEmpty) missingFields.add('মাসিক বেতন');
-    if (_addressController.text.trim().isEmpty)
+    if (_addressController.text.trim().isEmpty) {
       missingFields.add('পূর্ণ ঠিকানা');
+    }
 
     if (missingFields.isNotEmpty) {
       Get.snackbar(
@@ -696,7 +701,7 @@ class _AddStudentViewState extends State<AddStudentView> {
       final userData = await supabase
           .from('users')
           .select('academy_id')
-          .eq('email', currentUserEmail!)
+          .eq('email', currentUserEmail)
           .single();
 
       final academyId = userData['academy_id'];

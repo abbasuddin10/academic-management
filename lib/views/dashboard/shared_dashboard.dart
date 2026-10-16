@@ -1,39 +1,38 @@
-import 'package:academy_management/views/admin/teachers_view.dart';
-import 'package:academy_management/views/dashboard/AcademyAiAssistantView.dart';
-import 'package:academy_management/views/dashboard/Academy_Result_Management_View.dart';
-import 'package:academy_management/views/dashboard/Admin_Complaints_View.dart';
-import 'package:academy_management/views/dashboard/ExamSeatPlanView.dart';
-import 'package:academy_management/views/dashboard/Model_Test_View.dart';
-import 'package:academy_management/views/dashboard/OtherIncomeExpenseView.dart';
-import 'package:academy_management/views/dashboard/StudentIdCardVie.dart';
-import 'package:academy_management/views/dashboard/academy_accounts_excel_view.dart';
-import 'package:academy_management/views/dashboard/academy_teachers_salary_view.dart';
-import 'package:academy_management/views/dashboard/admit_card_view.dart';
-import 'package:academy_management/views/dashboard/attendance_page_view.dart';
-import 'package:academy_management/views/dashboard/class_routine_view.dart';
-import 'package:academy_management/views/dashboard/developer_profile_view.dart';
-import 'package:academy_management/views/dashboard/exam_routine_view.dart';
-import 'package:academy_management/views/dashboard/notice_board_view.dart';
-import 'package:academy_management/views/dashboard/question_create_view.dart';
-import 'package:academy_management/views/dashboard/student_attendance_page_view.dart';
-import 'package:academy_management/views/dashboard/student_fee_collection_view.dart';
-import 'package:academy_management/views/dashboard/students_file_download.dart';
-import 'package:academy_management/views/dashboard/subscription_plan_view.dart';
-import 'package:academy_management/views/dashboard/syllabus_view.dart';
-import 'package:academy_management/views/dashboard/teacher_home_view.dart';
+﻿import 'package:academy_management/views/admin/teachers_view.dart';
+import 'package:academy_management/views/admin/AcademyAiAssistantView.dart';
+import 'package:academy_management/views/exams/Academy_Result_Management_View.dart';
+import 'package:academy_management/views/finance/total_collected_details_view.dart';
+import 'package:academy_management/views/notices/Admin_Complaints_View.dart';
+import 'package:academy_management/views/exams/ExamSeatPlanView.dart';
+import 'package:academy_management/views/exams/Model_Test_View.dart';
+import 'package:academy_management/views/finance/OtherIncomeExpenseView.dart';
+import 'package:academy_management/views/student/StudentIdCardVie.dart';
+import 'package:academy_management/views/finance/academy_accounts_excel_view.dart';
+import 'package:academy_management/views/finance/academy_teachers_salary_view.dart';
+import 'package:academy_management/views/exams/admit_card_view.dart';
+import 'package:academy_management/views/attendance/attendance_page_view.dart';
+import 'package:academy_management/views/exams/class_routine_view.dart';
+import 'package:academy_management/views/admin/developer_profile_view.dart';
+import 'package:academy_management/views/exams/exam_routine_view.dart';
+import 'package:academy_management/views/notices/notice_board_view.dart';
+import 'package:academy_management/views/exams/question_create_view.dart';
+import 'package:academy_management/views/attendance/student_attendance_page_view.dart';
+import 'package:academy_management/views/finance/student_fee_collection_view.dart';
+import 'package:academy_management/views/student/class_wise_students_view.dart';
+import 'package:academy_management/views/student/students_file_download.dart';
+import 'package:academy_management/views/finance/subscription_plan_view.dart';
+import 'package:academy_management/views/exams/syllabus_view.dart';
+import 'package:academy_management/views/teacher/teacher_home_view.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 import '../auth/login_view.dart';
 import '../student/students_view.dart';
-import 'class_wise_students_view.dart';
-import 'total_collected_details_view.dart';
 
 class SharedDashboard extends StatefulWidget {
   final String role;
@@ -175,7 +174,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
           .select('id')
           .eq('academy_id', academyId);
 
-      if (response != null && mounted) {
+      if (mounted) {
         setState(() {
           _unreadNoticeCount = (response as List).length;
         });
@@ -205,8 +204,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
           .eq('email', currentUserEmail)
           .limit(1);
 
-      if (responseUser == null ||
-          (responseUser as List).isEmpty ||
+      if ((responseUser as List).isEmpty ||
           responseUser[0]['academy_id'] == null) {
         return _emptyStats();
       }
@@ -274,12 +272,9 @@ class _SharedDashboardState extends State<SharedDashboard> {
           .eq('academy_id', academyId);
 
       double paidSalarySum = 0.0;
-      if (salaryHistoryResponse != null) {
-        for (var item in (salaryHistoryResponse as List)) {
-          double amt =
-              double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-          paidSalarySum += amt;
-        }
+      for (var item in (salaryHistoryResponse as List)) {
+        double amt = double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
+        paidSalarySum += amt;
       }
 
       double remainingSalary = totalAccruedSalarySinceJoining - paidSalarySum;
@@ -320,42 +315,38 @@ class _SharedDashboardState extends State<SharedDashboard> {
           .eq('academy_id', academyId);
 
       double totalCollectedSum = 0.0;
-      if (feeHistoryResponse != null) {
-        for (var item in (feeHistoryResponse as List)) {
-          final createdAtStr = item['created_at']?.toString();
-          if (createdAtStr != null) {
-            DateTime? createdAt = DateTime.tryParse(createdAtStr);
-            if (createdAt != null) {
-              DateTime localCreatedAt = createdAt.toLocal();
-              if (localCreatedAt.isAfter(
-                    startDate.subtract(const Duration(seconds: 1)),
-                  ) &&
-                  localCreatedAt.isBefore(
-                    endDate.add(const Duration(seconds: 1)),
-                  )) {
-                double amt =
-                    double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-                totalCollectedSum += amt;
-              }
+      for (var item in (feeHistoryResponse as List)) {
+        final createdAtStr = item['created_at']?.toString();
+        if (createdAtStr != null) {
+          DateTime? createdAt = DateTime.tryParse(createdAtStr);
+          if (createdAt != null) {
+            DateTime localCreatedAt = createdAt.toLocal();
+            if (localCreatedAt.isAfter(
+                  startDate.subtract(const Duration(seconds: 1)),
+                ) &&
+                localCreatedAt.isBefore(
+                  endDate.add(const Duration(seconds: 1)),
+                )) {
+              double amt =
+                  double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
+              totalCollectedSum += amt;
             }
           }
         }
       }
 
       double totalYtdCollectedSum = 0.0;
-      if (feeHistoryResponse != null) {
-        for (var item in (feeHistoryResponse as List)) {
-          final createdAtStr = item['created_at']?.toString();
-          if (createdAtStr != null) {
-            DateTime? createdAt = DateTime.tryParse(createdAtStr);
-            if (createdAt != null) {
-              DateTime localCreatedAt = createdAt.toLocal();
-              if (localCreatedAt.year == now.year &&
-                  localCreatedAt.month <= now.month) {
-                double amt =
-                    double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-                totalYtdCollectedSum += amt;
-              }
+      for (var item in (feeHistoryResponse as List)) {
+        final createdAtStr = item['created_at']?.toString();
+        if (createdAtStr != null) {
+          DateTime? createdAt = DateTime.tryParse(createdAtStr);
+          if (createdAt != null) {
+            DateTime localCreatedAt = createdAt.toLocal();
+            if (localCreatedAt.year == now.year &&
+                localCreatedAt.month <= now.month) {
+              double amt =
+                  double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
+              totalYtdCollectedSum += amt;
             }
           }
         }
@@ -369,32 +360,28 @@ class _SharedDashboardState extends State<SharedDashboard> {
             .select('amount, type, created_at')
             .eq('academy_id', academyId);
 
-        if (otherIncomeExpenseResponse != null) {
-          for (var item in (otherIncomeExpenseResponse as List)) {
-            final createdAtStr = item['created_at']?.toString();
-            bool isCurrentYearAndMonth = true;
-            if (createdAtStr != null) {
-              DateTime? createdAt = DateTime.tryParse(createdAtStr);
-              if (createdAt != null) {
-                DateTime localCreatedAt = createdAt.toLocal();
-                if (!(localCreatedAt.year == now.year &&
-                    localCreatedAt.month <= now.month)) {
-                  isCurrentYearAndMonth = false;
-                }
+        for (var item in (otherIncomeExpenseResponse as List)) {
+          final createdAtStr = item['created_at']?.toString();
+          bool isCurrentYearAndMonth = true;
+          if (createdAtStr != null) {
+            DateTime? createdAt = DateTime.tryParse(createdAtStr);
+            if (createdAt != null) {
+              DateTime localCreatedAt = createdAt.toLocal();
+              if (!(localCreatedAt.year == now.year &&
+                  localCreatedAt.month <= now.month)) {
+                isCurrentYearAndMonth = false;
               }
             }
+          }
 
-            if (isCurrentYearAndMonth) {
-              double amt =
-                  double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-              String type = item['type']?.toString().toLowerCase().trim() ?? '';
-              if (type == 'income' || type == 'آئ' || type == 'আয়') {
-                totalOtherIncome += amt;
-              } else if (type == 'expense' ||
-                  type == 'ব্যয়' ||
-                  type == 'cost') {
-                totalOtherExpense += amt;
-              }
+          if (isCurrentYearAndMonth) {
+            double amt =
+                double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
+            String type = item['type']?.toString().toLowerCase().trim() ?? '';
+            if (type == 'income' || type == 'آئ' || type == 'আয়') {
+              totalOtherIncome += amt;
+            } else if (type == 'expense' || type == 'ব্যয়' || type == 'cost') {
+              totalOtherExpense += amt;
             }
           }
         }
@@ -407,27 +394,25 @@ class _SharedDashboardState extends State<SharedDashboard> {
             .select('amount, payment_date, created_at')
             .eq('academy_id', academyId);
 
-        if (studentOtherResponse != null) {
-          for (var item in (studentOtherResponse as List)) {
-            final dateStr =
-                item['payment_date'] ?? item['created_at']?.toString();
-            bool isCurrentYearAndMonth = true;
-            if (dateStr != null) {
-              DateTime? createdAt = DateTime.tryParse(dateStr);
-              if (createdAt != null) {
-                DateTime localCreatedAt = createdAt.toLocal();
-                if (!(localCreatedAt.year == now.year &&
-                    localCreatedAt.month <= now.month)) {
-                  isCurrentYearAndMonth = false;
-                }
+        for (var item in (studentOtherResponse as List)) {
+          final dateStr =
+              item['payment_date'] ?? item['created_at']?.toString();
+          bool isCurrentYearAndMonth = true;
+          if (dateStr != null) {
+            DateTime? createdAt = DateTime.tryParse(dateStr);
+            if (createdAt != null) {
+              DateTime localCreatedAt = createdAt.toLocal();
+              if (!(localCreatedAt.year == now.year &&
+                  localCreatedAt.month <= now.month)) {
+                isCurrentYearAndMonth = false;
               }
             }
+          }
 
-            if (isCurrentYearAndMonth) {
-              double amt =
-                  double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-              studentOtherCollectionsSum += amt;
-            }
+          if (isCurrentYearAndMonth) {
+            double amt =
+                double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
+            studentOtherCollectionsSum += amt;
           }
         }
       } catch (e) {}
@@ -497,7 +482,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
           .eq('email', currentUserEmail)
           .limit(1);
 
-      if (responseUser != null && (responseUser as List).isNotEmpty) {
+      if ((responseUser as List).isNotEmpty) {
         return responseUser[0]['academy_id']?.toString();
       }
       return null;
@@ -2083,19 +2068,17 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
 
     Map<String, double> paidMap = {};
 
-    if (feeHistoryResponse != null) {
-      for (var item in (feeHistoryResponse as List)) {
-        String sId = item['student_id']?.toString() ?? '';
-        double amt = double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-        String dbMonth = item['month']?.toString().trim() ?? '';
+    for (var item in (feeHistoryResponse as List)) {
+      String sId = item['student_id']?.toString() ?? '';
+      double amt = double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
+      String dbMonth = item['month']?.toString().trim() ?? '';
 
-        final cleanDbMonth = dbMonth.replaceAll(' ', '');
-        final target1 = currentMonthName.replaceAll(' ', '');
-        final target2 = currentMonthWithYear.replaceAll(' ', '');
+      final cleanDbMonth = dbMonth.replaceAll(' ', '');
+      final target1 = currentMonthName.replaceAll(' ', '');
+      final target2 = currentMonthWithYear.replaceAll(' ', '');
 
-        if (cleanDbMonth.contains(target1) || cleanDbMonth.contains(target2)) {
-          paidMap[sId] = (paidMap[sId] ?? 0.0) + amt;
-        }
+      if (cleanDbMonth.contains(target1) || cleanDbMonth.contains(target2)) {
+        paidMap[sId] = (paidMap[sId] ?? 0.0) + amt;
       }
     }
 

@@ -12,14 +12,18 @@ class AcademyRegisterView extends StatefulWidget {
 class _AcademyRegisterViewState extends State<AcademyRegisterView> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController academyNameController = TextEditingController();
-  final TextEditingController addressController =
-      TextEditingController(); // ঠিকানার জন্য কন্ট্রোলার
+  final TextEditingController addressController = TextEditingController();
+  final TextEditingController phoneController =
+      TextEditingController(); // 👈 অফিসিয়াল ফোন নম্বর কন্ট্রোলার
+  final TextEditingController eiinController =
+      TextEditingController(); // 👈 EIIN কন্ট্রোলার (অপশনাল)
+  final TextEditingController academyCodeController =
+      TextEditingController(); // 👈 প্রতিষ্ঠানের কোড কন্ট্রোলার (অপশনাল)
   final TextEditingController adminNameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  bool _obscurePassword = true; // পাসওয়ার্ড হাইড বা শো করার স্টেট
+  bool _obscurePassword = true;
 
-  // প্রতিষ্ঠান তাদের ইচ্ছামমতো ক্লাস নাম ও ক্রম যোগ করার জন্য কন্ট্রোলার লিস্ট
   final List<TextEditingController> classControllers = [
     TextEditingController(text: 'ষষ্ঠ শ্রেণি'),
     TextEditingController(text: 'সপ্তম শ্রেণি'),
@@ -30,14 +34,12 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
 
   bool isLoading = false;
 
-  // নতুন ক্লাস ফিল্ড যোগ করার ফাংশন
   void addClassField() {
     setState(() {
       classControllers.add(TextEditingController());
     });
   }
 
-  // ক্লাস ফিল্ড রিমুভ করার ফাংশন
   void removeClassField(int index) {
     if (classControllers.length > 1) {
       setState(() {
@@ -57,7 +59,10 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
   @override
   void dispose() {
     academyNameController.dispose();
-    addressController.dispose(); // কন্ট্রোলার ডিসপোজ করা হলো
+    addressController.dispose();
+    phoneController.dispose();
+    eiinController.dispose();
+    academyCodeController.dispose();
     adminNameController.dispose();
     emailController.dispose();
     passwordController.dispose();
@@ -67,11 +72,9 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
     super.dispose();
   }
 
-  // একাডেমি ও সুপার অ্যাডমিন রেজিস্ট্রেশন লজিক
   Future<void> registerAcademy() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // খালি ফিল্ড বাদ দিয়ে ক্লাসের নামগুলো নেওয়া
     List<String> validClasses = classControllers
         .map((c) => c.text.trim())
         .where((text) => text.isNotEmpty)
@@ -94,20 +97,26 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
     try {
       final supabase = Supabase.instance.client;
 
-      // ১. সুপাবেস অথ-এ অ্যাকাউন্ট তৈরি
       final AuthResponse authResponse = await supabase.auth.signUp(
         email: emailController.text.trim(),
         password: passwordController.text.trim(),
       );
 
       if (authResponse.user != null) {
-        // ২. academies টেবিলে নতুন একাডেমির তথ্য ও ঠিকানা সেভ করা[cite: 3]
+        // academies টেবিলে নতুন ফিল্ডসহ ডেটা সেভ করা[cite: 3, 10]
         final academyResponse = await supabase
             .from('academies')
             .insert({
               'academy_name': academyNameController.text.trim(),
-              'address': addressController.text
-                  .trim(), // ঠিকানা যুক্ত করা হয়েছে
+              'address': addressController.text.trim(),
+              'phone': phoneController.text
+                  .trim(), // বাধ্যতামূলক অফিসিয়াল নম্বর
+              'eiin': eiinController.text.trim().isNotEmpty
+                  ? eiinController.text.trim()
+                  : null, // অপশনাল
+              'academy_code': academyCodeController.text.trim().isNotEmpty
+                  ? academyCodeController.text.trim()
+                  : null, // অপশনাল
               'admin_email': emailController.text.trim(),
             })
             .select()
@@ -115,7 +124,6 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
 
         String academyId = academyResponse['id'];
 
-        // ৩. users টেবিলে প্রধান শিক্ষকের তথ্য ও role হিসেবে 'super_admin' সেভ করা[cite: 3]
         await supabase.from('users').insert({
           'academy_id': academyId,
           'email': emailController.text.trim(),
@@ -123,7 +131,6 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
           'role': 'super_admin',
         });
 
-        // ৪. ক্লাসের তালিকা এবং সিরিয়াল সুপাবেসের 'classes' টেবিলে সেভ করা[cite: 3]
         for (int i = 0; i < validClasses.length; i++) {
           await supabase.from('classes').insert({
             'academy_id': academyId,
@@ -195,7 +202,7 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
                   ),
                   const SizedBox(height: 15),
 
-                  // প্রতিষ্ঠানের ঠিকানা (নতুন ফিল্ড)
+                  // প্রতিষ্ঠানের ঠিকানা
                   TextFormField(
                     controller: addressController,
                     decoration: InputDecoration(
@@ -207,6 +214,49 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
                     ),
                     validator: (value) =>
                         value!.isEmpty ? 'প্রতিষ্ঠানের ঠিকানা দিন' : null,
+                  ),
+                  const SizedBox(height: 15),
+
+                  // অফিসিয়াল ফোন নম্বর (বাধ্যতামূলক)[cite: 10]
+                  TextFormField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: 'অফিসিয়াল ফোন নম্বর',
+                      prefixIcon: const Icon(Icons.phone),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    validator: (value) =>
+                        value!.isEmpty ? 'অফিসিয়াল ফোন নম্বর দিন' : null,
+                  ),
+                  const SizedBox(height: 15),
+
+                  // EIIN নম্বর (ঐচ্ছিক/অপশনাল)[cite: 10]
+                  TextFormField(
+                    controller: eiinController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'EIIN (ঐচ্ছিক)',
+                      prefixIcon: const Icon(Icons.confirmation_number),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+
+                  // প্রতিষ্ঠানের কোড (ঐচ্ছিক/অপশনাল)[cite: 10]
+                  TextFormField(
+                    controller: academyCodeController,
+                    decoration: InputDecoration(
+                      labelText: 'প্রতিষ্ঠানের কোড (ঐচ্ছিক)',
+                      prefixIcon: const Icon(Icons.code),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 15),
 
@@ -241,7 +291,7 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
                   ),
                   const SizedBox(height: 15),
 
-                  // পাসওয়ার্ড (এখানে পাসওয়ার্ড শো/হাইড করার আইকন যুক্ত করা হয়েছে)
+                  // পাসওয়ার্ড
                   TextFormField(
                     controller: passwordController,
                     obscureText: _obscurePassword,
@@ -281,16 +331,10 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
                       color: Colors.teal,
                     ),
                   ),
-                  const SizedBox(height: 5),
-                  const Text(
-                    'আপনার প্রতিষ্ঠানের পছন্দমতো ক্লাসের নাম দিন (যেমন: নূরানী, প্লে, ষষ্ঠ ইত্যাদি)। নতুন বছর আসলে সিস্টেম এই সিরিয়াল অনুযায়ী অটোমেটিক ক্লাস আপডেট করবে।',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
                   const SizedBox(height: 15),
 
-                  // ডায়নামিক ক্লাস লিস্ট ভিউ
                   ListView.builder(
-                    shrinkWrap: andShrinkWrapIfNeeded(),
+                    shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: classControllers.length,
                     itemBuilder: (context, index) {
@@ -332,7 +376,6 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
                     },
                   ),
 
-                  // ক্লাস বাড়ানোর বাটন
                   OutlinedButton.icon(
                     onPressed: addClassField,
                     icon: const Icon(Icons.add, color: Colors.teal),
@@ -349,7 +392,6 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
                   ),
                   const SizedBox(height: 30),
 
-                  // সাবমিট বাটন
                   ElevatedButton(
                     onPressed: isLoading ? null : registerAcademy,
                     style: ElevatedButton.styleFrom(
@@ -378,6 +420,4 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
       ),
     );
   }
-
-  bool andShrinkWrapIfNeeded() => true;
 }

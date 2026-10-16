@@ -60,8 +60,11 @@ dependencies:
   excel: ^4.0.6
   syncfusion_flutter_xlsio: ^29.2.11
   google_mobile_ads: ^6.0.0
+  flutter_local_notifications: ^20.1.0
 
 
+  shared_preferences: any
+  url_launcher: any
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,3 +1,4 @@
+import 'package:academy_management/views/teacher/teacher_home_view.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -5,7 +6,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // প্যাকেজ যুক্ত করা হলো
 import 'academy_register_view.dart';
 import '../dashboard/shared_dashboard.dart';
-import '../dashboard/teacher_home_view.dart';
 
 class TeacherLoginWidget extends StatefulWidget {
   const TeacherLoginWidget({super.key});
