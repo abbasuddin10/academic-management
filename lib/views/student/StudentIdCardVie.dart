@@ -649,7 +649,7 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
                       image: (imageUrl != null && imageUrl.isNotEmpty)
                           ? DecorationImage(
                               image: NetworkImage(imageUrl),
-                              fit: BoxFit.cover,
+                              fit: BoxFit.fill,
                             )
                           : null,
                       color: Colors.grey.shade200,
@@ -1234,6 +1234,13 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
     int totalStudents = students.length;
     ValueNotifier<int> progressNotifier = ValueNotifier<int>(0);
 
+    // সবার আগে লোগো প্রি-ক্যাচ করে নেওয়া (যদি থাকে)
+    if (logoUrl != null && logoUrl.isNotEmpty) {
+      try {
+        await precacheImage(NetworkImage(logoUrl), context);
+      } catch (_) {}
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1259,7 +1266,7 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
                 valueListenable: progressNotifier,
                 builder: (context, value, child) {
                   return Text(
-                    'মোট $totalStudents জনের মধ্যে $value জনের কার্ড প্রসেস করা হয়েছে',
+                    'মোট $totalStudents জনের মধ্যে $value জনের কার্ড প্রসেস করা হয়েছে',
                     style: const TextStyle(fontSize: 13, color: Colors.black54),
                   );
                 },
@@ -1280,6 +1287,14 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
 
       for (int i = 0; i < students.length; i++) {
         var student = students[i];
+        String? studentImg = student['image_url'];
+
+        // প্রতিটি শিক্ষার্থীর ছবি রেন্ডার হওয়ার আগে প্রি-ক্যাচ করে নিশ্চিত করা
+        if (studentImg != null && studentImg.isNotEmpty) {
+          try {
+            await precacheImage(NetworkImage(studentImg), context);
+          } catch (_) {}
+        }
 
         final frontBytes = await _frontScreenshotController.captureFromWidget(
           Material(
