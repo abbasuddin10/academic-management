@@ -99,7 +99,7 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
           fetchedStaff.add({'id': id, 'name': name});
         }
       }
-    
+
       final studentsResponse = await supabase
           .from('students')
           .select('class')
@@ -112,7 +112,7 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
           fetchedClasses.add(className);
         }
       }
-    
+
       setState(() {
         teachers = fetchedStaff;
         availableClasses = fetchedClasses.isNotEmpty
@@ -139,10 +139,26 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
         for (var r in savedRoutines) {
           String day = r['day'];
           String periodName = r['period_name'];
+          String startTime = r['start_time'] ?? '';
+          String endTime = r['end_time'] ?? '';
           String className = r['class_name'];
           String teacherId = r['teacher_id'] ?? '';
           String subject = r['subject'] ?? '';
           bool isOff = r['is_off'] ?? false;
+
+          // ডাটাবেজ থেকে আসা নতুন পিরিয়ডগুলো dayPeriodsMap এ ডায়নামিকভাবে যুক্ত করা হচ্ছে
+          if (dayPeriodsMap.containsKey(day)) {
+            bool periodExists = dayPeriodsMap[day]!.any(
+              (p) => p['name'] == periodName,
+            );
+            if (!periodExists && periodName.isNotEmpty) {
+              dayPeriodsMap[day]!.add({
+                'name': periodName,
+                'startTime': startTime,
+                'endTime': endTime,
+              });
+            }
+          }
 
           int classIndex = availableClasses.indexOf(className);
           if (classIndex != -1) {
@@ -371,8 +387,7 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
                       }
                     }
 
-                    String targetKey =
-                        "${day}_${periodName}_$currentSlotIndex";
+                    String targetKey = "${day}_${periodName}_$currentSlotIndex";
                     routineAssignments[targetKey] = selectedNewTeacherId!;
                   }
                 });
@@ -547,11 +562,17 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
                   onPressed: () {
                     if (nameController.text.isNotEmpty) {
                       setState(() {
-                        dayPeriodsMap[day]!.add({
-                          'name': nameController.text,
-                          'startTime': startTimeController.text,
-                          'endTime': endTimeController.text,
-                        });
+                        // ডুপ্লিকেট এড়াতে চেক করে নতুন পিরিয়ড যুক্ত করা হচ্ছে
+                        bool exists = dayPeriodsMap[day]!.any(
+                          (p) => p['name'] == nameController.text,
+                        );
+                        if (!exists) {
+                          dayPeriodsMap[day]!.add({
+                            'name': nameController.text,
+                            'startTime': startTimeController.text,
+                            'endTime': endTimeController.text,
+                          });
+                        }
                       });
                       Navigator.pop(context);
                     }

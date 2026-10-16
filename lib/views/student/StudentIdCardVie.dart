@@ -4,7 +4,6 @@ import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:screenshot/screenshot.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 
 class StudentIdCardView extends StatefulWidget {
@@ -76,7 +75,6 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
 
       Set<String> classes = {};
       for (var student in _students) {
-        // ডেটাবেজে class বা class_name যেকোনো একটি থাকতে পারে, তাই উভয় চেক করা হলো
         String className = (student['class'] ?? student['class_name'] ?? '')
             .toString()
             .trim();
@@ -90,7 +88,7 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
       _classList = classes.toList();
       _classList.sort();
       _classList.insert(0, 'সব ক্লাস');
-        } catch (e) {
+    } catch (e) {
       debugPrint("Error fetching data: $e");
     } finally {
       if (mounted) {
@@ -171,7 +169,6 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
 
   @override
   Widget build(BuildContext context) {
-    // ফিল্টারিং এবং সার্চ লজিক
     List<Map<String, dynamic>> filteredStudents = _students.where((student) {
       String className = (student['class'] ?? student['class_name'] ?? '')
           .toString()
@@ -199,6 +196,12 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
     String academyAddress = _academyInfo['address'] ?? 'মাদরাসার ঠিকানা';
     String? academySignature =
         _academyInfo['signature_url'] ?? _academyInfo['signature'];
+    String? logoUrl = _academyInfo['logo_url'];
+
+    // ডাটাবেজ থেকে অতিরিক্ত তথ্যসমূহ সংগ্রহ করা হলো
+    String academyPhone = _academyInfo['phone']?.toString() ?? '';
+    String academyEmail = _academyInfo['admin_email']?.toString() ?? '';
+    String academyEiin = _academyInfo['eiin']?.toString() ?? '';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
@@ -207,11 +210,10 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
           'স্টুডেন্ট স্মার্ট আইডি কার্ড',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
-        backgroundColor: const Color(0xFF0C5278),
+        backgroundColor: const Color(0xFF2993D2),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          // এক ক্লিকে সিলেক্টেড বা সমস্ত ক্লাসের আইডি কার্ড ডাউনলোড করার বাটন
           IconButton(
             icon: _isDownloadingAll
                 ? const SizedBox(
@@ -234,9 +236,12 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
                     academyName,
                     academyAddress,
                     academySignature,
+                    logoUrl,
+                    academyPhone,
+                    academyEmail,
+                    academyEiin,
                   ),
           ),
-          // সিগনেচার আপলোড বাটন
           IconButton(
             icon: _isUploadingSign
                 ? const SizedBox(
@@ -255,11 +260,10 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF0C5278)),
+              child: CircularProgressIndicator(color: Color(0xFF2993D2)),
             )
           : Column(
               children: [
-                // সার্চ এবং হেডার সেকশন
                 Container(
                   padding: const EdgeInsets.all(12),
                   color: Colors.white,
@@ -272,7 +276,7 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
                               'শিক্ষার্থীর নাম, রোল বা মোবাইল নম্বর দিয়ে খুঁজুন...',
                           prefixIcon: const Icon(
                             Icons.search,
-                            color: Color(0xFF0C5278),
+                            color: Color(0xFF2993D2),
                           ),
                           suffixIcon: _searchQuery.isNotEmpty
                               ? IconButton(
@@ -293,7 +297,6 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      // ক্লাস চিপস উইথ সঠিক কাউন্ট
                       SizedBox(
                         height: 42,
                         child: ListView.builder(
@@ -309,7 +312,7 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
                               child: ChoiceChip(
                                 label: Text('$className ($count)'),
                                 selected: isSelected,
-                                selectedColor: const Color(0xFF0C5278),
+                                selectedColor: const Color(0xFF2993D2),
                                 backgroundColor: const Color(0xFFF4F6F9),
                                 labelStyle: TextStyle(
                                   color: isSelected
@@ -332,7 +335,6 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
                   ),
                 ),
                 const Divider(height: 1, thickness: 1),
-                // স্টুডেন্ট লিস্ট
                 Expanded(
                   child: filteredStudents.isEmpty
                       ? Center(
@@ -383,7 +385,7 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
                                   vertical: 6,
                                 ),
                                 leading: CircleAvatar(
-                                  backgroundColor: const Color(0xFF0C5278),
+                                  backgroundColor: const Color(0xFF2993D2),
                                   foregroundColor: Colors.white,
                                   backgroundImage:
                                       (studentImg != null &&
@@ -419,7 +421,7 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
                                     IconButton(
                                       icon: const Icon(
                                         Icons.visibility_rounded,
-                                        color: Color(0xFF0C5278),
+                                        color: Color(0xFF2993D2),
                                       ),
                                       tooltip: 'আইডি কার্ড দেখুন',
                                       onPressed: () {
@@ -430,6 +432,10 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
                                           academyName,
                                           academyAddress,
                                           academySignature,
+                                          logoUrl,
+                                          academyPhone,
+                                          academyEmail,
+                                          academyEiin,
                                         );
                                       },
                                     ),
@@ -448,6 +454,10 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
                                           academyName,
                                           academyAddress,
                                           academySignature,
+                                          logoUrl,
+                                          academyPhone,
+                                          academyEmail,
+                                          academyEiin,
                                         );
                                       },
                                     ),
@@ -470,6 +480,10 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
     String academyName,
     String academyAddress,
     String? academySignature,
+    String? logoUrl,
+    String academyPhone,
+    String academyEmail,
+    String academyEiin,
   ) {
     showDialog(
       context: context,
@@ -485,17 +499,32 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Center(
-                  child: _buildFrontCard(
-                    student,
-                    academyNameAr,
-                    academyName,
-                    academyAddress,
-                    academySignature,
+                  child: Screenshot(
+                    controller: _frontScreenshotController,
+                    child: _buildFrontCard(
+                      student,
+                      academyNameAr,
+                      academyName,
+                      academyAddress,
+                      academySignature,
+                      logoUrl,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 15),
                 Center(
-                  child: _buildBackCard(student, academyName, academyAddress),
+                  child: Screenshot(
+                    controller: _backScreenshotController,
+                    child: _buildBackCard(
+                      student,
+                      academyName,
+                      academyAddress,
+                      logoUrl,
+                      academyPhone,
+                      academyEmail,
+                      academyEiin,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
@@ -531,224 +560,243 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
     String academyName,
     String academyAddress,
     String? academySignature,
+    String? logoUrl,
   ) {
     String name = student['full_name'] ?? student['name'] ?? '';
-    String fatherName = student['father_name'] ?? '';
-    String className = student['class'] ?? student['class_name'] ?? '';
-    String address = student['address'] ?? '';
-    String phone = student['phone'] ?? '';
     String roll = student['roll']?.toString() ?? '';
+    String className = student['class'] ?? student['class_name'] ?? '';
+    String fatherName = student['father_name'] ?? '';
+    String phone = student['phone'] ?? '';
+    String address = student['address'] ?? '';
     String? imageUrl = student['image_url'];
 
     return Container(
-      width: 290,
-      height: 450,
+      width: 230,
+      height: 360,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
         ],
-        border: Border.all(color: const Color(0xFF0C5278), width: 2),
       ),
-      child: Column(
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(14),
-              topRight: Radius.circular(14),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Stack(
+          children: [
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 120,
+              child: CustomPaint(painter: ExactTopVectorPainter()),
             ),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF0C5278), Color(0xFF1B75BC)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 35,
+              child: CustomPaint(painter: ExactBottomVectorPainter()),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14.0),
               child: Column(
                 children: [
-                  if (academyNameAr.isNotEmpty)
-                    Text(
-                      academyNameAr,
-                      style: const TextStyle(
-                        color: Color(0xFFFFD700),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                  const SizedBox(height: 28),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (logoUrl != null && logoUrl.isNotEmpty)
+                        Image.network(
+                          logoUrl,
+                          height: 16,
+                          width: 16,
+                          fit: BoxFit.fill,
+                        )
+                      else
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                        ),
+                      Expanded(
+                        child: Text(
+                          academyName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
-                      textAlign: TextAlign.center,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 68,
+                    height: 68,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF00AEEF),
+                        width: 3,
+                      ),
+                      image: (imageUrl != null && imageUrl.isNotEmpty)
+                          ? DecorationImage(
+                              image: NetworkImage(imageUrl),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                      color: Colors.grey.shade200,
                     ),
-                  const SizedBox(height: 3),
+                    child: (imageUrl == null || imageUrl.isEmpty)
+                        ? const Icon(Icons.person, size: 38, color: Colors.grey)
+                        : null,
+                  ),
+                  const SizedBox(height: 5),
                   Text(
-                    academyName,
+                    name.isNotEmpty ? name : 'Your Name Here',
                     style: const TextStyle(
-                      color: Colors.white,
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                      color: Color(0xFF0F172A),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                  Text(
+                    className.isNotEmpty
+                        ? 'Class: $className'
+                        : 'Designation Here',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF00AEEF),
+                      fontWeight: FontWeight.w600,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    academyAddress,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 8.5,
+                  const SizedBox(height: 8),
+                  _buildInfoRow('ID No', roll.isNotEmpty ? roll : '123456'),
+                  _buildInfoRow(
+                    'Father',
+                    fatherName.isNotEmpty ? fatherName : 'N/A',
+                  ),
+                  _buildInfoRow(
+                    'Phone',
+                    phone.isNotEmpty ? phone : '0000000000',
+                  ),
+                  _buildInfoRow(
+                    'Address',
+                    address.isNotEmpty ? address : 'N/A',
+                  ),
+                  const Spacer(),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 45.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 42,
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(
+                              color: Colors.black87,
+                              width: 0.8,
+                            ),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              Icons.qr_code_2_rounded,
+                              size: 34,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            if (academySignature != null &&
+                                academySignature.isNotEmpty)
+                              SizedBox(
+                                height: 20,
+                                width: 65,
+                                child: Image.network(
+                                  academySignature,
+                                  fit: BoxFit.contain,
+                                ),
+                              )
+                            else
+                              const SizedBox(height: 20),
+                            Container(
+                              width: 75,
+                              height: 1,
+                              color: Colors.black87,
+                              margin: const EdgeInsets.only(bottom: 2),
+                            ),
+                            const Text(
+                              'প্রধান শিক্ষক/অধ্যক্ষ',
+                              style: TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1B1B4B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: 75,
-            height: 75,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFF0C5278), width: 2.5),
-              image: (imageUrl != null && imageUrl.isNotEmpty)
-                  ? DecorationImage(
-                      image: NetworkImage(imageUrl),
-                      fit: BoxFit.cover,
-                    )
-                  : null,
-              color: Colors.grey.shade100,
-            ),
-            child: (imageUrl == null || imageUrl.isEmpty)
-                ? const Icon(Icons.person, size: 38, color: Colors.grey)
-                : null,
-          ),
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Text(
-              name,
-              style: const TextStyle(
-                fontSize: 15.5,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0C5278),
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.only(left: 20.0, right: 12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildInfoRow('পিতার নাম', fatherName),
-                _buildInfoRow('শ্রেণি/বিভাগ', className),
-                _buildInfoRow('ঠিকানা', address),
-                _buildInfoRow('মোবাইল', phone),
-                _buildInfoRow('আইডি নং', roll),
-              ],
-            ),
-          ),
-          const Spacer(),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 4.0,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Column(
-                  children: [
-                    SizedBox(
-                      height: 28,
-                      width: 85,
-                      child:
-                          (academySignature != null &&
-                              academySignature.isNotEmpty)
-                          ? Image.network(
-                              academySignature,
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  const SizedBox(),
-                            )
-                          : const SizedBox(),
-                    ),
-                    Container(width: 85, height: 1, color: Colors.black54),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'প্রতিষ্ঠান প্রধানের স্বাক্ষর',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 7),
-            decoration: const BoxDecoration(
-              color: Color(0xFF0C5278),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(14),
-                bottomRight: Radius.circular(14),
-              ),
-            ),
-            child: const Center(
-              child: Text(
-                'STUDENT CARD',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 3,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildInfoRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3.5),
+      padding: const EdgeInsets.symmetric(vertical: 1.2),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 78,
+            width: 50,
             child: Text(
               label,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: Color(0xFF1B1B4B),
               ),
             ),
           ),
           const Text(
             ': ',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1B1B4B),
+            ),
           ),
           Expanded(
             child: Text(
               value,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 11,
+                color: Color(0xFF334155),
                 fontWeight: FontWeight.w600,
-                color: Colors.black87,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -763,146 +811,311 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
     Map<String, dynamic> student,
     String academyName,
     String academyAddress,
+    String? logoUrl,
+    String academyPhone,
+    String academyEmail,
+    String academyEiin,
   ) {
-    String name = student['full_name'] ?? student['name'] ?? '';
-    String roll = student['roll']?.toString() ?? '';
-    String className = student['class'] ?? student['class_name'] ?? '';
-    String phone = student['phone'] ?? '';
-
-    String qrData =
-        'Name: $name\nID: $roll\nClass: $className\nPhone: $phone\nAcademy: $academyName';
-
     return Container(
-      width: 290,
-      height: 450,
+      width: 230,
+      height: 420,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF2993D2), width: 1.5),
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
         ],
-        border: Border.all(color: const Color(0xFF0C5278), width: 2),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14.0),
-        child: Column(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Stack(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0C5278).withOpacity(0.05),
-                border: Border.all(
-                  color: const Color(0xFF0C5278).withOpacity(0.2),
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text(
-                'এই কার্ডটি ব্যবহারকারী ব্যতিত অন্য কেউ পেলে প্রতিষ্ঠানের ঠিকানায় পৌঁছে দেওয়ার জন্য অনুরোধ করা গেল।',
-                style: TextStyle(
-                  fontSize: 9.5,
-                  height: 1.3,
-                  color: Colors.black87,
-                ),
-                textAlign: TextAlign.center,
-              ),
+            Positioned.fill(
+              child: CustomPaint(painter: ExactBackCurvePainter()),
             ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: const Color(0xFF0C5278), width: 1.5),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 5,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 15.0,
+                vertical: 15.0,
               ),
-              child: QrImageView(
-                data: qrData,
-                version: QrVersions.auto,
-                size: 110.0,
-                eyeStyle: const QrEyeStyle(
-                  eyeShape: QrEyeShape.square,
-                  color: Color(0xFF0C5278),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              academyName,
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0C5278),
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              academyAddress,
-              style: const TextStyle(fontSize: 8, color: Colors.black54),
-              textAlign: TextAlign.center,
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: const Column(
+              child: Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'ইস্যু ও মেয়াদ :',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0C5278),
-                        ),
+                  const SizedBox(height: 12),
+                  // ওপরে নির্দেশিকা টেক্সট
+                  const Text(
+                    'এই কার্ডটি ব্যবহারকারী ব্যতিত অন্য কেউ পেলে প্রতিষ্ঠানের ঠিকানায় পৌঁছে দেওয়ার জন্য অনুরোধ করা গেল।',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  // লোগো
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF2993D2),
+                        width: 1.2,
                       ),
-                      Text(
-                        '০১ জানুয়ারি - ৩১ ডিসেম্বর',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                      image: (logoUrl != null && logoUrl.isNotEmpty)
+                          ? DecorationImage(
+                              image: NetworkImage(logoUrl),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
+                      color: Colors.grey.shade200,
+                    ),
+                    child: (logoUrl == null || logoUrl.isEmpty)
+                        ? const Icon(Icons.school, size: 22, color: Colors.grey)
+                        : null,
+                  ),
+                  const SizedBox(height: 4),
+                  // মাদ্রাসার নাম (বোল্ড ও আকর্ষণীয় ডিজাইন)
+                  Text(
+                    academyName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1B1B4B),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 2),
+                  // ঠিকানা
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.location_on,
+                        size: 9,
+                        color: Color(0xFF2993D2),
+                      ),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                          academyAddress,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                  SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'শিক্ষাবর্ষ :',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0C5278),
-                        ),
+                  const SizedBox(height: 3),
+                  // প্রতিষ্ঠানের আইডি ভিত্তিক অতিরিক্ত ইনফো (ফোন, ইমেইল, EIIN) সুন্দরভাবে সাজানো
+                  // প্রতিষ্ঠানের আইডি ভিত্তিক অতিরিক্ত ইনফো (টেবিলের মতো সিরিয়ালে সাজানো)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF4F6F9),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.blue.withOpacity(0.15)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (academyPhone.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 1),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.phone,
+                                  size: 8,
+                                  color: Color(0xFF2993D2),
+                                ),
+                                const SizedBox(width: 4),
+                                const SizedBox(
+                                  width: 32,
+                                  child: Text(
+                                    'ফোন',
+                                    style: TextStyle(
+                                      fontSize: 7.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                                const Text(
+                                  ': ',
+                                  style: TextStyle(
+                                    fontSize: 7.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    academyPhone,
+                                    style: const TextStyle(
+                                      fontSize: 7.5,
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (academyEmail.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 1),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.email,
+                                  size: 8,
+                                  color: Color(0xFF2993D2),
+                                ),
+                                const SizedBox(width: 4),
+                                const SizedBox(
+                                  width: 32,
+                                  child: Text(
+                                    'ইমেইল',
+                                    style: TextStyle(
+                                      fontSize: 7.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                                const Text(
+                                  ': ',
+                                  style: TextStyle(
+                                    fontSize: 7.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    academyEmail,
+                                    style: const TextStyle(
+                                      fontSize: 7.5,
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (academyEiin.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 1),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.verified,
+                                  size: 8,
+                                  color: Color(0xFF2993D2),
+                                ),
+                                const SizedBox(width: 4),
+                                const SizedBox(
+                                  width: 32,
+                                  child: Text(
+                                    'EIIN',
+                                    style: TextStyle(
+                                      fontSize: 7.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                                const Text(
+                                  ': ',
+                                  style: TextStyle(
+                                    fontSize: 7.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    academyEiin,
+                                    style: const TextStyle(
+                                      fontSize: 7.5,
+                                      color: Color(0xFF1B1B4B),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // নোট বক্স
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 4,
+                      horizontal: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.black54, width: 0.8),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'রাষ্ট্রদ্রোহী কাজে জড়িত না থাকার শর্তে শুধুমাত্র অধ্যয়নকালীন সময়ের জন্য প্রযোজ্য।',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 7.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                        height: 1.1,
                       ),
-                      Text(
-                        'চলমান কালীন',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                    ),
+                  ),
+                  const Spacer(),
+                  // ইস্যু তারিখ ও মেয়াদ কাল
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'ইস্যু তারিখঃ  01/01/${DateTime.now().year} ইং',
+                          style: const TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
                         ),
-                      ),
-                    ],
+                        Text(
+                          'মেয়াদ কালঃ   31/12/${DateTime.now().year} ইং',
+                          style: const TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 25),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -913,7 +1126,6 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
     );
   }
 
-  // একক স্টুডেন্টের পিডিএফ ডাউনলোড
   Future<void> _downloadSinglePdf(
     BuildContext context,
     Map<String, dynamic> student,
@@ -921,12 +1133,16 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
     String academyName,
     String academyAddress,
     String? academySignature,
+    String? logoUrl,
+    String academyPhone,
+    String academyEmail,
+    String academyEiin,
   ) async {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => const Center(
-        child: CircularProgressIndicator(color: Color(0xFF0C5278)),
+        child: CircularProgressIndicator(color: Color(0xFF2993D2)),
       ),
     );
 
@@ -940,6 +1156,7 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
             academyName,
             academyAddress,
             academySignature,
+            logoUrl,
           ),
         ),
         pixelRatio: 3.0,
@@ -948,7 +1165,15 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
       final backBytes = await _backScreenshotController.captureFromWidget(
         Material(
           color: Colors.transparent,
-          child: _buildBackCard(student, academyName, academyAddress),
+          child: _buildBackCard(
+            student,
+            academyName,
+            academyAddress,
+            logoUrl,
+            academyPhone,
+            academyEmail,
+            academyEiin,
+          ),
         ),
         pixelRatio: 3.0,
       );
@@ -963,9 +1188,9 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
               child: pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.center,
                 children: [
-                  pw.Image(pw.MemoryImage(frontBytes), width: 240, height: 380),
+                  pw.Image(pw.MemoryImage(frontBytes), width: 230, height: 360),
                   pw.SizedBox(width: 20),
-                  pw.Image(pw.MemoryImage(backBytes), width: 240, height: 380),
+                  pw.Image(pw.MemoryImage(backBytes), width: 230, height: 360),
                 ],
               ),
             );
@@ -991,13 +1216,16 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
     }
   }
 
-  // স্মার্ট প্রোগ্রেস লোডার সহ একাধিক আইডি কার্ড ডাউনলোড
   Future<void> _downloadMultiplePdf(
     List<Map<String, dynamic>> students,
     String academyNameAr,
     String academyName,
     String academyAddress,
     String? academySignature,
+    String? logoUrl,
+    String academyPhone,
+    String academyEmail,
+    String academyEiin,
   ) async {
     setState(() {
       _isDownloadingAll = true;
@@ -1006,7 +1234,6 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
     int totalStudents = students.length;
     ValueNotifier<int> progressNotifier = ValueNotifier<int>(0);
 
-    // স্মার্ট লোডিং ডায়ালগ দেখানো
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1017,14 +1244,14 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CircularProgressIndicator(color: Color(0xFF0C5278)),
+              const CircularProgressIndicator(color: Color(0xFF2993D2)),
               const SizedBox(height: 16),
               const Text(
                 'আইডি কার্ড তৈরি হচ্ছে...',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
-                  color: Color(0xFF0C5278),
+                  color: Color(0xFF2993D2),
                 ),
               ),
               const SizedBox(height: 8),
@@ -1063,6 +1290,7 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
               academyName,
               academyAddress,
               academySignature,
+              logoUrl,
             ),
           ),
           pixelRatio: 2.5,
@@ -1071,7 +1299,15 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
         final backBytes = await _backScreenshotController.captureFromWidget(
           Material(
             color: Colors.transparent,
-            child: _buildBackCard(student, academyName, academyAddress),
+            child: _buildBackCard(
+              student,
+              academyName,
+              academyAddress,
+              logoUrl,
+              academyPhone,
+              academyEmail,
+              academyEiin,
+            ),
           ),
           pixelRatio: 2.5,
         );
@@ -1102,10 +1338,10 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
           ),
         );
 
-        progressNotifier.value = i + 1; // কাউন্টার আপডেট
+        progressNotifier.value = i + 1;
       }
 
-      if (mounted) Navigator.pop(context); // ডায়ালগ বন্ধ
+      if (mounted) Navigator.pop(context);
 
       String safeFileName = '${_selectedClass}_All_Id_Cards'
           .replaceAll(RegExp(r'[^\w\u0980-\u09FF\s]+'), '')
@@ -1126,4 +1362,123 @@ class _StudentIdCardViewState extends State<StudentIdCardView> {
       }
     }
   }
+}
+
+// কাস্টম টপ ভেক্টর পেন্টার (ফ্রন্ট কার্ড)
+class ExactTopVectorPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paintDarkNavy = Paint()
+      ..color = const Color(0xFF1B1B4B)
+      ..style = PaintingStyle.fill;
+
+    final paintCyan = Paint()
+      ..color = const Color(0xFF00AEEF)
+      ..style = PaintingStyle.fill;
+
+    Path navyPath = Path();
+    navyPath.moveTo(0, 0);
+    navyPath.lineTo(size.width, 0);
+    navyPath.lineTo(size.width, size.height * 0.82);
+    navyPath.lineTo(size.width * 0.58, size.height * 0.64);
+    navyPath.lineTo(size.width * 0.42, size.height * 0.64);
+    navyPath.lineTo(0, size.height * 0.82);
+    navyPath.close();
+    canvas.drawPath(navyPath, paintDarkNavy);
+
+    Path cyanPath = Path();
+    cyanPath.moveTo(0, size.height * 0.82);
+    cyanPath.lineTo(size.width * 0.42, size.height * 0.64);
+    cyanPath.lineTo(size.width * 0.58, size.height * 0.64);
+    cyanPath.lineTo(size.width, size.height * 0.82);
+    cyanPath.lineTo(size.width, size.height * 0.97);
+    cyanPath.lineTo(size.width * 0.58, size.height * 0.79);
+    cyanPath.lineTo(size.width * 0.42, size.height * 0.79);
+    cyanPath.lineTo(0, size.height * 0.97);
+    cyanPath.close();
+    canvas.drawPath(cyanPath, paintCyan);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ব্যাক পার্টের জন্য আরও ছোট ও আকর্ষণীয় কার্ভড স্কাই ব্লু শেপ পেন্টার
+class ExactBackCurvePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paintBg = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    final paintCyan = Paint()
+      ..color = const Color(0xFF00AEEF).withOpacity(0.12);
+
+    Path bgPath = Path();
+    bgPath.addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawPath(bgPath, paintBg);
+
+    // ওপরে এবং নিচে ছোট কার্ভড শেপ বা বর্ডার ইফেক্ট
+    Path topCurve = Path();
+    topCurve.lineTo(0, size.height * 0.12);
+    topCurve.quadraticBezierTo(
+      size.width * 0.5,
+      size.height * 0.18,
+      size.width,
+      size.height * 0.12,
+    );
+    topCurve.lineTo(size.width, 0);
+    topCurve.close();
+    canvas.drawPath(topCurve, paintCyan);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// কাস্টম বটম ভেক্টর পেন্টার (ফ্রন্ট কার্ড)
+class ExactBottomVectorPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paintDarkSlate = Paint()
+      ..color = const Color(0xFF0F172A)
+      ..style = PaintingStyle.fill;
+
+    final paintBlue = Paint()
+      ..color = const Color(0xFF2993D2)
+      ..style = PaintingStyle.fill;
+
+    final paintWhite = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    Path leftPath = Path();
+    leftPath.addRect(Rect.fromLTWH(0, 0, size.width * 0.48, size.height));
+    canvas.drawPath(leftPath, paintDarkSlate);
+
+    Path rightPath = Path();
+    rightPath.addRect(
+      Rect.fromLTWH(size.width * 0.48, 0, size.width * 0.52, size.height),
+    );
+    canvas.drawPath(rightPath, paintBlue);
+
+    Path stripe1 = Path();
+    stripe1.moveTo(size.width * 0.40, size.height);
+    stripe1.lineTo(size.width * 0.47, size.height);
+    stripe1.lineTo(size.width * 0.55, 0);
+    stripe1.lineTo(size.width * 0.48, 0);
+    stripe1.close();
+    canvas.drawPath(stripe1, paintWhite);
+
+    Path stripe2 = Path();
+    stripe2.moveTo(size.width * 0.52, size.height);
+    stripe2.lineTo(size.width * 0.59, size.height);
+    stripe2.lineTo(size.width * 0.67, 0);
+    stripe2.lineTo(size.width * 0.60, 0);
+    stripe2.close();
+    canvas.drawPath(stripe2, paintWhite);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
