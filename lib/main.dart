@@ -1,16 +1,16 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:academy_management/services/NotificationService.dart';
+import 'package:academy_management/views/student/student_home_view.dart';
+import 'package:academy_management/views/teacher/teacher_home_view.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'views/auth/login_view.dart';
-import 'views/dashboard/shared_dashboard.dart';
-import 'views/student/student_home_view.dart';
-import 'views/teacher/teacher_home_view.dart';
+import 'package:academy_management/views/auth/login_view.dart';
+import 'package:academy_management/views/dashboard/shared_dashboard.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'services/notification_service.dart'; // নোটিফিকেশন সার্ভিস ইমপোর্ট করুন
 
 // ব্যাকগ্রাউন্ড হ্যান্ডলার
 @pragma('vm:entry-point')
@@ -130,4 +130,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
