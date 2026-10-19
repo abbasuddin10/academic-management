@@ -171,7 +171,10 @@ class _AdmitCardViewState extends State<AdmitCardView> {
           .select('*')
           .eq('academy_id', widget.academyId);
 
-      allStudents = list.map((e) => Map<String, dynamic>.from(e)).toList();
+      List studentList = response as List;
+      allStudents = studentList
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
 
       groupedStudents.clear();
       Map<String, int> counts = {};

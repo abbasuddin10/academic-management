@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AttendancePageView extends StatefulWidget {
   final String academyId;
@@ -80,6 +81,23 @@ class _AttendancePageViewState extends State<AttendancePageView> {
     super.dispose();
   }
 
+  // ডিভাইসের একটি স্থায়ী ইউনিক আইডি জেনারেট বা ফেচ করার মেথড (ডিভাইস বাইন্ডিং এর জন্য)
+  Future<String> _getOrCreateDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? deviceId = prefs.getString('app_unique_device_id');
+    if (deviceId == null || deviceId.isEmpty) {
+      deviceId = sha256
+          .convert(
+            utf8.encode(
+              DateTime.now().toIso8601String() + '_' + widget.academyId,
+            ),
+          )
+          .toString();
+      await prefs.setString('app_unique_device_id', deviceId);
+    }
+    return deviceId;
+  }
+
   Future<void> _fetchAcademyDataAndUsers({bool isBackground = false}) async {
     try {
       if (!isBackground) {
@@ -124,7 +142,6 @@ class _AttendancePageViewState extends State<AttendancePageView> {
 
       DateTime now = DateTime.now();
       String todayDate = DateFormat('yyyy-MM-dd').format(now);
-      String checkInTimeStr = DateTime.now().toUtc().toIso8601String();
 
       _pastDatesList = [];
       for (int i = 1; i <= 3; i++) {
@@ -136,7 +153,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
       final attendanceRes = await supabase
           .from('teacher_attendance')
           .select(
-            'teacher_id, check_in_time, status, date, teacher_name, latitude, longitude',
+            'teacher_id, check_in_time, status, date, teacher_name, latitude, longitude, device_id',
           )
           .eq('academy_id', widget.academyId)
           .gte('date', oldestDate);
@@ -149,7 +166,8 @@ class _AttendancePageViewState extends State<AttendancePageView> {
 
       for (var att in attendanceRes) {
         String attDate = att['date']?.toString() ?? '';
-        String userId = att['teacher_id']?.toString().trim() ?? '';
+        String userId =
+            att['teacher_id']?.toString().trim().toLowerCase() ?? '';
 
         if (attDate == todayDate) {
           _todayAttendanceMap[userId] = att;
@@ -529,28 +547,51 @@ class _AttendancePageViewState extends State<AttendancePageView> {
       Get.back();
 
       if (distanceInMeters <= _allowedRadius) {
-        final authUser = supabase.auth.currentUser;
-        if (authUser == null) {
-          Get.snackbar(
-            "ত্রুটি",
-            "লগইন করা ইউজার পাওয়া যায়নি!",
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-          );
-          return;
+        // SharedPreferences থেকে লগইন করা শিক্ষকের আইডি বা ইমেইল নেওয়া হচ্ছে
+        final prefs = await SharedPreferences.getInstance();
+        String? loggedInTeacherId = prefs.getString('teacher_id');
+        String? loggedInEmail = prefs.getString('teacher_email');
+
+        Map<String, dynamic>? userRecord;
+
+        // প্রথমে সরাসরি teacher_id দিয়ে users টেবিল থেকে খোঁজা হবে
+        if (loggedInTeacherId != null && loggedInTeacherId.isNotEmpty) {
+          userRecord = await supabase
+              .from('users')
+              .select('id, full_name')
+              .eq('id', loggedInTeacherId)
+              .maybeSingle();
         }
 
-        final userRecord = await supabase
-            .from('users')
-            .select('id, full_name')
-            .eq('email', authUser.email ?? '')
-            .eq('academy_id', widget.academyId)
-            .maybeSingle();
+        // যদি teacher_id দিয়ে না পাওয়া যায়, তবে teacher_email দিয়ে খোঁজা হবে
+        if (userRecord == null &&
+            loggedInEmail != null &&
+            loggedInEmail.isNotEmpty) {
+          userRecord = await supabase
+              .from('users')
+              .select('id, full_name')
+              .eq('email', loggedInEmail)
+              .eq('academy_id', widget.academyId)
+              .maybeSingle();
+        }
+
+        // যদি তাও না পাওয়া যায়, তবে সুপার অ্যাডমিনের জন্য Supabase Auth চেক করা হবে
+        if (userRecord == null) {
+          final authUser = supabase.auth.currentUser;
+          if (authUser != null && authUser.email != null) {
+            userRecord = await supabase
+                .from('users')
+                .select('id, full_name')
+                .eq('email', authUser.email!)
+                .eq('academy_id', widget.academyId)
+                .maybeSingle();
+          }
+        }
 
         if (userRecord == null) {
           Get.snackbar(
             "ত্রুটি",
-            "ইউজার টেবিল থেকে আপনার তথ্য পাওয়া যায়নি!",
+            "লগইন করা ইউজারের সঠিক তথ্য ডেটাবেজে পাওয়া যায়নি, দয়া করে পুনরায় লগইন করুন!",
             backgroundColor: Colors.red,
             colorText: Colors.white,
           );
@@ -558,8 +599,9 @@ class _AttendancePageViewState extends State<AttendancePageView> {
         }
 
         String currentUserId = userRecord['id'].toString().trim();
+        String lookupUserIdKey = currentUserId.toLowerCase();
         String currentUserName =
-            userRecord['full_name']?.toString() ?? 'শিক্ষক';
+            userRecord['full_name']?.toString() ?? 'ব্যবহারকারী';
 
         if (currentUserId.isEmpty) {
           Get.snackbar(
@@ -571,7 +613,8 @@ class _AttendancePageViewState extends State<AttendancePageView> {
           return;
         }
 
-        if (_todayAttendanceMap.containsKey(currentUserId)) {
+        // 🛑 ১. লোকাল মেমোরি ম্যাপ চেক
+        if (_todayAttendanceMap.containsKey(lookupUserIdKey)) {
           Get.snackbar(
             "আজকে নেওয়া হয়ে গেছে",
             "আপনার হাজিরা আজকে ইতিমধ্যে সফলভাবে নেওয়া হয়েছে!",
@@ -581,6 +624,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
           return;
         }
 
+        // 🛑 ২. সুপাবেস ডাটাবেজ লেভেলে কড়া চেক (একই শিক্ষক আজ ইতিমধ্যে হাজির কি না)
         final existingCheck = await supabase
             .from('teacher_attendance')
             .select('id')
@@ -590,9 +634,11 @@ class _AttendancePageViewState extends State<AttendancePageView> {
             .maybeSingle();
 
         if (existingCheck != null) {
-          setState(() {
-            _todayAttendanceMap[currentUserId] = {'status': 'Present'};
-          });
+          if (mounted) {
+            setState(() {
+              _todayAttendanceMap[lookupUserIdKey] = {'status': 'Present'};
+            });
+          }
           Get.snackbar(
             "আজকে নেওয়া হয়ে গেছে",
             "আপনার হাজিরা আজকে ইতিমধ্যে সফলভাবে নেওয়া হয়েছে!",
@@ -600,6 +646,33 @@ class _AttendancePageViewState extends State<AttendancePageView> {
             colorText: Colors.white,
           );
           return;
+        }
+
+        // বর্তমান ডিভাইসের ইউনিক আইডি ফেচ করা হলো
+        String currentDeviceId = await _getOrCreateDeviceId();
+
+        // 🛡️ জালিয়াতি রোধ: চেক করা হচ্ছে এই ডিভাইস থেকে আজকে অন্য কোনো শিক্ষক ইতিমধ্যে হাজিরা দিয়েছেন কি না
+        final deviceCheck = await supabase
+            .from('teacher_attendance')
+            .select('teacher_id, teacher_name')
+            .eq('academy_id', widget.academyId)
+            .eq('date', todayDate)
+            .eq('device_id', currentDeviceId)
+            .maybeSingle();
+
+        if (deviceCheck != null) {
+          String recordedTeacherId =
+              deviceCheck['teacher_id']?.toString().trim().toLowerCase() ?? '';
+          if (recordedTeacherId != lookupUserIdKey) {
+            Get.snackbar(
+              "নিরাপত্তা সতর্কতা",
+              "এই ডিভাইস থেকে আজ ইতিমধ্যে অন্য শিক্ষকের হাজিরা দেওয়া হয়েছে! একই ডিভাইস থেকে একাধিক শিক্ষকের হাজিরা নিষিদ্ধ।",
+              backgroundColor: Colors.red,
+              colorText: Colors.white,
+              duration: const Duration(seconds: 4),
+            );
+            return;
+          }
         }
 
         String attendanceStatus = now.isAfter(startTimeToday)
@@ -619,38 +692,46 @@ class _AttendancePageViewState extends State<AttendancePageView> {
             'check_in_time': checkInTimeStr,
             'latitude': currentPosition.latitude,
             'longitude': currentPosition.longitude,
+            'device_id': currentDeviceId,
           });
+
+          if (mounted) {
+            setState(() {
+              _todayAttendanceMap[lookupUserIdKey] = {
+                'teacher_id': currentUserId,
+                'teacher_name': currentUserName,
+                'date': todayDate,
+                'status': attendanceStatus,
+                'check_in_time': checkInTimeStr,
+                'latitude': currentPosition.latitude,
+                'longitude': currentPosition.longitude,
+                'device_id': currentDeviceId,
+              };
+            });
+          }
+
+          Get.snackbar(
+            "সফল",
+            attendanceStatus == 'Late'
+                ? "হাজিরা রেকর্ড হয়েছে (বিলম্বিত বা Late)!"
+                : "হাজিরা সফলভাবে রেকর্ড করা হয়েছে (Present)!",
+            backgroundColor: attendanceStatus == 'Late'
+                ? Colors.amber.shade800
+                : Colors.green,
+            colorText: Colors.white,
+          );
+
+          if (mounted) {
+            await _fetchAcademyDataAndUsers(isBackground: true);
+          }
         } catch (insertError) {
           print("Insert Error Detail: $insertError");
-        }
-
-        if (mounted) {
-          setState(() {
-            _todayAttendanceMap[currentUserId] = {
-              'teacher_id': currentUserId,
-              'teacher_name': currentUserName,
-              'date': todayDate,
-              'status': attendanceStatus,
-              'check_in_time': checkInTimeStr,
-              'latitude': currentPosition.latitude,
-              'longitude': currentPosition.longitude,
-            };
-          });
-        }
-
-        Get.snackbar(
-          "সফল",
-          attendanceStatus == 'Late'
-              ? "হাজিরা রেকর্ড হয়েছে (বিলম্বিত বা Late)!"
-              : "হাজিরা সফলভাবে রেকর্ড করা হয়েছে (Present)!",
-          backgroundColor: attendanceStatus == 'Late'
-              ? Colors.amber.shade800
-              : Colors.green,
-          colorText: Colors.white,
-        );
-
-        if (mounted) {
-          await _fetchAcademyDataAndUsers(isBackground: true);
+          Get.snackbar(
+            "আজকে নেওয়া হয়ে গেছে",
+            "আপনার হাজিরা আজকে ইতিমধ্যে সফলভাবে রেকর্ড করা আছে!",
+            backgroundColor: Colors.orange,
+            colorText: Colors.white,
+          );
         }
       } else {
         Get.snackbar(
@@ -817,7 +898,9 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                           itemCount: _usersList.length,
                           itemBuilder: (context, index) {
                             final user = _usersList[index];
-                            final userId = user['id']?.toString().trim() ?? '';
+                            final userId =
+                                user['id']?.toString().trim().toLowerCase() ??
+                                '';
                             final userName =
                                 user['full_name'] ?? 'নামবিহীন ইউজার';
                             final userPhone = user['phone'] ?? 'নম্বর নেই';
@@ -1038,4 +1121,3 @@ class _AttendancePageViewState extends State<AttendancePageView> {
     );
   }
 }
-

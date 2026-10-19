@@ -88,6 +88,14 @@ class _TeacherLoginWidgetState extends State<TeacherLoginWidget> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('is_teacher_logged_in', true);
         await prefs.setString('teacher_email', email);
+        await prefs.setString(
+          'teacher_id',
+          teacherResponse['id'].toString(),
+        ); // 👈 শিক্ষকের আইডি সেভ করা হলো
+        await prefs.setString(
+          'academy_id',
+          teacherResponse['academy_id'].toString(),
+        ); // 👈 একাডেমি আইডি সেভ করা হলো
 
         // ফায়ারবেস টোকেন আপডেট (নন-ব্লকিং)
         try {

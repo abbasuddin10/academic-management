@@ -181,9 +181,11 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
               .from('teacher_attendance')
               .select('*')
               .eq('academy_id', tempAcademyId)
-              .eq('email', teacherEmail)
-              .gte('created_at', '$today 00:00:00');
-
+              .eq(
+                'teacher_id',
+                tempId,
+              ) // 👈 email এর পরিবর্তে শিক্ষকের নিজস্ব id দিয়ে চেক করা হলো
+              .eq('date', today);
           if ((attendanceResponse as List).isNotEmpty) {
             tempAttendance = true;
           }
@@ -997,14 +999,18 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                           iconColor: Colors.teal.shade700,
                           onTap: () {
                             AdService.showAdWithTracking(
-                              onComplete: () {
+                              onComplete: () async {
                                 if (academyId.isNotEmpty) {
-                                  Get.to(
+                                  // 👈 ১. এখানে await ব্যবহার করা হয়েছে কি না নিশ্চিত করুন
+                                  await Get.to(
                                     () => AttendancePageView(
                                       academyId: academyId,
                                       userRole: 'teacher',
                                     ),
                                   );
+
+                                  // 👈 ২. পেজ থেকে ফিরে আসার সাথে সাথে ডাটা রিলোড হবে
+                                  _checkAuthAndFetchData();
                                 } else {
                                   Get.snackbar(
                                     "ত্রুটি",
@@ -1017,6 +1023,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                             );
                           },
                         ),
+
                         _buildMenuCard(
                           title: 'ক্লাস রুটিন',
                           icon: Icons.schedule,

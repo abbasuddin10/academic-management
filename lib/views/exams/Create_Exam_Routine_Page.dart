@@ -47,7 +47,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
           .eq('academy_id', widget.academyId);
 
       classesList = List<Map<String, dynamic>>.from(classResponse);
-    
+
       // এরপর এই পরীক্ষার আন্ডারে পূর্বে সেভ করা রুটিনগুলো ফেচ করা
       final routineResponse = await supabase
           .from('exam_routines')
@@ -57,7 +57,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
 
       List<Map<String, dynamic>> existingRoutines = [];
       existingRoutines = List<Map<String, dynamic>>.from(routineResponse);
-    
+
       routineEntries.clear();
 
       if (existingRoutines.isNotEmpty) {
@@ -107,8 +107,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
             'time_values': times,
             'errors': errors,
             'no_exam_status': noExamStatus,
-            'is_expanded':
-                false, // আগের ডাটা থাকলে ডিফল্টভাবে কোল্যাপ্সড থাকতে পারে, চাইলে true করতে পারেন
+            'is_expanded': false,
           });
         });
       }
@@ -134,24 +133,22 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
     }
   }
 
-  // বাংলা সংখ্যায় দিন রূপান্তর করার ফাংশন
+  // বাংলা সংখ্যা ও তম দিন ডায়নামিক রূপান্তর করার ফাংশন
   String _getDayNameInBengali(int index) {
-    List<String> bengaliDays = [
-      'প্রথম দিন',
-      'দ্বিতীয় দিন',
-      'তৃতীয় দিন',
-      'চতুর্থ দিন',
-      'পঞ্চম দিন',
-      'ষষ্ঠ দিন',
-      'সপ্তম দিন',
-      'অষ্টম দিন',
-      'নবম দিন',
-      'দশম দিন',
-    ];
-    if (index < bengaliDays.length) {
-      return bengaliDays[index];
-    }
-    return '${index + 1} তম দিন';
+    int dayNum = index + 1;
+    String bengaliNum = dayNum
+        .toString()
+        .replaceAll('0', '০')
+        .replaceAll('1', '১')
+        .replaceAll('2', '২')
+        .replaceAll('3', '৩')
+        .replaceAll('4', '৪')
+        .replaceAll('5', '৫')
+        .replaceAll('6', '৬')
+        .replaceAll('7', '৭')
+        .replaceAll('8', '৮')
+        .replaceAll('9', '৯');
+    return '$bengaliNum তম দিন';
   }
 
   // নতুন তারিখের রুটিন ব্লক যোগ করার ফাংশন
@@ -182,7 +179,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
     });
   }
 
-  // সময় সিলেক্ট করার টাইম পিকার
+  // সময় সিলেক্ট করার টাইম পিকার
   Future<void> _pickTime(int entryIndex, String className) async {
     TimeOfDay? pickedTime = await showTimePicker(
       context: context,
@@ -213,11 +210,151 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
     }
   }
 
-  // সব রুটিন ডাটাবেজে সেভ এবং আপডেট করা (Upsert লজিক)
+  // নির্দিষ্ট একটি দিনের রুটিন মুছে ফেলার কনফার্মেশন ডায়ালগ
+  Future<void> _confirmDeleteSingleDay(int entryIndex) async {
+    String date = routineEntries[entryIndex]['date_controller'].text.trim();
+
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('রুটিন ডিলিট নিশ্চিতকরণ'),
+        content: Text(
+          date.isNotEmpty
+              ? '$date তারিখের এই রুটিনটি মুছে ফেলতে চান?'
+              : '${_getDayNameInBengali(entryIndex)}-এর রুটিন ব্লকটি মুছে ফেলতে চান?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('না'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'ডিলিট করুন',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      if (date.isNotEmpty) {
+        try {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => const Center(
+              child: CircularProgressIndicator(color: Colors.teal),
+            ),
+          );
+
+          await supabase
+              .from('exam_routines')
+              .delete()
+              .eq('academy_id', widget.academyId)
+              .eq('exam_id', widget.examId)
+              .eq('exam_date', date);
+
+          Navigator.pop(context); // ডায়ালগ পপ
+        } catch (e) {
+          Navigator.pop(context);
+          Get.snackbar(
+            "ত্রুটি",
+            "ডিলিট করতে সমস্যা হয়েছে: $e",
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+          return;
+        }
+      }
+
+      setState(() {
+        routineEntries.removeAt(entryIndex);
+        if (routineEntries.isEmpty) {
+          _addNewRoutineEntry();
+        }
+      });
+
+      Get.snackbar(
+        "সফল",
+        "রুটিন সফলভাবে মুছে ফেলা হয়েছে!",
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  // এই পরীক্ষার সম্পূর্ণ রুটিন মুছে ফেলার কনফার্মেশন ও ডিলিট
+  Future<void> _confirmDeleteAllRoutines() async {
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('সকল রুটিন মুছে ফেলুন'),
+        content: Text(
+          'আপনি কি নিশ্চিত যে "${widget.examTitle}" পরীক্ষার আন্ডারে থাকা সকল রুটিন ডাটা মুছে ফেলতে চান?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('বাতিল'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'সব ডিলিট করুন',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(color: Colors.teal),
+          ),
+        );
+
+        await supabase
+            .from('exam_routines')
+            .delete()
+            .eq('academy_id', widget.academyId)
+            .eq('exam_id', widget.examId);
+
+        Navigator.pop(context);
+
+        Get.snackbar(
+          "সফল",
+          "পরীক্ষার সকল ডাটা সফলভাবে মুছে ফেলা হয়েছে!",
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+
+        _fetchClassesAndExistingRoutines();
+      } catch (e) {
+        Navigator.pop(context);
+        Get.snackbar(
+          "ত্রুটি",
+          "ডাটা মুছে ফেলতে সমস্যা হয়েছে: $e",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
+    }
+  }
+
+  // সব রুটিন ডাটাবেজে সেভ এবং আপডেট করা
   Future<void> _saveAllRoutines() async {
     bool hasError = false;
     List<Map<String, dynamic>> routinesToUpsert = [];
-    List<String> updatedDates = [];
 
     for (int i = 0; i < routineEntries.length; i++) {
       var entry = routineEntries[i];
@@ -237,8 +374,6 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
         );
         return;
       }
-
-      updatedDates.add(examDate);
 
       subjControllers.forEach((className, controller) {
         bool isNoExam = noExamStatus[className] ?? false;
@@ -300,17 +435,14 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
             const Center(child: CircularProgressIndicator(color: Colors.teal)),
       );
 
-      // ১. বর্তমান ফর্মে যে তারিখগুলো নিয়ে কাজ করা হচ্ছে, ডাটাবেজ থেকে সেই তারিখগুলোর পুরোনো রুটিন মুছে ফেলা (যাতে আপডেট করলে পুরোনো ডুপ্লিকেট না থাকে)
-      for (String date in updatedDates) {
-        await supabase
-            .from('exam_routines')
-            .delete()
-            .eq('academy_id', widget.academyId)
-            .eq('exam_id', widget.examId)
-            .eq('exam_date', date);
-      }
+      // ১. আগের সম্পূর্ণ পরীক্ষার ডাটা ক্লিয়ার করা যাতে ফ্রেশভাবে সেভ হতে পারে
+      await supabase
+          .from('exam_routines')
+          .delete()
+          .eq('academy_id', widget.academyId)
+          .eq('exam_id', widget.examId);
 
-      // ২. নতুন বা এডিট করা আপডেট ডাটাগুলো ইনসার্ট করা
+      // ২. নতুন এবং পুরোনো সকল ইনপুট করা ডাটা ইনসার্ট করা
       await supabase.from('exam_routines').insert(routinesToUpsert);
 
       Navigator.pop(context); // লোডিং ডায়ালগ বন্ধ করা
@@ -352,6 +484,11 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_forever, color: Colors.white),
+            tooltip: 'সকল রুটিন মুছে ফেলুন',
+            onPressed: _confirmDeleteAllRoutines,
+          ),
           IconButton(
             icon: const Icon(Icons.save, color: Colors.white),
             tooltip: 'সব রুটিন সেভ করুন',
@@ -501,24 +638,19 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                                       });
                                     },
                                   ),
-                                  if (routineEntries.length > 1) ...[
-                                    const SizedBox(width: 8),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.delete_outline,
-                                        color: Colors.red,
-                                        size: 18,
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                      tooltip: 'ডিলিট করুন',
-                                      onPressed: () {
-                                        setState(() {
-                                          routineEntries.removeAt(entryIndex);
-                                        });
-                                      },
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.red,
+                                      size: 18,
                                     ),
-                                  ],
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    tooltip: 'ডিলিট করুন',
+                                    onPressed: () =>
+                                        _confirmDeleteSingleDay(entryIndex),
+                                  ),
                                 ],
                               ),
                             ),
