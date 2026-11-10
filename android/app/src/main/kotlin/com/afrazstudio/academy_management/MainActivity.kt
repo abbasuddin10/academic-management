@@ -1,4 +1,4 @@
-package com.example.academy_management
+package com.afrazstudio.academy_management
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -9,7 +9,7 @@ class AdService {
   // ১. ইন্টারস্টিশিয়াল অ্যাড লোড করা[cite: 9]
   static void loadInterstitialAd() {
     InterstitialAd.load(
-      adUnitId: 'ca-app-pub-3940256099942544/1033173712', // টেস্ট আইডি[cite: 9]
+      adUnitId: 'ca-app-pub-6885203373790979/9324785589', // টেস্ট আইডি[cite: 9]
       request: const AdRequest(),
       adLoadCallback: InterstitialAdLoadCallback(
         onAdLoaded: (ad) {
@@ -26,7 +26,7 @@ class AdService {
   static BannerAd createBannerAd() {
     return BannerAd(
       adUnitId:
-          'ca-app-pub-3940256099942544/6300978111', // টেস্ট ব্যানার আইডি[cite: 9]
+          'ca-app-pub-6885203373790979/6584118352', // টেস্ট ব্যানার আইডি[cite: 9]
       size: AdSize.banner,
       request: const AdRequest(),
       listener: BannerAdListener(

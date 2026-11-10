@@ -6,6 +6,7 @@ import 'package:academy_management/views/notices/Admin_Complaints_View.dart';
 import 'package:academy_management/views/exams/ExamSeatPlanView.dart';
 import 'package:academy_management/views/exams/Model_Test_View.dart';
 import 'package:academy_management/views/finance/OtherIncomeExpenseView.dart';
+import 'package:academy_management/views/privacy_policy_view.dart';
 import 'package:academy_management/views/student/StudentIdCardVie.dart';
 import 'package:academy_management/views/finance/academy_accounts_excel_view.dart';
 import 'package:academy_management/views/finance/academy_teachers_salary_view.dart';
@@ -1076,10 +1077,15 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   ),
                   ListTile(
                     leading: const Icon(Icons.privacy_tip, color: Colors.teal),
-                    title: Text(
-                      _isEnglish ? 'Privacy Policy' : 'প্রাইভেসি পলিসি',
-                    ),
-                    onTap: () => Navigator.pop(context),
+                    title: const Text('প্রাইভেসি পলিসি'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PrivacyPolicyView(),
+                        ),
+                      );
+                    },
                   ),
                   ListTile(
                     leading: const Icon(Icons.share, color: Colors.teal),

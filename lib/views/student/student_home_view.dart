@@ -6,6 +6,7 @@ import 'package:academy_management/views/notices/student_complaint_view.dart';
 import 'package:academy_management/views/exams/student_exam_routine_view.dart';
 import 'package:academy_management/views/finance/student_fee_details_view.dart';
 import 'package:academy_management/views/exams/student_model_test.dart';
+import 'package:academy_management/views/privacy_policy_view.dart';
 import 'package:academy_management/views/student/student_teachers_view.dart';
 import 'package:academy_management/views/exams/student_routine_view.dart';
 import 'package:flutter/material.dart';
@@ -755,31 +756,15 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                     },
                   ),
                   ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    leading: const Icon(
-                      Icons.privacy_tip_outlined,
-                      color: Colors.brown,
-                    ),
-                    title: const Text(
-                      'প্রাইভেসি পলিসি',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                      ),
-                    ),
-                    onTap: () async {
-                      Navigator.pop(context);
-                      final Uri privacyUrl = Uri.parse(
-                        'https://your-privacy-policy-url.com',
+                    leading: const Icon(Icons.privacy_tip, color: Colors.teal),
+                    title: const Text('প্রাইভেসি পলিসি'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PrivacyPolicyView(),
+                        ),
                       );
-                      if (await canLaunchUrl(privacyUrl)) {
-                        await launchUrl(
-                          privacyUrl,
-                          mode: LaunchMode.externalApplication,
-                        );
-                      }
                     },
                   ),
                   ListTile(
@@ -801,7 +786,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                       Navigator.pop(context);
                       Get.snackbar(
                         "শেয়ার",
-                        "প্লে-স্টোর লিংক কপি বা শেয়ার অপশন",
+                        "প্লে-স্টোর লিংক কপি বা শেয়ার অপশন শীঘ্রই আসছে!",
                       );
                     },
                   ),
@@ -1658,4 +1643,3 @@ class _StudentHomeViewState extends State<StudentHomeView> {
     return Colors.white;
   }
 }
-

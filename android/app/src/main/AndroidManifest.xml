@@ -10,15 +10,15 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
+        android:name="androidx.multidex.MultiDexApplication"
         android:label="academy management"
-        android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
         
         <!-- গুগল অ্যাডমব অ্যাপ আইডি (অ্যাড করা হয়েছে) -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
+            android:value="ca-app-pub-6885203373790979~1934426902"/>
         
         <activity
             android:name=".MainActivity"
@@ -47,7 +47,7 @@
                 
                 <!-- আপনার প্যাকেজ নেম অনুযায়ী কাস্টম স্কিম এবং হোস্ট -->
                 <data
-                    android:scheme="com.example.academy_management"
+                    android:scheme="com.afrazstudio.academy_management"
                     android:host="login-callback" />
             </intent-filter>
         </activity>

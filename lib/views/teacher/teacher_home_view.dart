@@ -8,6 +8,7 @@ import 'package:academy_management/views/exams/question_create_view.dart';
 import 'package:academy_management/views/attendance/student_attendance_page_view.dart';
 import 'package:academy_management/views/exams/teacher_exam_routine_view.dart';
 import 'package:academy_management/views/notices/notice_board_view.dart';
+import 'package:academy_management/views/privacy_policy_view.dart';
 import 'package:academy_management/views/teacher/teacher_profile.dart';
 import 'package:academy_management/views/finance/teacher_salary_page.dart';
 import 'package:flutter/material.dart';
@@ -658,25 +659,14 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                     },
                   ),
                   ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    leading: const Icon(
-                      Icons.privacy_tip_outlined,
-                      color: Colors.brown,
-                    ),
-                    title: const Text(
-                      'প্রাইভেসি পলিসি',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                      ),
-                    ),
+                    leading: const Icon(Icons.privacy_tip, color: Colors.teal),
+                    title: const Text('প্রাইভেসি পলিসি'),
                     onTap: () {
-                      Navigator.pop(context);
-                      Get.snackbar(
-                        "প্রাইভেসি পলিসি",
-                        "পলিসি লিংক ব্রাউজারে ওপেন হবে",
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PrivacyPolicyView(),
+                        ),
                       );
                     },
                   ),
@@ -699,7 +689,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                       Navigator.pop(context);
                       Get.snackbar(
                         "শেয়ার",
-                        "প্লে-স্টোর লিংক কপি বা শেয়ার অপশন",
+                        "প্লে-স্টোর লিংক কপি বা শেয়ার অপশন শীঘ্রই আসছে!",
                       );
                     },
                   ),

@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:291092236875:android:cadc6f82a3678559705bce",
+        "mobilesdk_app_id": "1:291092236875:android:ac0c53d964a41db6705bce",
         "android_client_info": {
-          "package_name": "com.example.academy_management"
+          "package_name": "com.afrazstudio.academy_management"
         }
       },
       "oauth_client": [],
