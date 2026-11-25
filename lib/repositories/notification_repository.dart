@@ -48,7 +48,11 @@ class NotificationRepository extends BaseRepository {
           .select('id')
           .eq('academy_id', academyId)
           .eq('reader_key', readerKey)
-          .isFilter('read_at', null);
+          .isFilter('read_at', null)
+          // Notices are already counted by NoticeRepository via `notices` +
+          // `notice_reads`. Excluding their mirrored inbox rows here keeps the
+          // combined bell at one unread per logical notice for every role.
+          .neq('type', NotificationTypes.notice);
       return (rows as List).length;
     } catch (_) {
       return 0;
