@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -157,7 +158,9 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
             }
           }
         }
-            } catch (e) {}
+            } catch (e) {
+        debugPrint('Other expense rows unavailable: $e');
+      }
 
       // ৩. ছাত্রছাত্রীদের অন্যান্য কালেকশন (student_other_collections টেবিল)
       try {
@@ -195,7 +198,9 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
             }
           }
         }
-            } catch (e) {}
+            } catch (e) {
+        debugPrint('Student other collection rows unavailable: $e');
+      }
 
       // ৪. শিক্ষক বেতন পরিশোধ (ব্যয়)
       try {
@@ -233,7 +238,9 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
             }
           }
         }
-            } catch (e) {}
+            } catch (e) {
+        debugPrint('Teacher salary rows unavailable: $e');
+      }
 
       setState(() {
         _accountsList = combinedList;
@@ -585,30 +592,30 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
                       strokeWidth: 2,
                     ),
                   )
-                : const Icon(Icons.download),
+                : Icon(Icons.download),
             tooltip: 'এক্সেল ডাউনলোড করুন',
             onPressed: _isExporting ? null : _exportToExcel,
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.teal))
+          ? Center(child: CircularProgressIndicator(color: Colors.teal))
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(12.0),
+              padding: EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(12),
+                    padding: EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.teal.shade50,
+                      color: AppTheme.tileOf(context, Colors.teal),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.teal.shade200),
+                      border: Border.all(color: AppTheme.tileOf(context, Colors.teal)),
                     ),
                     child: Text(
                       'হিসাবের সময়সীমা: $_dateRangeText',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.teal,
                         fontSize: 13,
@@ -616,13 +623,13 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
                       textAlign: TextAlign.center,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
 
                   Row(
                     children: [
                       Expanded(
                         child: Card(
-                          color: Colors.green.shade50,
+                          color: AppTheme.tileOf(context, Colors.green),
                           elevation: 2,
                           child: Padding(
                             padding: const EdgeInsets.all(10.0),
@@ -636,10 +643,10 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                SizedBox(height: 4),
                                 Text(
                                   '৳ ${_totalIncomeSum.toStringAsFixed(0)}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.green,
@@ -652,7 +659,7 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
                       ),
                       Expanded(
                         child: Card(
-                          color: Colors.red.shade50,
+                          color: AppTheme.tileOf(context, Colors.red),
                           elevation: 2,
                           child: Padding(
                             padding: const EdgeInsets.all(10.0),
@@ -666,10 +673,10 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                SizedBox(height: 4),
                                 Text(
                                   '৳ ${_totalExpenseSum.toStringAsFixed(0)}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.red,
@@ -682,7 +689,7 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
                       ),
                       Expanded(
                         child: Card(
-                          color: Colors.indigo.shade50,
+                          color: AppTheme.tileOf(context, Colors.indigo),
                           elevation: 2,
                           child: Padding(
                             padding: const EdgeInsets.all(10.0),
@@ -774,18 +781,18 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
                       : ListView.builder(
                           itemCount: _accountsList.length,
                           shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
+                          physics: NeverScrollableScrollPhysics(),
                           itemBuilder: (context, index) {
                             final item = _accountsList[index];
                             bool isIncome = item['type'] == 'আয়';
                             return Card(
                               elevation: 1,
-                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              margin: EdgeInsets.symmetric(vertical: 4),
                               child: ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor: isIncome
-                                      ? Colors.green.shade100
-                                      : Colors.red.shade100,
+                                      ? AppTheme.tileOf(context, Colors.green)
+                                      : AppTheme.tileOf(context, Colors.red),
                                   child: Icon(
                                     isIncome
                                         ? Icons.arrow_downward
@@ -795,16 +802,16 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
                                 ),
                                 title: Text(
                                   item['category'],
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13,
                                   ),
                                 ),
                                 subtitle: Text(
                                   'তারিখ: ${item['date']}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.grey,
+                                    color: AppTheme.mutedOf(context),
                                   ),
                                 ),
                                 trailing: Text(
@@ -832,16 +839,16 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
     Color color,
   ) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surfaceOf(context),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
+            color: Colors.grey.withValues(alpha: 0.05),
             blurRadius: 4,
-            offset: const Offset(0, 2),
+            offset: Offset(0, 2),
           ),
         ],
       ),
@@ -857,7 +864,7 @@ class _AcademyAccountsExcelViewState extends State<AcademyAccountsExcelView> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade700,
+                  color: AppTheme.mutedOf(context),
                 ),
               ),
               Icon(icon, color: color, size: 20),

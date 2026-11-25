@@ -1,15 +1,23 @@
-﻿import 'package:academy_management/views/admin/teachers_view.dart';
-import 'package:academy_management/views/admin/AcademyAiAssistantView.dart';
-import 'package:academy_management/views/exams/Academy_Result_Management_View.dart';
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/controllers/app_state_controller.dart';
+import 'package:academy_management/repositories/academy_repository.dart';
+import 'package:academy_management/services/app_actions.dart';
+import 'package:academy_management/repositories/dashboard_repository.dart';
+import 'package:academy_management/views/admin/teachers_view.dart';
+import 'package:academy_management/views/admin/super_admin_management_view.dart';
+import 'package:academy_management/views/admin/academy_ai_assistant_view.dart';
+import 'package:academy_management/views/exams/academy_result_management_view.dart';
 import 'package:academy_management/views/finance/total_collected_details_view.dart';
-import 'package:academy_management/views/notices/Admin_Complaints_View.dart';
-import 'package:academy_management/views/exams/ExamSeatPlanView.dart';
-import 'package:academy_management/views/exams/Model_Test_View.dart';
-import 'package:academy_management/views/finance/OtherIncomeExpenseView.dart';
+import 'package:academy_management/views/notices/admin_complaints_view.dart';
+import 'package:academy_management/views/exams/exam_seat_plan_view.dart';
+import 'package:academy_management/views/exams/model_test_view.dart';
+import 'package:academy_management/views/finance/other_income_expense_view.dart';
 import 'package:academy_management/views/privacy_policy_view.dart';
-import 'package:academy_management/views/student/StudentIdCardVie.dart';
-import 'package:academy_management/views/finance/academy_accounts_excel_view.dart';
+import 'package:academy_management/views/settings/settings_view.dart';
+import 'package:academy_management/views/student/student_id_card_view.dart';
 import 'package:academy_management/views/finance/academy_teachers_salary_view.dart';
+import 'package:academy_management/views/finance/due_students_pdf_report_view.dart';
+import 'package:academy_management/views/finance/financial_pdf_report_view.dart';
 import 'package:academy_management/views/exams/admit_card_view.dart';
 import 'package:academy_management/views/attendance/attendance_page_view.dart';
 import 'package:academy_management/views/exams/class_routine_view.dart';
@@ -28,8 +36,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:crypto/crypto.dart';
-import 'dart:convert';
+import 'package:academy_management/services/session_service.dart';
+import 'package:academy_management/widgets/notification_bell.dart';
+import 'package:academy_management/widgets/theme_mode_toggle.dart';
 import 'dart:async';
 import 'dart:io';
 import '../auth/login_view.dart';
@@ -55,8 +64,11 @@ class SharedDashboard extends StatefulWidget {
 
 class _SharedDashboardState extends State<SharedDashboard> {
   final supabase = Supabase.instance.client;
+  late final AppStateController _appState;
+  Worker? _languageWorker;
 
-  // ভাষা পরিবর্তনের স্টেট (false = বাংলা, true = ইংরেজি)
+  // Local mirror of the shared language state; kept so the large build method
+  // does not need a full Obx rewrite.
   bool _isEnglish = false;
 
   // রিয়েল-টাইম ডাটা হোল্ড করার জন্য ভেরিয়েবলসমূহ
@@ -79,11 +91,16 @@ class _SharedDashboardState extends State<SharedDashboard> {
 
   bool _hasInternetConnection = true;
   Timer? _pollingTimer;
-  int _unreadNoticeCount = 0; // সিন/আনসিন নোটিফিকেশন সংখ্যা ট্র্যাক করার জন্য
 
   @override
   void initState() {
     super.initState();
+
+    _appState = Get.find<AppStateController>();
+    _isEnglish = _appState.isEnglish.value;
+    _languageWorker = ever(_appState.isEnglish, (value) {
+      if (mounted) setState(() => _isEnglish = value);
+    });
 
     // রোল চেক করে যদি টিচার হয় তবে সরাসরি টিচারের হোমপেজে রিডাইরেক্ট করে দেওয়া
     if (widget.role != 'super_admin') {
@@ -94,16 +111,31 @@ class _SharedDashboardState extends State<SharedDashboard> {
     }
 
     _loadStatsInitial();
+    _startNoticeWatch();
     // ব্যাকগ্রাউন্ডে রিয়েল-টাইম বা পরিচালনা করার জন্য টাইমার
     _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       _fetchAcademyStatsSilent();
-      _fetchUnreadNoticeCount(); // রিয়েল-টাইমে নোটিফিকেশন সংখ্যা চেক করা
     });
+  }
+
+  Future<void> _startNoticeWatch() async {
+    final tenant = await _getAcademyIdSafely();
+    if (tenant == null || tenant.isEmpty) return;
+    final key = _appState.readerKey.value?.isNotEmpty == true
+        ? _appState.readerKey.value!
+        : (supabase.auth.currentUser?.id ?? '');
+    if (key.isEmpty) return;
+    _appState.startNoticeWatch(
+      academyId: tenant,
+      role: 'super_admin',
+      readerKey: key,
+    );
   }
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    _languageWorker?.dispose();
     super.dispose();
   }
 
@@ -135,7 +167,6 @@ class _SharedDashboardState extends State<SharedDashboard> {
     }
 
     var stats = await _fetchAcademyStats();
-    await _fetchUnreadNoticeCount();
     if (mounted) {
       setState(() {
         _hasInternetConnection = true;
@@ -164,332 +195,29 @@ class _SharedDashboardState extends State<SharedDashboard> {
     }
   }
 
-  // আনসিন নোটিফিকেশন সংখ্যা ফেচ করার ফাংশন
-  Future<void> _fetchUnreadNoticeCount() async {
-    try {
-      final academyId = await _getAcademyIdSafely();
-      if (academyId == null) return;
-
-      final response = await supabase
-          .from('notices')
-          .select('id')
-          .eq('academy_id', academyId);
-
-      if (mounted) {
-        setState(() {
-          _unreadNoticeCount = (response as List).length;
-        });
-      }
-    } catch (e) {
-      // সাইಲೆಂ্ট ক্যাচ
-    }
-  }
-
-  String _hashPassword(String password) {
-    var bytes = utf8.encode(password);
-    var digest = sha256.convert(bytes);
-    return digest.toString();
-  }
-
-  // নিরাপদভাবে বর্তমান ইউজারের ইমেইল দিয়ে একাডেমি ডেটা ও আইডি ফেচ করার ফাংশন
+  /// Aggregated dashboard data now lives in the repository layer.
   Future<Map<String, dynamic>> _fetchAcademyStats() async {
-    try {
-      final currentUserEmail = supabase.auth.currentUser?.email;
-      if (currentUserEmail == null) {
-        return _emptyStats();
-      }
-
-      final responseUser = await supabase
-          .from('users')
-          .select('academy_id')
-          .eq('email', currentUserEmail)
-          .limit(1);
-
-      if ((responseUser as List).isEmpty ||
-          responseUser[0]['academy_id'] == null) {
-        return _emptyStats();
-      }
-
-      final academyId = responseUser[0]['academy_id'];
-
-      final studentResponse = await supabase
-          .from('students')
-          .select('*')
-          .eq('academy_id', academyId);
-
-      final List studentsList = studentResponse as List;
-      final int totalStudentsCount = studentsList.length;
-
-      double totalFeeSum = 0.0;
-      for (var student in studentsList) {
-        double fee =
-            double.tryParse(student['monthly_fee']?.toString() ?? '0') ?? 0.0;
-        totalFeeSum += fee;
-      }
-
-      final teacherResponse = await supabase
-          .from('users')
-          .select('salary, created_at')
-          .eq('academy_id', academyId)
-          .inFilter('role', ['teacher', 'super_admin']);
-
-      final List teachersList = teacherResponse as List;
-
-      double totalOneMonthSalarySum = 0.0;
-      double totalAccruedSalarySinceJoining = 0.0;
-
-      final now = DateTime.now();
-
-      for (var teacher in teachersList) {
-        double monthlySal =
-            double.tryParse(teacher['salary']?.toString() ?? '0') ?? 0.0;
-        totalOneMonthSalarySum += monthlySal;
-
-        final createdAtStr = teacher['created_at']?.toString();
-        if (createdAtStr != null) {
-          DateTime? createdAt = DateTime.tryParse(createdAtStr);
-          if (createdAt != null) {
-            DateTime localJoinDate = createdAt.toLocal();
-
-            int totalMonths =
-                (now.year - localJoinDate.year) * 12 +
-                now.month -
-                localJoinDate.month;
-            if (totalMonths < 0) totalMonths = 0;
-
-            double teacherTotalDue = monthlySal * (totalMonths + 1);
-            totalAccruedSalarySinceJoining += teacherTotalDue;
-          } else {
-            totalAccruedSalarySinceJoining += monthlySal;
-          }
-        } else {
-          totalAccruedSalarySinceJoining += monthlySal;
-        }
-      }
-
-      final salaryHistoryResponse = await supabase
-          .from('teacher_salary_history')
-          .select('amount')
-          .eq('academy_id', academyId);
-
-      double paidSalarySum = 0.0;
-      for (var item in (salaryHistoryResponse as List)) {
-        double amt = double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-        paidSalarySum += amt;
-      }
-
-      double remainingSalary = totalAccruedSalarySinceJoining - paidSalarySum;
-      if (remainingSalary < 0) remainingSalary = 0;
-
-      final List<String> months = [
-        'জানুয়ারি',
-        'ফেব্রুয়ারি',
-        'মার্চ',
-        'এপ্রিল',
-        'মে',
-        'জুন',
-        'জুলাই',
-        'আগস্ট',
-        'সেপ্টেম্বর',
-        'অক্টোবর',
-        'নভেম্বর',
-        'ডিসেম্বর',
-      ];
-
-      DateTime startDate;
-      DateTime endDate = DateTime(now.year, now.month, 10, 23, 59, 59);
-
-      int prevMonth = now.month - 1;
-      int prevYear = now.year;
-      if (prevMonth == 0) {
-        prevMonth = 12;
-        prevYear -= 1;
-      }
-      startDate = DateTime(prevYear, prevMonth, 10, 0, 0, 0);
-
-      String customDateRangeText =
-          '${startDate.day} ${months[startDate.month - 1]} থেকে ${endDate.day} ${months[endDate.month - 1]}';
-
-      final feeHistoryResponse = await supabase
-          .from('student_fee_history')
-          .select('amount, created_at, month')
-          .eq('academy_id', academyId);
-
-      double totalCollectedSum = 0.0;
-      for (var item in (feeHistoryResponse as List)) {
-        final createdAtStr = item['created_at']?.toString();
-        if (createdAtStr != null) {
-          DateTime? createdAt = DateTime.tryParse(createdAtStr);
-          if (createdAt != null) {
-            DateTime localCreatedAt = createdAt.toLocal();
-            if (localCreatedAt.isAfter(
-                  startDate.subtract(const Duration(seconds: 1)),
-                ) &&
-                localCreatedAt.isBefore(
-                  endDate.add(const Duration(seconds: 1)),
-                )) {
-              double amt =
-                  double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-              totalCollectedSum += amt;
-            }
-          }
-        }
-      }
-
-      double totalYtdCollectedSum = 0.0;
-      for (var item in (feeHistoryResponse as List)) {
-        final createdAtStr = item['created_at']?.toString();
-        if (createdAtStr != null) {
-          DateTime? createdAt = DateTime.tryParse(createdAtStr);
-          if (createdAt != null) {
-            DateTime localCreatedAt = createdAt.toLocal();
-            if (localCreatedAt.year == now.year &&
-                localCreatedAt.month <= now.month) {
-              double amt =
-                  double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-              totalYtdCollectedSum += amt;
-            }
-          }
-        }
-      }
-
-      double totalOtherIncome = 0.0;
-      double totalOtherExpense = 0.0;
-      try {
-        final otherIncomeExpenseResponse = await supabase
-            .from('other_income_expenses')
-            .select('amount, type, created_at')
-            .eq('academy_id', academyId);
-
-        for (var item in (otherIncomeExpenseResponse as List)) {
-          final createdAtStr = item['created_at']?.toString();
-          bool isCurrentYearAndMonth = true;
-          if (createdAtStr != null) {
-            DateTime? createdAt = DateTime.tryParse(createdAtStr);
-            if (createdAt != null) {
-              DateTime localCreatedAt = createdAt.toLocal();
-              if (!(localCreatedAt.year == now.year &&
-                  localCreatedAt.month <= now.month)) {
-                isCurrentYearAndMonth = false;
-              }
-            }
-          }
-
-          if (isCurrentYearAndMonth) {
-            double amt =
-                double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-            String type = item['type']?.toString().toLowerCase().trim() ?? '';
-            if (type == 'income' || type == 'آئ' || type == 'আয়') {
-              totalOtherIncome += amt;
-            } else if (type == 'expense' || type == 'ব্যয়' || type == 'cost') {
-              totalOtherExpense += amt;
-            }
-          }
-        }
-      } catch (e) {}
-
-      double studentOtherCollectionsSum = 0.0;
-      try {
-        final studentOtherResponse = await supabase
-            .from('student_other_collections')
-            .select('amount, payment_date, created_at')
-            .eq('academy_id', academyId);
-
-        for (var item in (studentOtherResponse as List)) {
-          final dateStr =
-              item['payment_date'] ?? item['created_at']?.toString();
-          bool isCurrentYearAndMonth = true;
-          if (dateStr != null) {
-            DateTime? createdAt = DateTime.tryParse(dateStr);
-            if (createdAt != null) {
-              DateTime localCreatedAt = createdAt.toLocal();
-              if (!(localCreatedAt.year == now.year &&
-                  localCreatedAt.month <= now.month)) {
-                isCurrentYearAndMonth = false;
-              }
-            }
-          }
-
-          if (isCurrentYearAndMonth) {
-            double amt =
-                double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
-            studentOtherCollectionsSum += amt;
-          }
-        }
-      } catch (e) {}
-
-      double finalTotalOtherIncome =
-          totalOtherIncome + studentOtherCollectionsSum;
-
-      double grandTotalIncome = totalYtdCollectedSum + finalTotalOtherIncome;
-      double grandTotalExpense = paidSalarySum + totalOtherExpense;
-      double netBalance = grandTotalIncome - grandTotalExpense;
-
-      double totalDueSum = totalFeeSum - totalCollectedSum;
-      if (totalDueSum < 0) totalDueSum = 0;
-
-      double totalRemainingCollection = totalFeeSum - totalCollectedSum;
-      if (totalRemainingCollection < 0) totalRemainingCollection = 0;
-
-      return {
-        'academyId': academyId,
-        'totalStudents': totalStudentsCount,
-        'totalExpectedFee': '৳ ${totalFeeSum.toStringAsFixed(0)}',
-        'totalDue': '৳ ${totalDueSum.toStringAsFixed(0)}',
-        'totalCollected': '৳ ${totalCollectedSum.toStringAsFixed(0)}',
-        'totalRemainingCollection':
-            '৳ ${totalRemainingCollection.toStringAsFixed(0)}',
-        'dateRange': customDateRangeText,
-        'totalTeacherSalary': '৳ ${totalOneMonthSalarySum.toStringAsFixed(0)}',
-        'paidTeacherSalary': '৳ ${paidSalarySum.toStringAsFixed(0)}',
-        'remainingTeacherSalary': '৳ ${remainingSalary.toStringAsFixed(0)}',
-        'netBalance': '৳ ${netBalance.toStringAsFixed(0)}',
-        'totalOtherIncome': '৳ ${finalTotalOtherIncome.toStringAsFixed(0)}',
-        'totalOtherExpense': '৳ ${totalOtherExpense.toStringAsFixed(0)}',
-        'ytdCollected': '৳ ${totalYtdCollectedSum.toStringAsFixed(0)}',
-      };
-    } catch (e) {
-      return _emptyStats();
-    }
+    final stats = await DashboardRepository().fetchStats();
+    return stats.toMap();
   }
 
-  Map<String, dynamic> _emptyStats() {
-    return {
-      'academyId': null,
-      'totalStudents': 0,
-      'totalExpectedFee': '৳ ০',
-      'totalDue': '৳ ০',
-      'totalCollected': '৳ ০',
-      'totalRemainingCollection': '৳ ০',
-      'dateRange': '',
-      'totalTeacherSalary': '৳ ০',
-      'paidTeacherSalary': '৳ ০',
-      'remainingTeacherSalary': '৳ ০',
-      'netBalance': '৳ ০',
-      'totalOtherIncome': '৳ ০',
-      'totalOtherExpense': '৳ ০',
-      'ytdCollected': '৳ ০',
-    };
-  }
+  Future<String?> _getAcademyIdSafely() =>
+      AcademyRepository().currentUserAcademyId();
 
-  Future<String?> _getAcademyIdSafely() async {
-    try {
-      final currentUserEmail = supabase.auth.currentUser?.email;
-      if (currentUserEmail == null) return null;
-
-      final responseUser = await supabase
-          .from('users')
-          .select('academy_id')
-          .eq('email', currentUserEmail)
-          .limit(1);
-
-      if ((responseUser as List).isNotEmpty) {
-        return responseUser[0]['academy_id']?.toString();
-      }
-      return null;
-    } catch (e) {
-      return null;
+  /// Opens the admin financial PDF report from either the AppBar or drawer.
+  Future<void> _openFinancialReport() async {
+    final academyId = await _getAcademyIdSafely();
+    if (!mounted) return;
+    if (academyId == null || academyId.trim().isEmpty) {
+      Get.snackbar(
+        _isEnglish ? 'Error' : 'ত্রুটি',
+        _isEnglish ? 'Academy ID not found!' : 'একাডেমি আইডি পাওয়া যায়নি!',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return;
     }
+    await Get.to(() => FinancialPdfReportView(academyId: academyId));
   }
 
   void _checkAndShowYearTransitionDialog(BuildContext context) {
@@ -510,7 +238,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
                 const SizedBox(width: 8),
                 Text(
                   _isEnglish ? 'Not Time Yet' : 'সময় হয়নি',
-                  style: const TextStyle(fontSize: 18),
+                  style: TextStyle(fontSize: 18),
                 ),
               ],
             ),
@@ -519,9 +247,9 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   ? '2027 or new academic session has not started yet! (Current year: $currentYear).\n\nThis option is scheduled to be used only after the next year or new session begins.'
                   : 'এখনো ২০২৭ বা নতুন শিক্ষাবর্ষ শুরু হয়নি! (বর্তমান বছর: $currentYear)।\n\n'
                         'এই অপশনটি শুধুমাত্র পরবর্তী বছর বা নতুন শিক্ষাবর্ষ শুরু হওয়ার পর ব্যবহারের জন্য নির্ধারিত।',
-              style: const TextStyle(
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 fontSize: 13,
-                color: Colors.black87,
+                color: AppTheme.inkOf(context),
                 height: 1.4,
               ),
             ),
@@ -586,9 +314,9 @@ class _SharedDashboardState extends State<SharedDashboard> {
                       : '• সকল শিক্ষার্থীর বর্তমান ক্লাসের বকেয়া হিসাব আলাদা একটি সংরক্ষণ টেবিলে (yearly_due_history) জমা হয়ে যাবে।\n\n'
                             '• ডাটাবেসের সিকোয়েন্স অনুযায়ী সকল শিক্ষার্থী স্বয়ংক্রিয়ভাবে ডাইনামিক্যালি পরবর্তী ক্লাসে উন্নীত হবে।\n\n'
                             '• অন্যান্য আয়-ব্যয় এবং পূর্বের সাধারণ হিসাবগুলো অপরিবর্তিত থাকবে এবং নতুন বছরের হিসাব শুরু হবে।',
-                  style: const TextStyle(
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontSize: 13,
-                    color: Colors.black87,
+                    color: AppTheme.inkOf(context),
                     height: 1.4,
                   ),
                 ),
@@ -599,7 +327,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
             TextButton(
               child: Text(
                 _isEnglish ? 'Cancel' : 'বাতিল',
-                style: const TextStyle(color: Colors.grey),
+                style: TextStyle(color: AppTheme.mutedOf(context)),
               ),
               onPressed: () => Navigator.of(context).pop(),
             ),
@@ -636,6 +364,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
     try {
       final academyId = await _getAcademyIdSafely();
       if (academyId == null) {
+        if (!context.mounted) return;
         Navigator.pop(context);
         Get.snackbar(
           _isEnglish ? "Error" : "ত্রুটি",
@@ -653,6 +382,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
 
       final List students = studentResponse as List;
       if (students.isEmpty) {
+        if (!context.mounted) return;
         Navigator.pop(context);
         Get.snackbar(
           _isEnglish ? "Warning" : "সতর্কতা",
@@ -719,6 +449,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
             .eq('id', studentId);
       }
 
+      if (!context.mounted) return;
       Navigator.pop(context);
       _loadStatsInitial();
 
@@ -731,6 +462,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
         colorText: Colors.white,
       );
     } catch (e) {
+      if (!context.mounted) return;
       Navigator.pop(context);
       Get.snackbar(
         _isEnglish ? "Error" : "ত্রুটি",
@@ -748,10 +480,15 @@ class _SharedDashboardState extends State<SharedDashboard> {
     bool isSuperAdmin = (widget.role == 'super_admin');
 
     if (!isSuperAdmin) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(child: CircularProgressIndicator(color: Colors.teal)),
       );
     }
+
+    final isDark = AppTheme.isDark(context);
+    final ink = AppTheme.inkOf(context);
+    final border = AppTheme.borderOf(context);
+    final appBarIconColor = isDark ? AppTheme.nightInk : Colors.white;
 
     final data = _academyStats;
     final academyId = data['academyId'];
@@ -769,31 +506,45 @@ class _SharedDashboardState extends State<SharedDashboard> {
     String ytdCollected = data['ytdCollected'] ?? '৳ ০';
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppTheme.canvasOf(context),
       appBar: AppBar(
         title: Text(
           isSuperAdmin
               ? (_isEnglish ? 'Admin Panel' : 'অ্যাডমিন প্যানেল')
               : (_isEnglish ? 'Teacher Dashboard' : 'শিক্ষক ড্যাশবোর্ড'),
         ),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: Text(
-              _isEnglish ? 'BN' : 'EN',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-                color: Colors.white,
-              ),
+          if (isSuperAdmin)
+            IconButton(
+              icon: Icon(Icons.picture_as_pdf_outlined, color: appBarIconColor),
+              tooltip: _isEnglish
+                  ? 'Financial Report (PDF)'
+                  : 'আর্থিক রিপোর্ট (PDF)',
+              onPressed: _openFinancialReport,
             ),
-            tooltip: _isEnglish ? 'বাংলা করুন' : 'Switch to English',
-            onPressed: () {
-              setState(() {
-                _isEnglish = !_isEnglish;
-              });
+          ThemeModeToggle(color: appBarIconColor),
+          NotificationBell(
+            color: appBarIconColor,
+            onTap: () async {
+              final tenant = await _getAcademyIdSafely();
+              if (tenant != null && tenant.isNotEmpty) {
+                Get.to(
+                  () => NoticeBoardView(
+                    academyId: tenant,
+                    userRole: 'super_admin',
+                  ),
+                );
+              } else {
+                Get.snackbar(
+                  _isEnglish ? 'Error' : 'ত্রুটি',
+                  _isEnglish
+                      ? 'Academy ID not found!'
+                      : 'একাডেমি আইডি পাওয়া যায়নি!',
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+              }
             },
           ),
           if (isSuperAdmin)
@@ -817,7 +568,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   alignment: Alignment.center,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.feedback, color: Colors.white),
+                      icon: Icon(Icons.feedback, color: appBarIconColor),
                       tooltip: _isEnglish ? 'Complaints' : 'অভিযোগসমূহ',
                       onPressed: () async {
                         final academyId = await _getAcademyIdSafely();
@@ -875,18 +626,18 @@ class _SharedDashboardState extends State<SharedDashboard> {
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  // ড্রয়ারের কাস্টম হেডার (প্রোফাইল + সাবস্ক্রিপশন ইনফো)[cite: 5]
+                  // ড্রয়ারের কাস্টম হেডার (প্রোফাইল + সাবস্ক্রিপশন ইনফো)
                   Container(
-                    padding: const EdgeInsets.fromLTRB(16, 45, 16, 16),
-                    decoration: const BoxDecoration(color: Colors.teal),
+                    padding: EdgeInsets.fromLTRB(16, 45, 16, 16),
+                    decoration: BoxDecoration(color: Colors.teal),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            const CircleAvatar(
+                            CircleAvatar(
                               radius: 28,
-                              backgroundColor: Colors.white,
+                              backgroundColor: AppTheme.surfaceOf(context),
                               child: Icon(
                                 Icons.person,
                                 size: 35,
@@ -913,7 +664,9 @@ class _SharedDashboardState extends State<SharedDashboard> {
                                     widget.role.toUpperCase(),
                                     style: TextStyle(
                                       fontSize: 11,
-                                      color: Colors.white.withOpacity(0.8),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.8,
+                                      ),
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -923,14 +676,14 @@ class _SharedDashboardState extends State<SharedDashboard> {
                           ],
                         ),
                         const SizedBox(height: 14),
-                        // সাবস্ক্রিপশন স্ট্যাটাস কার্ড[cite: 5]
+                        // সাবস্ক্রিপশন স্ট্যাটাস কার্ড
                         Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
+                            color: Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
+                              color: Colors.white.withValues(alpha: 0.3),
                             ),
                           ),
                           child: Row(
@@ -960,7 +713,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
                               ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.amber,
-                                  foregroundColor: Colors.black87,
+                                  foregroundColor: AppTheme.inkOf(context),
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 10,
                                     vertical: 0,
@@ -1022,38 +775,27 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   ),
                   ListTile(
                     leading: const Icon(
-                      Icons.account_balance_wallet,
+                      Icons.picture_as_pdf_outlined,
                       color: Colors.teal,
                     ),
                     title: Text(
                       _isEnglish
-                          ? 'Salary & Accounts'
-                          : 'একাডেমি হিসাব(এক্সেল)',
+                          ? 'Financial Report (PDF)'
+                          : 'আর্থিক রিপোর্ট (PDF)',
                     ),
-                    onTap: () async {
-                      Navigator.pop(context); // ড্রয়ার বন্ধ করবে
-                      final fetchedAcademyId = await _getAcademyIdSafely();
-                      if (fetchedAcademyId != null) {
-                        Get.to(
-                          () => AcademyAccountsExcelView(
-                            academyId: fetchedAcademyId,
-                          ),
-                        );
-                      } else {
-                        Get.snackbar(
-                          _isEnglish ? "Error" : "ত্রুটি",
-                          _isEnglish
-                              ? "Academy ID not found!"
-                              : "একাডেমি আইডি পাওয়া যায়নি!",
-                          backgroundColor: Colors.red,
-                          colorText: Colors.white,
-                        );
-                      }
+                    subtitle: Text(
+                      _isEnglish
+                          ? 'Generate & saved reports'
+                          : 'রিপোর্ট তৈরি ও সংরক্ষিত PDF',
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openFinancialReport();
                     },
                   ),
-                  const Divider(),
+                  Divider(),
                   ListTile(
-                    leading: const Icon(Icons.update, color: Colors.teal),
+                    leading: Icon(Icons.update, color: Colors.teal),
                     title: Text(
                       _isEnglish
                           ? 'Update to New Year'
@@ -1064,16 +806,25 @@ class _SharedDashboardState extends State<SharedDashboard> {
                       _checkAndShowYearTransitionDialog(context);
                     },
                   ),
-                  const Divider(),
+                  Divider(),
                   ListTile(
-                    leading: const Icon(Icons.settings, color: Colors.teal),
+                    leading: Icon(
+                      Icons.settings,
+                      color: AppTheme.brandOf(context),
+                    ),
                     title: Text(_isEnglish ? 'Settings' : 'সেটিংস'),
-                    onTap: () => Navigator.pop(context),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Get.to(() => const SettingsView());
+                    },
                   ),
                   ListTile(
                     leading: const Icon(Icons.feedback, color: Colors.teal),
                     title: Text(_isEnglish ? 'Feedback' : 'ফিডব্যাক'),
-                    onTap: () => Navigator.pop(context),
+                    onTap: () {
+                      Navigator.pop(context);
+                      AppActions.showFeedbackDialog();
+                    },
                   ),
                   ListTile(
                     leading: const Icon(Icons.privacy_tip, color: Colors.teal),
@@ -1090,10 +841,13 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   ListTile(
                     leading: const Icon(Icons.share, color: Colors.teal),
                     title: Text(_isEnglish ? 'Share App' : 'অ্যাপ শেয়ার'),
-                    onTap: () => Navigator.pop(context),
+                    onTap: () {
+                      Navigator.pop(context);
+                      AppActions.showShareUnavailable();
+                    },
                   ),
                   const Divider(),
-                  // ডেভেলপারের সাথে যোগাযোগের অপشن (আপডেট করা হয়েছে)[cite: 5]
+                  // ডেভেলপারের সাথে যোগাযোগের অপشن (আপডেট করা হয়েছে)
                   ListTile(
                     leading: const Icon(Icons.mail_outline, color: Colors.teal),
                     title: Text(
@@ -1102,7 +856,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
                           : 'ডেভেলপারের সাথে যোগাযোগ',
                     ),
                     onTap: () {
-                      Navigator.pop(context); // ড্রয়ার বন্ধ করবে[cite: 5]
+                      Navigator.pop(context); // ড্রয়ার বন্ধ করবে
                       Get.to(
                         () => const DeveloperProfileView(),
                       ); // ডেভেলপার প্রোফাইল পেজে নিয়ে যাবে
@@ -1113,22 +867,25 @@ class _SharedDashboardState extends State<SharedDashboard> {
                     leading: const Icon(Icons.logout, color: Colors.red),
                     title: Text(
                       _isEnglish ? 'Logout' : 'লগআউট',
-                      style: const TextStyle(color: Colors.red),
+                      style: TextStyle(color: Colors.red),
                     ),
                     onTap: () async {
-                      Get.offAll(() => const LoginView());
+                      await SessionService.signOut();
+                      if (mounted) {
+                        Get.offAll(() => LoginView());
+                      }
                     },
                   ),
                 ],
               ),
             ),
-            // একেবারে নিচে মাঝখানে শুধু ভার্সন সংখ্যা[cite: 5]
-            const Padding(
+            // একেবারে নিচে মাঝখানে শুধু ভার্সন সংখ্যা
+            Padding(
               padding: EdgeInsets.only(bottom: 16.0),
               child: Text(
-                '1.0.0',
+                '1.0.5',
                 style: TextStyle(
-                  color: Colors.grey,
+                  color: AppTheme.mutedOf(context),
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
                 ),
@@ -1150,21 +907,27 @@ class _SharedDashboardState extends State<SharedDashboard> {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade100,
+                  color: Colors.red.withValues(alpha: isDark ? 0.18 : 0.08),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.red.shade300),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.45)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.wifi_off, color: Colors.red, size: 22),
-                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.wifi_off,
+                      color: isDark ? Color(0xFFFCA5A5) : Colors.red,
+                      size: 22,
+                    ),
+                    SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _isEnglish
                             ? 'You have no internet connection! Please check your internet connection.'
                             : 'আপনার ইন্টারনেট কানেকশন নেই! দয়া করে ইন্টারনেট সংযোগ চেক করুন।',
-                        style: const TextStyle(
-                          color: Colors.red,
+                        style: TextStyle(
+                          color: isDark
+                              ? Color(0xFFFCA5A5)
+                              : AppTheme.tileInkOf(context, Colors.red),
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                         ),
@@ -1177,58 +940,48 @@ class _SharedDashboardState extends State<SharedDashboard> {
               _isEnglish
                   ? 'Academy Financial & General Overview'
                   : 'একাডেমি আর্থিক ও সাধারণ ওভারভিউ',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: ink,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Column(
               children: [
                 Container(
                   width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(14),
+                  margin: EdgeInsets.only(bottom: 12),
+                  padding: EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.surfaceOf(context),
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                    border: Border.all(
-                      color: Colors.teal.withOpacity(0.3),
-                      width: 1.5,
-                    ),
+                    border: Border.all(color: border, width: 1.2),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.account_balance,
-                            color: Colors.teal,
+                            color: AppTheme.brandOf(context),
                             size: 20,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: 8),
                           Text(
                             _isEnglish
                                 ? 'Academy Overall Cash & Balance Calculation'
                                 : 'একাডেমির সার্বিক ক্যাশ ও ব্যালেন্স হিসাব',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
-                              color: Colors.teal,
+                              color: AppTheme.brandOf(context),
                             ),
                           ),
                         ],
                       ),
-                      const Divider(height: 16),
+                      Divider(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1238,20 +991,22 @@ class _SharedDashboardState extends State<SharedDashboard> {
                                 : 'মোট আয় (বেতন উঠছে + অন্যান্য):',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey.shade700,
+                              color: AppTheme.mutedOf(context),
                             ),
                           ),
                           Text(
                             '$ytdCollected + $totalOtherIncome',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: Colors.green,
+                              color: isDark
+                                  ? const Color(0xFF6EE7B7)
+                                  : Colors.green,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -1261,15 +1016,17 @@ class _SharedDashboardState extends State<SharedDashboard> {
                                 : 'মোট ব্যয় (শিক্ষকদের বেতন + অন্যান্য):',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey.shade700,
+                              color: AppTheme.mutedOf(context),
                             ),
                           ),
                           Text(
                             '$paidTeacherSalary + $totalOtherExpense',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: Colors.red,
+                              color: isDark
+                                  ? const Color(0xFFFCA5A5)
+                                  : Colors.red,
                             ),
                           ),
                         ],
@@ -1282,18 +1039,18 @@ class _SharedDashboardState extends State<SharedDashboard> {
                             _isEnglish
                                 ? 'Net Cash Balance:'
                                 : 'নিট ক্যাশ ব্যালেন্স:',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
-                              color: Colors.black87,
+                              color: ink,
                             ),
                           ),
                           Text(
                             netBalance,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: Colors.indigo,
+                              color: AppTheme.brandOf(context),
                             ),
                           ),
                         ],
@@ -1432,17 +1189,17 @@ class _SharedDashboardState extends State<SharedDashboard> {
               _isEnglish
                   ? 'Academy Management & Update'
                   : 'একাডেমি ম্যানেজমেন্ট ও আপডেট',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: ink,
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             GridView.count(
               crossAxisCount: 3,
               shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
+              physics: NeverScrollableScrollPhysics(),
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
               childAspectRatio: 1.1,
@@ -1450,8 +1207,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                 _buildDashboardCard(
                   icon: Icons.people_alt_rounded,
                   title: _isEnglish ? 'Students List' : 'ছাত্র-ছাত্রী তালিকা',
-                  color: Colors.teal.shade50,
-                  iconColor: Colors.teal.shade800,
+                  color: AppTheme.tileOf(context, Colors.teal),
+                  iconColor: AppTheme.tileInkOf(context, Colors.teal),
                   onTap: () async {
                     await Get.to(() => StudentsView(userRole: widget.role));
                     _loadStatsInitial();
@@ -1460,8 +1217,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                 _buildDashboardCard(
                   icon: Icons.payment_rounded,
                   title: _isEnglish ? 'Fee Collection' : 'বেতন ও ফি সংগ্রহ',
-                  color: Colors.indigo.shade50,
-                  iconColor: Colors.indigo.shade800,
+                  color: AppTheme.tileOf(context, Colors.indigo),
+                  iconColor: AppTheme.tileInkOf(context, Colors.indigo),
                   onTap: () async {
                     final fetchedAcademyId = await _getAcademyIdSafely();
 
@@ -1489,8 +1246,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   title: _isEnglish
                       ? 'Teacher Attendance'
                       : 'উপস্থিতি (শিক্ষক)',
-                  color: Colors.amber.shade50,
-                  iconColor: Colors.amber.shade900,
+                  color: AppTheme.tileOf(context, Colors.amber),
+                  iconColor: AppTheme.tileInkOf(context, Colors.amber),
                   onTap: () async {
                     final fetchedAcademyId = await _getAcademyIdSafely();
 
@@ -1517,8 +1274,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                 _buildDashboardCard(
                   icon: Icons.assignment_turned_in_rounded,
                   title: _isEnglish ? 'Model Test' : 'মডেল টেস্ট',
-                  color: Colors.brown.shade50,
-                  iconColor: Colors.brown.shade800,
+                  color: AppTheme.tileOf(context, Colors.brown),
+                  iconColor: AppTheme.tileInkOf(context, Colors.brown),
                   onTap: () async {
                     final fetchedAcademyId = await _getAcademyIdSafely();
                     if (fetchedAcademyId != null) {
@@ -1546,8 +1303,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   _buildDashboardCard(
                     icon: Icons.campaign_rounded,
                     title: _isEnglish ? 'Notice Board' : 'নোটিশ বোর্ড',
-                    color: Colors.pink.shade50,
-                    iconColor: Colors.pink.shade800,
+                    color: AppTheme.tileOf(context, Colors.pink),
+                    iconColor: AppTheme.tileInkOf(context, Colors.pink),
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
                       if (fetchedAcademyId != null) {
@@ -1575,8 +1332,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   title: _isEnglish
                       ? 'Student Attendance'
                       : 'ছাত্র-ছাত্রীদের হাজিরা',
-                  color: Colors.green.shade50,
-                  iconColor: Colors.green.shade800,
+                  color: AppTheme.tileOf(context, Colors.green),
+                  iconColor: AppTheme.tileInkOf(context, Colors.green),
                   onTap: () async {
                     final fetchedAcademyId = await _getAcademyIdSafely();
 
@@ -1604,8 +1361,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                 _buildDashboardCard(
                   icon: Icons.note_alt_rounded,
                   title: _isEnglish ? 'Exam Result' : 'পরীক্ষার রেজাল্ট',
-                  color: Colors.purple.shade50,
-                  iconColor: Colors.purple.shade800,
+                  color: AppTheme.tileOf(context, Colors.purple),
+                  iconColor: AppTheme.tileInkOf(context, Colors.purple),
                   onTap: () async {
                     final fetchedAcademyId = await _getAcademyIdSafely();
                     if (fetchedAcademyId != null) {
@@ -1632,8 +1389,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   _buildDashboardCard(
                     icon: Icons.person_add_alt_1_rounded,
                     title: _isEnglish ? 'Add Teacher' : 'নতুন শিক্ষক যোগ',
-                    color: Colors.cyan.shade50,
-                    iconColor: Colors.cyan.shade800,
+                    color: AppTheme.tileOf(context, Colors.cyan),
+                    iconColor: AppTheme.tileInkOf(context, Colors.cyan),
                     onTap: () async {
                       await Get.to(
                         () => TeachersView(adminUserName: widget.userName),
@@ -1643,12 +1400,39 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   ),
                 if (isSuperAdmin)
                   _buildDashboardCard(
+                    icon: Icons.manage_accounts_rounded,
+                    title: _isEnglish ? 'Staff & Roles' : 'কর্মচারী ও রোল',
+                    color: AppTheme.tileOf(context, Colors.indigo),
+                    iconColor: AppTheme.tileInkOf(context, Colors.indigo),
+                    onTap: () async {
+                      final fetchedAcademyId = await _getAcademyIdSafely();
+                      if (fetchedAcademyId != null) {
+                        await Get.to(
+                          () => SuperAdminManagementView(
+                            academyId: fetchedAcademyId,
+                          ),
+                        );
+                        _loadStatsInitial();
+                      } else {
+                        Get.snackbar(
+                          _isEnglish ? "Error" : "ত্রুটি",
+                          _isEnglish
+                              ? "Academy ID not found!"
+                              : "একাডেমি আইডি পাওয়া যায়নি!",
+                          backgroundColor: Colors.red,
+                          colorText: Colors.white,
+                        );
+                      }
+                    },
+                  ),
+                if (isSuperAdmin)
+                  _buildDashboardCard(
                     icon: Icons.account_balance_wallet_rounded,
                     title: _isEnglish
                         ? 'Income / Expense'
                         : 'অন্যান্য আয় ব্যয়',
-                    color: Colors.blueGrey.shade50,
-                    iconColor: Colors.blueGrey.shade800,
+                    color: AppTheme.tileOf(context, Colors.blueGrey),
+                    iconColor: AppTheme.tileInkOf(context, Colors.blueGrey),
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
 
@@ -1675,8 +1459,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   _buildDashboardCard(
                     icon: Icons.badge_rounded,
                     title: _isEnglish ? 'ID Card' : 'আইডি কার্ড',
-                    color: Colors.deepOrange.shade50,
-                    iconColor: Colors.deepOrange.shade800,
+                    color: AppTheme.tileOf(context, Colors.deepOrange),
+                    iconColor: AppTheme.tileInkOf(context, Colors.deepOrange),
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
                       if (fetchedAcademyId != null) {
@@ -1700,8 +1484,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   _buildDashboardCard(
                     icon: Icons.schedule_rounded,
                     title: _isEnglish ? 'Class Routine' : 'ক্লাশ রুটিন',
-                    color: Colors.blue.shade50,
-                    iconColor: Colors.blue.shade800,
+                    color: AppTheme.tileOf(context, Colors.blue),
+                    iconColor: AppTheme.tileInkOf(context, Colors.blue),
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
                       if (fetchedAcademyId != null) {
@@ -1725,8 +1509,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   _buildDashboardCard(
                     icon: Icons.payments_rounded,
                     title: _isEnglish ? 'Academy Salary' : 'প্রতিষ্ঠানের বেতন',
-                    color: Colors.orange.shade50,
-                    iconColor: Colors.orange.shade800,
+                    color: AppTheme.tileOf(context, Colors.orange),
+                    iconColor: AppTheme.tileInkOf(context, Colors.orange),
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
 
@@ -1754,8 +1538,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   _buildDashboardCard(
                     icon: Icons.card_membership_rounded,
                     title: _isEnglish ? 'Admit Card' : 'এডমিট কার্ড',
-                    color: Colors.amber.shade50,
-                    iconColor: Colors.amber.shade900,
+                    color: AppTheme.tileOf(context, Colors.amber),
+                    iconColor: AppTheme.tileInkOf(context, Colors.amber),
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
                       if (fetchedAcademyId != null) {
@@ -1779,8 +1563,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   _buildDashboardCard(
                     icon: Icons.event_note_rounded,
                     title: _isEnglish ? 'Exam Routine' : 'পরীক্ষার রুটিন',
-                    color: Colors.teal.shade50,
-                    iconColor: Colors.teal.shade800,
+                    color: AppTheme.tileOf(context, Colors.teal),
+                    iconColor: AppTheme.tileInkOf(context, Colors.teal),
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
                       if (fetchedAcademyId != null) {
@@ -1804,8 +1588,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   _buildDashboardCard(
                     icon: Icons.quiz_rounded,
                     title: _isEnglish ? 'Question Create' : 'প্রশ্ন তৈরি',
-                    color: Colors.deepPurple.shade50,
-                    iconColor: Colors.deepPurple.shade800,
+                    color: AppTheme.tileOf(context, Colors.deepPurple),
+                    iconColor: AppTheme.tileInkOf(context, Colors.deepPurple),
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
                       final currentUserId = supabase.auth.currentUser?.id ?? '';
@@ -1836,8 +1620,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   _buildDashboardCard(
                     icon: Icons.merge_outlined,
                     title: _isEnglish ? 'Syllabus Create' : 'সিলেবাস তৈরি',
-                    color: Colors.deepPurple.shade50,
-                    iconColor: Colors.teal.shade800,
+                    color: AppTheme.tileOf(context, Colors.deepPurple),
+                    iconColor: AppTheme.tileInkOf(context, Colors.teal),
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
 
@@ -1867,8 +1651,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                     title: _isEnglish
                         ? 'Seat Number Create'
                         : 'সিট নাম্বার তৈরি',
-                    color: Colors.deepPurple.shade50,
-                    iconColor: Colors.teal.shade800,
+                    color: AppTheme.tileOf(context, Colors.deepPurple),
+                    iconColor: AppTheme.tileInkOf(context, Colors.teal),
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
 
@@ -1896,8 +1680,8 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   _buildDashboardCard(
                     icon: Icons.assistant_rounded,
                     title: _isEnglish ? 'AI Assistant' : 'AI Assistant',
-                    color: Colors.lightBlue.shade50,
-                    iconColor: Colors.lightBlue.shade800,
+                    color: AppTheme.tileOf(context, Colors.lightBlue),
+                    iconColor: AppTheme.tileInkOf(context, Colors.lightBlue),
                     onTap: () async {
                       final fetchedAcademyId = await _getAcademyIdSafely();
                       if (fetchedAcademyId != null) {
@@ -1921,7 +1705,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
                   ),
               ],
             ),
-            const SizedBox(height: 30),
+            SizedBox(height: 30),
           ],
         ),
       ),
@@ -1934,19 +1718,13 @@ class _SharedDashboardState extends State<SharedDashboard> {
     IconData icon,
     Color color,
   ) {
+    final accentInk = AppTheme.tileInkOf(context, color);
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surfaceOf(context),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(color: color.withOpacity(0.2), width: 1.5),
+        border: Border.all(color: AppTheme.borderOf(context), width: 1.2),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1955,24 +1733,29 @@ class _SharedDashboardState extends State<SharedDashboard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.mutedOf(context),
+                  ),
                 ),
               ),
-              Icon(icon, color: color, size: 22),
+              Icon(icon, color: accentInk, size: 22),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 8),
           Text(
             value,
-            style: TextStyle(
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
               fontSize: 13,
               fontWeight: FontWeight.bold,
-              color: color,
+              color: accentInk,
+              fontFeatures: AppTheme.numericFeatures,
+              height: 1.25,
             ),
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
@@ -1998,7 +1781,7 @@ class _SharedDashboardState extends State<SharedDashboard> {
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: iconColor.withOpacity(0.15)),
+            border: Border.all(color: iconColor.withValues(alpha: 0.15)),
           ),
           child: Padding(
             padding: const EdgeInsets.all(8.0),
@@ -2010,10 +1793,10 @@ class _SharedDashboardState extends State<SharedDashboard> {
                 const SizedBox(height: 6),
                 Text(
                   title,
-                  style: TextStyle(
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: iconColor.withOpacity(0.9),
+                    fontWeight: FontWeight.w700,
+                    color: iconColor,
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 2,
@@ -2122,12 +1905,23 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
         title: const Text('বকেয়া শিক্ষার্থীদের তালিকা'),
         backgroundColor: Colors.redAccent,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            tooltip: 'বকেয়া শিক্ষার্থী PDF রিপোর্ট',
+            onPressed: () {
+              Get.to(
+                () => DueStudentsPdfReportView(academyId: widget.academyId),
+              );
+            },
+          ),
+        ],
       ),
       body: FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
         future: _fetchGroupedDueStudents(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
+            return Center(
               child: CircularProgressIndicator(color: Colors.redAccent),
             );
           }
@@ -2137,13 +1931,13 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
 
           final groupedData = snapshot.data ?? {};
           if (groupedData.isEmpty || (groupedData['সব ক্লাস'] ?? []).isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
-                'চলتی মাসে কোনো বকেয়া নেই! সবাই ফি পরিশোধ করেছে।',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green,
+                'চলতি মাসে কোনো বকেয়া নেই! সবাই ফি পরিশোধ করেছে।',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: AppTheme.isDark(context)
+                      ? Color(0xFF6EE7B7)
+                      : AppTheme.tileInkOf(context, Colors.green),
                 ),
               ),
             );
@@ -2169,7 +1963,7 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: EdgeInsets.symmetric(horizontal: 12),
                   itemCount: classes.length,
                   itemBuilder: (context, index) {
                     String className = classes[index];
@@ -2177,14 +1971,16 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
                     int count = groupedData[className]?.length ?? 0;
 
                     return Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
+                      padding: EdgeInsets.only(right: 8.0),
                       child: ChoiceChip(
                         label: Text('$className ($count)'),
                         selected: isSelected,
                         selectedColor: Colors.redAccent,
-                        backgroundColor: Colors.grey.shade200,
+                        backgroundColor: AppTheme.altSurfaceOf(context),
                         labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : Colors.black87,
+                          color: isSelected
+                              ? Colors.white
+                              : AppTheme.inkOf(context),
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                         ),
@@ -2201,10 +1997,12 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
               const Divider(height: 1, thickness: 1),
               Expanded(
                 child: currentStudents.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text(
                           'এই ক্লাসে কোনো বকেয়া শিক্ষার্থী নেই।',
-                          style: TextStyle(color: Colors.grey, fontSize: 14),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.copyWith(fontSize: 14),
                         ),
                       )
                     : ListView.builder(
@@ -2230,16 +2028,19 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
 
                           return Card(
                             elevation: 2,
-                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            margin: EdgeInsets.symmetric(vertical: 6),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Padding(
-                              padding: const EdgeInsets.all(10.0),
+                              padding: EdgeInsets.all(10.0),
                               child: Row(
                                 children: [
                                   CircleAvatar(
-                                    backgroundColor: Colors.redAccent.shade100,
+                                    backgroundColor: AppTheme.tileOf(
+                                      context,
+                                      Colors.redAccent,
+                                    ),
                                     backgroundImage:
                                         (student['image_url'] != null &&
                                             student['image_url']
@@ -2266,21 +2067,28 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
                                       children: [
                                         Text(
                                           studentName,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15,
-                                            color: Colors.black87,
-                                          ),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleSmall
+                                              ?.copyWith(
+                                                fontSize: 15,
+                                                color: AppTheme.inkOf(context),
+                                              ),
                                         ),
-                                        const SizedBox(height: 2),
+                                        SizedBox(height: 2),
                                         Text(
                                           'বাবার নাম: $fatherName',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey.shade700,
-                                          ),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                fontSize: 12,
+                                                color: AppTheme.mutedOf(
+                                                  context,
+                                                ),
+                                              ),
                                         ),
-                                        const SizedBox(height: 4),
+                                        SizedBox(height: 4),
                                         Wrap(
                                           spacing: 8,
                                           runSpacing: 4,
@@ -2289,7 +2097,10 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
                                               'ক্লাস: $className',
                                               style: TextStyle(
                                                 fontSize: 11,
-                                                color: Colors.blue.shade800,
+                                                color: AppTheme.tileInkOf(
+                                                  context,
+                                                  Colors.blue,
+                                                ),
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
@@ -2297,18 +2108,22 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
                                               'রোল: $roll',
                                               style: TextStyle(
                                                 fontSize: 11,
-                                                color: Colors.grey.shade800,
+                                                color: AppTheme.mutedOf(
+                                                  context,
+                                                ),
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
                                             Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 5,
-                                                    vertical: 1,
-                                                  ),
+                                              padding: EdgeInsets.symmetric(
+                                                horizontal: 5,
+                                                vertical: 1,
+                                              ),
                                               decoration: BoxDecoration(
-                                                color: Colors.orange.shade100,
+                                                color: AppTheme.tileOf(
+                                                  context,
+                                                  Colors.orange,
+                                                ),
                                                 borderRadius:
                                                     BorderRadius.circular(4),
                                               ),
@@ -2316,7 +2131,10 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
                                                 'মাস: $dueMonth',
                                                 style: TextStyle(
                                                   fontSize: 10,
-                                                  color: Colors.orange.shade900,
+                                                  color: AppTheme.tileInkOf(
+                                                    context,
+                                                    Colors.orange,
+                                                  ),
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
@@ -2328,11 +2146,16 @@ class _TotalDueDetailsViewState extends State<TotalDueDetailsView> {
                                   ),
                                   Text(
                                     '৳ ${dueAmount.toStringAsFixed(0)}',
-                                    style: const TextStyle(
-                                      color: Colors.redAccent,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          color: AppTheme.isDark(context)
+                                              ? Color(0xFFFCA5A5)
+                                              : Colors.red.shade700,
+                                          fontFeatures:
+                                              AppTheme.numericFeatures,
+                                        ),
                                   ),
                                 ],
                               ),

@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'dart:typed_data' as pw;
 
 import 'package:flutter/material.dart';
@@ -285,7 +286,7 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               content: uploading
-                  ? const SizedBox(
+                  ? SizedBox(
                       height: 100,
                       child: Center(
                         child: CircularProgressIndicator(color: Colors.amber),
@@ -297,7 +298,7 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                         children: [
                           ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: Colors.grey.shade200,
+                              backgroundColor: AppTheme.borderOf(context),
                               backgroundImage:
                                   (logoUrl != null && logoUrl.isNotEmpty)
                                   ? NetworkImage(logoUrl)
@@ -312,16 +313,16 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                                   ? 'সংরক্ষিত আছে (পরিবর্তন করতে চাপুন)'
                                   : 'কোনো লগো নেই',
                             ),
-                            trailing: const Icon(
+                            trailing: Icon(
                               Icons.upload_file,
                               color: Colors.amber,
                             ),
                             onTap: () => uploadImage('logo_url'),
                           ),
-                          const Divider(),
+                          Divider(),
                           ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: Colors.grey.shade200,
+                              backgroundColor: AppTheme.borderOf(context),
                               backgroundImage:
                                   (principalSigUrl != null &&
                                       principalSigUrl.isNotEmpty)
@@ -340,16 +341,16 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                                   ? 'সংরক্ষিত আছে (পরিবর্তন করতে চাপুন)'
                                   : 'কোনো স্বাক্ষর নেই',
                             ),
-                            trailing: const Icon(
+                            trailing: Icon(
                               Icons.upload_file,
                               color: Colors.amber,
                             ),
                             onTap: () => uploadImage('principal_signature_url'),
                           ),
-                          const Divider(),
+                          Divider(),
                           ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: Colors.grey.shade200,
+                              backgroundColor: AppTheme.borderOf(context),
                               backgroundImage:
                                   (accountsSigUrl != null &&
                                       accountsSigUrl.isNotEmpty)
@@ -358,9 +359,9 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                               child:
                                   (accountsSigUrl == null ||
                                       accountsSigUrl.isEmpty)
-                                  ? const Icon(
+                                  ? Icon(
                                       Icons.edit_note,
-                                      color: Colors.grey,
+                                      color: AppTheme.mutedOf(context),
                                     )
                                   : null,
                             ),
@@ -462,7 +463,7 @@ class _AdmitCardViewState extends State<AdmitCardView> {
       builder: (context) {
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(
+          insetPadding: EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 20,
           ),
@@ -471,11 +472,11 @@ class _AdmitCardViewState extends State<AdmitCardView> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Center(child: _buildAdmitCardWidget(student, routine)),
-                const SizedBox(height: 20),
+                SizedBox(height: 20),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black87,
+                    backgroundColor: AppTheme.surfaceOf(context),
+                    foregroundColor: AppTheme.inkOf(context),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24,
                       vertical: 12,
@@ -551,7 +552,8 @@ class _AdmitCardViewState extends State<AdmitCardView> {
         ),
       );
 
-      if (mounted) Navigator.pop(context);
+      if (!mounted) return;
+      Navigator.pop(context);
 
       String studentName = student['name'] ?? student['full_name'] ?? 'student';
       String safeFileName = 'AdmitCard_$studentName'
@@ -564,7 +566,7 @@ class _AdmitCardViewState extends State<AdmitCardView> {
           builder: (context) => Scaffold(
             appBar: AppBar(
               title: Text('$studentName - এডমিট কার্ড'),
-              backgroundColor: Colors.amber.shade800,
+              backgroundColor: AppTheme.tileInkOf(context, Colors.amber),
               foregroundColor: Colors.white,
             ),
             body: PdfPreview(
@@ -628,7 +630,7 @@ class _AdmitCardViewState extends State<AdmitCardView> {
       builder: (context) => PopScope(
         canPop: false,
         child: Dialog(
-          backgroundColor: Colors.white,
+          backgroundColor: AppTheme.surfaceOf(context),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -644,7 +646,7 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                   builder: (context, value, child) {
                     return Text(
                       value,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                       ),
@@ -652,7 +654,7 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                     );
                   },
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: 12),
                 ValueListenableBuilder<double>(
                   valueListenable: progressNotifier,
                   builder: (context, value, child) {
@@ -660,16 +662,16 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                       children: [
                         LinearProgressIndicator(
                           value: value,
-                          backgroundColor: Colors.grey.shade200,
-                          color: Colors.amber.shade800,
+                          backgroundColor: AppTheme.borderOf(context),
+                          color: AppTheme.tileInkOf(context, Colors.amber),
                           minHeight: 8,
                         ),
-                        const SizedBox(height: 6),
+                        SizedBox(height: 6),
                         Text(
                           "${(value * 100).toStringAsFixed(0)}%",
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey,
+                            color: AppTheme.mutedOf(context),
                           ),
                         ),
                       ],
@@ -790,7 +792,7 @@ class _AdmitCardViewState extends State<AdmitCardView> {
           builder: (context) => Scaffold(
             appBar: AppBar(
               title: Text('$selectedClass - সব এডমিট কার্ড'),
-              backgroundColor: Colors.amber.shade800,
+              backgroundColor: AppTheme.tileInkOf(context, Colors.amber),
               foregroundColor: Colors.white,
             ),
             body: PdfPreview(
@@ -836,9 +838,9 @@ class _AdmitCardViewState extends State<AdmitCardView> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
+      backgroundColor: Color(0xFFF4F6F9),
       appBar: AppBar(
-        backgroundColor: Colors.amber.shade800,
+        backgroundColor: AppTheme.tileInkOf(context, Colors.amber),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -877,15 +879,15 @@ class _AdmitCardViewState extends State<AdmitCardView> {
               ),
             ),
           ),
-          const SizedBox(width: 4),
+          SizedBox(width: 4),
           if (examList.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              padding: EdgeInsets.symmetric(horizontal: 8.0),
               child: Center(
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: selectedExam,
-                    dropdownColor: Colors.amber.shade900,
+                    dropdownColor: AppTheme.tileInkOf(context, Colors.amber),
                     icon: const Icon(
                       Icons.arrow_drop_down,
                       color: Colors.white,
@@ -900,7 +902,7 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                         value: exam,
                         child: Text(
                           exam,
-                          style: const TextStyle(color: Colors.white),
+                          style: TextStyle(color: Colors.white),
                         ),
                       );
                     }).toList(),
@@ -917,12 +919,12 @@ class _AdmitCardViewState extends State<AdmitCardView> {
       ),
       body: isLoading
           ? Center(
-              child: CircularProgressIndicator(color: Colors.amber.shade800),
+              child: CircularProgressIndicator(color: AppTheme.tileInkOf(context, Colors.amber)),
             )
           : Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: EdgeInsets.all(12),
                   color: Colors.white,
                   child: Column(
                     children: [
@@ -933,7 +935,7 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                               'শিক্ষার্থীর নাম, রোল বা মোবাইল নম্বর দিয়ে খুঁজুন...',
                           prefixIcon: Icon(
                             Icons.search,
-                            color: Colors.amber.shade800,
+                            color: AppTheme.tileInkOf(context, Colors.amber),
                           ),
                           suffixIcon: searchQuery.isNotEmpty
                               ? IconButton(
@@ -965,16 +967,16 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                             int count = classCounts[className] ?? 0;
 
                             return Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
+                              padding: EdgeInsets.only(right: 8.0),
                               child: ChoiceChip(
                                 label: Text('$className ($count)'),
                                 selected: isSelected,
-                                selectedColor: Colors.amber.shade800,
-                                backgroundColor: const Color(0xFFF4F6F9),
+                                selectedColor: AppTheme.tileInkOf(context, Colors.amber),
+                                backgroundColor: Color(0xFFF4F6F9),
                                 labelStyle: TextStyle(
                                   color: isSelected
                                       ? Colors.white
-                                      : Colors.black87,
+                                      : AppTheme.inkOf(context),
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
                                 ),
@@ -1003,12 +1005,12 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                                 size: 50,
                                 color: Colors.grey.shade400,
                               ),
-                              const SizedBox(height: 10),
-                              const Text(
+                              SizedBox(height: 10),
+                              Text(
                                 'কোনো শিক্ষার্থী পাওয়া যায়নি!',
                                 style: TextStyle(
                                   fontSize: 16,
-                                  color: Colors.grey,
+                                  color: AppTheme.mutedOf(context),
                                 ),
                               ),
                             ],
@@ -1035,14 +1037,14 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              margin: const EdgeInsets.only(bottom: 10),
+                              margin: EdgeInsets.only(bottom: 10),
                               child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
+                                contentPadding: EdgeInsets.symmetric(
                                   horizontal: 16,
                                   vertical: 6,
                                 ),
                                 leading: CircleAvatar(
-                                  backgroundColor: Colors.amber.shade800,
+                                  backgroundColor: AppTheme.tileInkOf(context, Colors.amber),
                                   foregroundColor: Colors.white,
                                   backgroundImage:
                                       (studentImg != null &&
@@ -1060,15 +1062,15 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                                 ),
                                 title: Text(
                                   studentName,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 15,
                                   ),
                                 ),
                                 subtitle: Text(
                                   'শ্রেণি: $className | রোল: ${roll.isNotEmpty ? roll : 'নেই'}',
-                                  style: const TextStyle(
-                                    color: Colors.black54,
+                                  style: TextStyle(
+                                    color: AppTheme.mutedOf(context),
                                     fontSize: 13,
                                   ),
                                 ),
@@ -1078,7 +1080,7 @@ class _AdmitCardViewState extends State<AdmitCardView> {
                                     IconButton(
                                       icon: Icon(
                                         Icons.visibility_rounded,
-                                        color: Colors.amber.shade900,
+                                        color: AppTheme.tileInkOf(context, Colors.amber),
                                       ),
                                       tooltip: 'এডমিট কার্ডের প্রিভিউ দেখুন',
                                       onPressed: () => _showAdmitCardDialog(
@@ -1148,7 +1150,7 @@ class _DynamicAdmitCardContent extends StatelessWidget {
     String accountsName = academyInfo?['accounts_name'] ?? 'পরীক্ষা নিয়ন্ত্রক';
     String? imageUrl = student['image_url'];
 
-    const String fallbackAssetPath = 'assets/images/institute logo.png';
+    String fallbackAssetPath = 'assets/images/institute logo.png';
 
     int mid = (prefetchedRoutine.length / 2).ceil();
     List<Map<String, String>> subjectsPart1 = prefetchedRoutine
@@ -1160,10 +1162,10 @@ class _DynamicAdmitCardContent extends StatelessWidget {
 
     return Container(
       width: 500,
-      padding: const EdgeInsets.all(8),
+      padding: EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.red.shade800, width: 1.2),
+        color: AppTheme.surfaceOf(context),
+        border: Border.all(color: AppTheme.tileInkOf(context, Colors.red), width: 1.2),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1176,16 +1178,16 @@ class _DynamicAdmitCardContent extends StatelessWidget {
                 height: 35,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.blue.shade900, width: 1),
+                  border: Border.all(color: AppTheme.tileInkOf(context, Colors.blue), width: 1),
                   image: DecorationImage(
                     image: (logoUrl != null && logoUrl.isNotEmpty)
                         ? NetworkImage(logoUrl) as ImageProvider
-                        : const AssetImage(fallbackAssetPath),
+                        : AssetImage(fallbackAssetPath),
                     fit: BoxFit.cover,
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -1195,55 +1197,55 @@ class _DynamicAdmitCardContent extends StatelessWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
-                        color: Colors.blue.shade900,
+                        color: AppTheme.tileInkOf(context, Colors.blue),
                       ),
                       textAlign: TextAlign.center,
                     ),
                     Text(
                       schoolSubtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w500,
-                        color: Colors.black87,
+                        color: AppTheme.inkOf(context),
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 1),
+                    SizedBox(height: 1),
                     Text(
                       examName,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 10.5,
-                        color: Colors.red.shade900,
+                        color: AppTheme.tileInkOf(context, Colors.red),
                       ),
                       textAlign: TextAlign.center,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               Container(
                 width: 35,
                 height: 35,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.blue.shade900, width: 1),
+                  border: Border.all(color: AppTheme.tileInkOf(context, Colors.blue), width: 1),
                   image: DecorationImage(
                     image: (logoUrl != null && logoUrl.isNotEmpty)
                         ? NetworkImage(logoUrl) as ImageProvider
-                        : const AssetImage(fallbackAssetPath),
+                        : AssetImage(fallbackAssetPath),
                     fit: BoxFit.cover,
                   ),
                 ),
               ),
             ],
           ),
-          const Divider(thickness: 1, height: 6),
+          Divider(thickness: 1, height: 6),
           Center(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 1),
+              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 1),
               decoration: BoxDecoration(
-                border: Border.all(width: 1, color: Colors.black87),
+                border: Border.all(width: 1, color: AppTheme.inkOf(context)),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text(
@@ -1261,16 +1263,16 @@ class _DynamicAdmitCardContent extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildInfoRow('নাম', studentName),
-                    _buildInfoRow('পিতার নাম', fatherName),
-                    _buildInfoRow('রোল নং', roll),
-                    _buildInfoRow('শ্রেণি', className),
-                    _buildInfoRow('বিভাগ', group),
-                    _buildInfoRow('সেশন', session),
+                    _buildInfoRow(context, 'নাম', studentName),
+                    _buildInfoRow(context, 'পিতার নাম', fatherName),
+                    _buildInfoRow(context, 'রোল নং', roll),
+                    _buildInfoRow(context, 'শ্রেণি', className),
+                    _buildInfoRow(context, 'বিভাগ', group),
+                    _buildInfoRow(context, 'সেশন', session),
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               Container(
                 width: 55,
                 height: 68,
@@ -1282,18 +1284,18 @@ class _DynamicAdmitCardContent extends StatelessWidget {
                           fit: BoxFit.cover,
                         )
                       : null,
-                  color: Colors.grey.shade100,
+                  color: AppTheme.altSurfaceOf(context),
                 ),
                 child: (imageUrl == null || imageUrl.isEmpty)
-                    ? const Center(
+                    ? Center(
                         child: Text('ছবি নেই', style: TextStyle(fontSize: 7.5)),
                       )
                     : null,
               ),
             ],
           ),
-          const SizedBox(height: 5),
-          const Row(
+          SizedBox(height: 5),
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
@@ -1301,7 +1303,7 @@ class _DynamicAdmitCardContent extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 9,
-                  color: Colors.black,
+                  color: AppTheme.inkOf(context),
                 ),
               ),
               Text(
@@ -1309,7 +1311,7 @@ class _DynamicAdmitCardContent extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 8.5,
-                  color: Colors.black,
+                  color: AppTheme.inkOf(context),
                 ),
               ),
             ],
@@ -1336,7 +1338,7 @@ class _DynamicAdmitCardContent extends StatelessWidget {
                       Expanded(
                         child: Table(
                           border: TableBorder.all(
-                            color: Colors.black54,
+                            color: AppTheme.mutedOf(context),
                             width: 0.5,
                           ),
                           columnWidths: const {
@@ -1367,12 +1369,12 @@ class _DynamicAdmitCardContent extends StatelessWidget {
                         ),
                       ),
                     if (subjectsPart1.isNotEmpty && subjectsPart2.isNotEmpty)
-                      const SizedBox(width: 4),
+                      SizedBox(width: 4),
                     if (subjectsPart2.isNotEmpty)
                       Expanded(
                         child: Table(
                           border: TableBorder.all(
-                            color: Colors.black54,
+                            color: AppTheme.mutedOf(context),
                             width: 0.5,
                           ),
                           columnWidths: const {
@@ -1453,7 +1455,7 @@ class _DynamicAdmitCardContent extends StatelessWidget {
                     offset: const Offset(0, -2),
                     child: Text(
                       accountsName,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 8.5,
                       ),
@@ -1463,16 +1465,16 @@ class _DynamicAdmitCardContent extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 3),
+          SizedBox(height: 3),
           Container(
-            padding: const EdgeInsets.all(2),
+            padding: EdgeInsets.all(2),
             decoration: BoxDecoration(border: Border.all(width: 0.7)),
-            child: const Text(
+            child: Text(
               'সতর্কবার্তা: পরীক্ষার হলে অবশ্যই এই এডমিট কার্ড সাথে রাখতে হবে। কার্ড ছাড়া পরীক্ষায় অংশগ্রহণ করা যাবে না।',
               style: TextStyle(
                 fontSize: 6.5,
                 fontWeight: FontWeight.bold,
-                color: Colors.black,
+                color: AppTheme.inkOf(context),
               ),
               textAlign: TextAlign.center,
             ),
@@ -1482,34 +1484,34 @@ class _DynamicAdmitCardContent extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(BuildContext context, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 0.4),
+      padding: EdgeInsets.symmetric(vertical: 0.4),
       child: Row(
         children: [
           SizedBox(
             width: 60,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 8.5,
-                color: Colors.black,
+                color: AppTheme.inkOf(context),
               ),
             ),
           ),
-          const Text(
+          Text(
             ': ',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: Colors.black,
+              color: AppTheme.inkOf(context),
               fontSize: 8.5,
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 8.5, color: Colors.black),
+              style: TextStyle(fontSize: 8.5, color: AppTheme.inkOf(context)),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1538,7 +1540,7 @@ class _TableCellWidget extends StatelessWidget {
         style: TextStyle(
           fontWeight: isHeader ? FontWeight.bold : FontWeight.w500,
           fontSize: 6.5,
-          color: Colors.black,
+          color: AppTheme.inkOf(context),
         ),
         textAlign: TextAlign.center,
       ),

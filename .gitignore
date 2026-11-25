@@ -1,6 +1,8 @@
 # Miscellaneous
 *.class
 *.log
+**/.kotlin/errors/
+**/.kotlin/
 *.pyc
 *.swp
 .DS_Store

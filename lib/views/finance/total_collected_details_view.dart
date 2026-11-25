@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -257,30 +258,30 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                     itemBuilder: (context, index) {
                       final item = feeDetails[index];
                       return Container(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.all(12),
+                        margin: EdgeInsets.symmetric(vertical: 4),
+                        padding: EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.green.shade50,
+                          color: AppTheme.tileOf(context, Colors.green),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.green.shade200),
+                          border: Border.all(color: AppTheme.tileOf(context, Colors.green)),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.calendar_month,
                                   color: Colors.green,
                                   size: 18,
                                 ),
-                                const SizedBox(width: 8),
+                                SizedBox(width: 8),
                                 Text(
                                   'মাস: ${item['month']}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
-                                    color: Colors.black87,
+                                    color: AppTheme.inkOf(context),
                                   ),
                                 ),
                               ],
@@ -352,14 +353,14 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
             children: [
               // ফিল্টার ও সার্চ প্যানেল
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppTheme.surfaceOf(context),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.withOpacity(0.05),
+                      color: Colors.grey.withValues(alpha: 0.05),
                       blurRadius: 10,
-                      offset: const Offset(0, 4),
+                      offset: Offset(0, 4),
                     ),
                   ],
                 ),
@@ -370,11 +371,11 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                         Expanded(
                           child: Container(
                             height: 44,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            padding: EdgeInsets.symmetric(horizontal: 10),
                             decoration: BoxDecoration(
-                              color: Colors.teal.shade50,
+                              color: AppTheme.tileOf(context, Colors.teal),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.teal.shade200),
+                              border: Border.all(color: AppTheme.tileOf(context, Colors.teal)),
                             ),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
@@ -386,7 +387,7 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
                                 ),
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.arrow_drop_down,
                                   color: Colors.teal,
                                 ),
@@ -395,8 +396,8 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                                     value: cls,
                                     child: Text(
                                       cls,
-                                      style: const TextStyle(
-                                        color: Colors.black87,
+                                      style: TextStyle(
+                                        color: AppTheme.inkOf(context),
                                         fontSize: 13,
                                       ),
                                     ),
@@ -413,15 +414,15 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: 8),
                         Expanded(
                           child: Container(
                             height: 44,
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            padding: EdgeInsets.symmetric(horizontal: 10),
                             decoration: BoxDecoration(
-                              color: Colors.green.shade50,
+                              color: AppTheme.tileOf(context, Colors.green),
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.green.shade200),
+                              border: Border.all(color: AppTheme.tileOf(context, Colors.green)),
                             ),
                             child: DropdownButtonHideUnderline(
                               child: DropdownButton<String>(
@@ -433,7 +434,7 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
                                 ),
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.arrow_drop_down,
                                   color: Colors.green,
                                 ),
@@ -442,8 +443,8 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                                     value: month,
                                     child: Text(
                                       month,
-                                      style: const TextStyle(
-                                        color: Colors.black87,
+                                      style: TextStyle(
+                                        color: AppTheme.inkOf(context),
                                         fontSize: 13,
                                       ),
                                     ),
@@ -462,7 +463,7 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
@@ -472,21 +473,21 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                               controller: _searchController,
                               decoration: InputDecoration(
                                 hintText: 'নাম বা রোল লিখে খুঁজুন...',
-                                hintStyle: const TextStyle(
+                                hintStyle: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.grey,
+                                  color: AppTheme.mutedOf(context),
                                 ),
-                                prefixIcon: const Icon(
+                                prefixIcon: Icon(
                                   Icons.search,
                                   color: Colors.green,
                                   size: 20,
                                 ),
                                 suffixIcon: _searchController.text.isNotEmpty
                                     ? IconButton(
-                                        icon: const Icon(
+                                        icon: Icon(
                                           Icons.clear,
                                           size: 16,
-                                          color: Colors.grey,
+                                          color: AppTheme.mutedOf(context),
                                         ),
                                         onPressed: () {
                                           setState(() {
@@ -497,7 +498,7 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                                       )
                                     : null,
                                 filled: true,
-                                fillColor: Colors.grey.shade100,
+                                fillColor: AppTheme.altSurfaceOf(context),
                                 contentPadding: const EdgeInsets.symmetric(
                                   vertical: 0,
                                   horizontal: 10,
@@ -548,20 +549,20 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
               // নির্বাচিত মাসের মোট কালেকশন দেখানোর কার্ড (নতুন যুক্ত করা হয়েছে)
               Container(
                 width: double.infinity,
-                margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-                padding: const EdgeInsets.symmetric(
+                margin: EdgeInsets.fromLTRB(12, 10, 12, 0),
+                padding: EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade50,
+                  color: AppTheme.tileOf(context, Colors.green),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.green.shade200),
+                  border: Border.all(color: AppTheme.tileOf(context, Colors.green)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
+                      color: Colors.black.withValues(alpha: 0.02),
                       blurRadius: 4,
-                      offset: const Offset(0, 2),
+                      offset: Offset(0, 2),
                     ),
                   ],
                 ),
@@ -572,10 +573,10 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                       selectedMonthFilter == 'সব মাস'
                           ? 'সর্বমোট সংগ্রহ:'
                           : '$selectedMonthFilter মাসের মোট সংগ্রহ:',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                        color: AppTheme.inkOf(context),
                       ),
                     ),
                     Text(
@@ -600,15 +601,15 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                             Icon(
                               Icons.check_circle_outline,
                               size: 60,
-                              color: Colors.green.shade300,
+                              color: AppTheme.tileOf(context, Colors.green),
                             ),
-                            const SizedBox(height: 10),
-                            const Text(
+                            SizedBox(height: 10),
+                            Text(
                               'এই মুহূর্তে কোনো বকেয়া নেই!',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.grey,
+                                color: AppTheme.mutedOf(context),
                               ),
                             ),
                           ],
@@ -627,13 +628,13 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                           double totalDueAmount = student['total_due_amount'];
 
                           return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            margin: EdgeInsets.symmetric(vertical: 6),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: AppTheme.surfaceOf(context),
                               borderRadius: BorderRadius.circular(14),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.03),
+                                  color: Colors.black.withValues(alpha: 0.03),
                                   blurRadius: 8,
                                   offset: const Offset(0, 3),
                                 ),
@@ -644,7 +645,7 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                               onTap: () =>
                                   _showFeeDetailsPopup(context, student),
                               child: Padding(
-                                padding: const EdgeInsets.all(12.0),
+                                padding: EdgeInsets.all(12.0),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -655,7 +656,7 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                                         CircleAvatar(
                                           radius: 24,
                                           backgroundColor:
-                                              Colors.green.shade100,
+                                              AppTheme.tileOf(context, Colors.green),
                                           backgroundImage:
                                               profileImage.isNotEmpty
                                               ? NetworkImage(profileImage)
@@ -676,18 +677,18 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                                             children: [
                                               Text(
                                                 student['name'],
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   fontSize: 15,
-                                                  color: Colors.black87,
+                                                  color: AppTheme.inkOf(context),
                                                 ),
                                                 overflow: TextOverflow.ellipsis,
                                               ),
-                                              const SizedBox(height: 2),
+                                              SizedBox(height: 2),
                                               Text(
                                                 'বাবার নাম: ${fatherName.isEmpty ? 'প্রযোজ্য নয়' : fatherName}',
                                                 style: TextStyle(
-                                                  color: Colors.grey.shade600,
+                                                  color: AppTheme.mutedOf(context),
                                                   fontSize: 12,
                                                 ),
                                                 overflow: TextOverflow.ellipsis,
@@ -695,7 +696,7 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                                               Text(
                                                 'ফোন: ${student['phone']}',
                                                 style: TextStyle(
-                                                  color: Colors.grey.shade600,
+                                                  color: AppTheme.mutedOf(context),
                                                   fontSize: 12,
                                                 ),
                                               ),
@@ -708,19 +709,19 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                                           children: [
                                             Text(
                                               'রোল: ${student['roll']}',
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 12,
-                                                color: Colors.black87,
+                                                color: AppTheme.inkOf(context),
                                               ),
                                             ),
-                                            const SizedBox(height: 2),
+                                            SizedBox(height: 2),
                                             Text(
                                               '${student['class']}',
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 12,
-                                                color: Colors.black87,
+                                                color: AppTheme.inkOf(context),
                                               ),
                                             ),
                                             const SizedBox(height: 2),
@@ -749,9 +750,9 @@ class _TotalCollectedDetailsViewState extends State<TotalCollectedDetailsView> {
                                     ),
                                     Text(
                                       'বকেয়া মাস: ${due.isEmpty ? 'পরিশোধিত' : due.join(', ')}',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 12,
-                                        color: Colors.black87,
+                                        color: AppTheme.inkOf(context),
                                         fontWeight: FontWeight.normal,
                                       ),
                                     ),

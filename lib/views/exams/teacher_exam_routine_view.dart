@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -65,7 +66,7 @@ class _TeacherExamRoutineViewState extends State<TeacherExamRoutineView> {
           isInitialLoading = false;
         });
       }
-      print("Error fetching exam routine: $e");
+      debugPrint("Error fetching exam routine: $e");
     }
   }
 
@@ -164,7 +165,7 @@ class _TeacherExamRoutineViewState extends State<TeacherExamRoutineView> {
         },
         build: (pw.Context context) {
           return [
-            pw.Table.fromTextArray(
+            pw.TableHelper.fromTextArray(
               headers: [
                 'তারিখ ও বার',
                 'শ্রেণী',
@@ -371,15 +372,15 @@ class _TeacherExamRoutineViewState extends State<TeacherExamRoutineView> {
                 );
 
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
+                  margin: EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.surfaceOf(context),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.06),
+                        color: Colors.grey.withValues(alpha: 0.06),
                         blurRadius: 8,
-                        offset: const Offset(0, 3),
+                        offset: Offset(0, 3),
                       ),
                     ],
                   ),
@@ -391,7 +392,7 @@ class _TeacherExamRoutineViewState extends State<TeacherExamRoutineView> {
                       ).copyWith(dividerColor: Colors.transparent),
                       child: ExpansionTile(
                         initiallyExpanded: index == 0,
-                        backgroundColor: Colors.white,
+                        backgroundColor: AppTheme.surfaceOf(context),
                         collapsedBackgroundColor: Colors.white,
                         tilePadding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -407,20 +408,20 @@ class _TeacherExamRoutineViewState extends State<TeacherExamRoutineView> {
                             const SizedBox(width: 6),
                             Text(
                               formattedDate,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.teal,
                               ),
                             ),
-                            const SizedBox(width: 6),
+                            SizedBox(width: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(
+                              padding: EdgeInsets.symmetric(
                                 horizontal: 6,
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.teal.shade50,
+                                color: AppTheme.tileOf(context, Colors.teal),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -456,11 +457,11 @@ class _TeacherExamRoutineViewState extends State<TeacherExamRoutineView> {
                         ),
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(
+                            padding: EdgeInsets.symmetric(
                               vertical: 6,
                               horizontal: 8,
                             ),
-                            color: Colors.teal.shade50.withOpacity(0.5),
+                            color: AppTheme.tileOf(context, Colors.teal).withValues(alpha: 0.5),
                             child: Row(
                               children: [
                                 const Expanded(
@@ -492,11 +493,11 @@ class _TeacherExamRoutineViewState extends State<TeacherExamRoutineView> {
                                     ],
                                   ),
                                 ),
-                                const SizedBox(width: 12),
+                                SizedBox(width: 12),
                                 Container(
                                   width: 1,
                                   height: 14,
-                                  color: Colors.teal.shade200,
+                                  color: AppTheme.tileOf(context, Colors.teal),
                                 ),
                                 const SizedBox(width: 12),
                                 const Expanded(
@@ -564,10 +565,10 @@ class _TeacherExamRoutineViewState extends State<TeacherExamRoutineView> {
                                               children: [
                                                 Text(
                                                   leftItem['class_name'] ?? '',
-                                                  style: const TextStyle(
+                                                  style: TextStyle(
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.bold,
-                                                    color: Colors.black87,
+                                                    color: AppTheme.inkOf(context),
                                                   ),
                                                   maxLines: 1,
                                                   overflow:
@@ -577,7 +578,7 @@ class _TeacherExamRoutineViewState extends State<TeacherExamRoutineView> {
                                                   leftItem['exam_title'] ?? '',
                                                   style: TextStyle(
                                                     fontSize: 9,
-                                                    color: Colors.grey.shade600,
+                                                    color: AppTheme.mutedOf(context),
                                                   ),
                                                   maxLines: 1,
                                                   overflow:
@@ -622,11 +623,11 @@ class _TeacherExamRoutineViewState extends State<TeacherExamRoutineView> {
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
+                                    SizedBox(width: 12),
                                     Container(
                                       width: 1,
                                       height: 24,
-                                      color: Colors.grey.shade300,
+                                      color: AppTheme.borderOf(context),
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
@@ -643,11 +644,11 @@ class _TeacherExamRoutineViewState extends State<TeacherExamRoutineView> {
                                                       Text(
                                                         rightItem['class_name'] ??
                                                             '',
-                                                        style: const TextStyle(
+                                                        style: TextStyle(
                                                           fontSize: 11,
                                                           fontWeight:
                                                               FontWeight.bold,
-                                                          color: Colors.black87,
+                                                          color: AppTheme.inkOf(context),
                                                         ),
                                                         maxLines: 1,
                                                         overflow: TextOverflow

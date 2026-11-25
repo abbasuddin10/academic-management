@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:get/get.dart';
@@ -243,6 +244,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
     if (confirm == true) {
       if (date.isNotEmpty) {
         try {
+          if (!mounted) return;
           showDialog(
             context: context,
             barrierDismissible: false,
@@ -258,8 +260,10 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
               .eq('exam_id', widget.examId)
               .eq('exam_date', date);
 
+          if (!mounted) return;
           Navigator.pop(context); // ডায়ালগ পপ
         } catch (e) {
+          if (!mounted) return;
           Navigator.pop(context);
           Get.snackbar(
             "ত্রুটি",
@@ -315,6 +319,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
 
     if (confirm == true) {
       try {
+        if (!mounted) return;
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -329,6 +334,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
             .eq('academy_id', widget.academyId)
             .eq('exam_id', widget.examId);
 
+        if (!mounted) return;
         Navigator.pop(context);
 
         Get.snackbar(
@@ -340,6 +346,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
 
         _fetchClassesAndExistingRoutines();
       } catch (e) {
+        if (!mounted) return;
         Navigator.pop(context);
         Get.snackbar(
           "ত্রুটি",
@@ -445,6 +452,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
       // ২. নতুন এবং পুরোনো সকল ইনপুট করা ডাটা ইনসার্ট করা
       await supabase.from('exam_routines').insert(routinesToUpsert);
 
+      if (!mounted) return;
       Navigator.pop(context); // লোডিং ডায়ালগ বন্ধ করা
 
       Get.snackbar(
@@ -457,6 +465,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
       // সফলভাবে সেভ হওয়ার পর আবার লেটেস্ট ডাটা রিফ্রেশ করে নেওয়া
       _fetchClassesAndExistingRoutines();
     } catch (e) {
+      if (!mounted) return;
       Navigator.pop(context);
       Get.snackbar(
         "ত্রুটি",
@@ -525,19 +534,19 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                       String dayName = _getDayNameInBengali(entryIndex);
 
                       return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
+                        margin: EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AppTheme.surfaceOf(context),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: Colors.teal.shade200,
+                            color: AppTheme.tileOf(context, Colors.teal),
                             width: 1.2,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.grey.withOpacity(0.06),
+                              color: Colors.grey.withValues(alpha: 0.06),
                               blurRadius: 4,
-                              offset: const Offset(0, 2),
+                              offset: Offset(0, 2),
                             ),
                           ],
                         ),
@@ -546,12 +555,12 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                           children: [
                             // হেডার সেকশন
                             Container(
-                              padding: const EdgeInsets.symmetric(
+                              padding: EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.teal.shade50,
+                                color: AppTheme.tileOf(context, Colors.teal),
                                 borderRadius: BorderRadius.vertical(
                                   top: const Radius.circular(10),
                                   bottom: isExpanded
@@ -576,7 +585,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                                       child: TextField(
                                         controller: dateController,
                                         readOnly: true,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -584,9 +593,9 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                                           hintText: 'তারিখ নির্বাচন করুন',
                                           hintStyle: TextStyle(
                                             fontSize: 11,
-                                            color: Colors.grey.shade500,
+                                            color: AppTheme.mutedOf(context),
                                           ),
-                                          prefixIcon: const Icon(
+                                          prefixIcon: Icon(
                                             Icons.calendar_today,
                                             size: 14,
                                             color: Colors.teal,
@@ -596,7 +605,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                                               6,
                                             ),
                                             borderSide: BorderSide(
-                                              color: Colors.teal.shade200,
+                                              color: AppTheme.tileOf(context, Colors.teal),
                                             ),
                                           ),
                                           enabledBorder: OutlineInputBorder(
@@ -604,7 +613,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                                               6,
                                             ),
                                             borderSide: BorderSide(
-                                              color: Colors.teal.shade200,
+                                              color: AppTheme.tileOf(context, Colors.teal),
                                             ),
                                           ),
                                           isDense: true,
@@ -658,16 +667,16 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                             // ক্লাসের বক্সসমূহ
                             if (isExpanded)
                               Padding(
-                                padding: const EdgeInsets.all(10.0),
+                                padding: EdgeInsets.all(10.0),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
+                                    Text(
                                       'শ্রেণিভিত্তিক বিষয় ও সময় (যে ক্লাসে পরীক্ষা নেই তার চেকবক্সে টিক দিন):',
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.grey,
+                                        color: AppTheme.mutedOf(context),
                                       ),
                                     ),
                                     const SizedBox(height: 6),
@@ -696,19 +705,19 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                                             return SizedBox(
                                               width: itemWidth,
                                               child: Container(
-                                                padding: const EdgeInsets.all(
+                                                padding: EdgeInsets.all(
                                                   5,
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: isNoExam
-                                                      ? Colors.grey.shade200
-                                                      : Colors.grey.shade50,
+                                                      ? AppTheme.borderOf(context)
+                                                      : AppTheme.altSurfaceOf(context),
                                                   borderRadius:
                                                       BorderRadius.circular(6),
                                                   border: Border.all(
                                                     color: isError
                                                         ? Colors.red
-                                                        : Colors.grey.shade300,
+                                                        : AppTheme.borderOf(context),
                                                     width: isError ? 1.5 : 1,
                                                   ),
                                                 ),
@@ -766,7 +775,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                                                         ),
                                                       ],
                                                     ),
-                                                    const SizedBox(height: 4),
+                                                    SizedBox(height: 4),
                                                     isNoExam
                                                         ? Container(
                                                             height: 32,
@@ -774,9 +783,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                                                                 .center,
                                                             decoration:
                                                                 BoxDecoration(
-                                                                  color: Colors
-                                                                      .red
-                                                                      .shade50,
+                                                                  color: AppTheme.tileOf(context, Colors.red),
                                                                   borderRadius:
                                                                       BorderRadius.circular(
                                                                         4,
@@ -823,7 +830,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                                                                       color:
                                                                           isError
                                                                           ? Colors.red
-                                                                          : Colors.grey.shade300,
+                                                                          : AppTheme.borderOf(context),
                                                                     ),
                                                                   ),
                                                                   enabledBorder: OutlineInputBorder(
@@ -835,7 +842,7 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                                                                       color:
                                                                           isError
                                                                           ? Colors.red
-                                                                          : Colors.grey.shade300,
+                                                                          : AppTheme.borderOf(context),
                                                                     ),
                                                                   ),
                                                                   isDense: true,
@@ -875,24 +882,20 @@ class _CreateExamRoutinePageState extends State<CreateExamRoutinePage> {
                                                                   width: double
                                                                       .infinity,
                                                                   padding:
-                                                                      const EdgeInsets.symmetric(
+                                                                      EdgeInsets.symmetric(
                                                                         vertical:
                                                                             4,
                                                                         horizontal:
                                                                             4,
                                                                       ),
                                                                   decoration: BoxDecoration(
-                                                                    color: Colors
-                                                                        .teal
-                                                                        .shade50,
+                                                                    color: AppTheme.tileOf(context, Colors.teal),
                                                                     borderRadius:
                                                                         BorderRadius.circular(
                                                                           4,
                                                                         ),
                                                                     border: Border.all(
-                                                                      color: Colors
-                                                                          .teal
-                                                                          .shade200,
+                                                                      color: AppTheme.tileOf(context, Colors.teal),
                                                                     ),
                                                                   ),
                                                                   child: Row(

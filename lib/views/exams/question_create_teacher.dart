@@ -1,3 +1,5 @@
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/repositories/model_test_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'dart:convert';
@@ -9,11 +11,19 @@ class CreateTestView extends StatefulWidget {
   final String className;
   final String subjectName;
 
+  /// Called after a successful save so the caller can refresh immediately.
+  final VoidCallback? onSaved;
+  final String? currentUserId;
+  final String? currentUserName;
+
   const CreateTestView({
     super.key,
     required this.academyId,
     required this.className,
     required this.subjectName,
+    this.onSaved,
+    this.currentUserId,
+    this.currentUserName,
   });
 
   @override
@@ -22,6 +32,7 @@ class CreateTestView extends StatefulWidget {
 
 class _CreateTestViewState extends State<CreateTestView> {
   final SupabaseClient supabase = Supabase.instance.client;
+  final _repository = ModelTestRepository();
   final _formKey = GlobalKey<FormState>();
 
   // কন্ট্রোলারসমূহ
@@ -46,6 +57,18 @@ class _CreateTestViewState extends State<CreateTestView> {
     _fetchExistingChapters();
   }
 
+  @override
+  void dispose() {
+    questionController.dispose();
+    customChapterController.dispose();
+    optionAController.dispose();
+    optionBController.dispose();
+    optionCController.dispose();
+    optionDController.dispose();
+    explanationController.dispose();
+    super.dispose();
+  }
+
   // ১. সুপাবেস থেকে নির্দিষ্ট প্রতিষ্ঠান ও বিষয়ের ইউনিক অধ্যায়গুলো ফেচ করা
   Future<void> _fetchExistingChapters() async {
     try {
@@ -63,7 +86,7 @@ class _CreateTestViewState extends State<CreateTestView> {
           chapters.add(chapter);
         }
       }
-    
+
       setState(() {
         existingChapters = chapters.toList();
         existingChapters.sort();
@@ -82,11 +105,39 @@ class _CreateTestViewState extends State<CreateTestView> {
   }
 
   Future<void> handleSaveQuestion() async {
+    final snackInk = AppTheme.inkOf(context);
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
     String questionText = questionController.text.trim();
+    final options = [
+      optionAController.text.trim(),
+      optionBController.text.trim(),
+      optionCController.text.trim(),
+      optionDController.text.trim(),
+    ];
+    final normalized = options.map((item) => item.toLowerCase()).toList();
+    if (normalized.toSet().length != normalized.length) {
+      Get.snackbar(
+        'সতর্কতা',
+        'একই অপশন একাধিকবার দেওয়া যাবে না।',
+        backgroundColor: Colors.orangeAccent,
+        colorText: snackInk,
+      );
+      return;
+    }
+    if (correctOption == null ||
+        !['A', 'B', 'C', 'D'].contains(correctOption!.trim().toUpperCase())) {
+      Get.snackbar(
+        'সতর্কতা',
+        'সঠিক উত্তরের অপশন নির্বাচন করুন।',
+        backgroundColor: Colors.orangeAccent,
+        colorText: snackInk,
+      );
+      return;
+    }
+    // question_hash is also enforced by the database trigger in migration 0007.
     String newHash = generateHash(questionText);
 
     // অধ্যায়ের নাম নির্ধারণ (ড্রপডাউন থেকে সিলেক্ট করা অথবা নতুন লেখা)
@@ -98,46 +149,46 @@ class _CreateTestViewState extends State<CreateTestView> {
     setState(() => isSaving = true);
 
     try {
-      // ২. ডুপ্লিকেট চেক
-      final existingCheck = await supabase
-          .from('academy_questions')
-          .select('id')
-          .eq('academy_id', widget.academyId)
-          .eq('class_name', widget.className)
-          .eq('subject_name', widget.subjectName)
-          .eq('question_hash', newHash)
-          .maybeSingle();
-
-      if (existingCheck != null) {
+      // ডুপ্লিকেট চেক (limit(1) — maybeSingle() throws on legacy duplicates).
+      final exists = await _repository.questionExists(
+        academyId: widget.academyId,
+        className: widget.className,
+        subjectName: widget.subjectName,
+        questionHash: newHash,
+      );
+      if (exists) {
         Get.snackbar(
           "সতর্কতা: ডুপ্লিকেট প্রশ্ন!",
           "এই প্রশ্নটি ইতিমধ্যে এই ক্লাস ও বিষয়ে সংরক্ষিত রয়েছে।",
           backgroundColor: Colors.orangeAccent,
-          colorText: Colors.black,
+          colorText: snackInk,
         );
-        setState(() => isSaving = false);
         return;
       }
 
-      // ৩. সুপাবেসে ডেটা ইনসার্ট করা (শিক্ষক সম্পর্কিত ফিল্ড বাদ দেওয়া হয়েছে)
-      await supabase.from('academy_questions').insert({
-        'academy_id': widget.academyId,
-        'class_name': widget.className,
-        'subject_name': widget.subjectName,
-        'chapter_name': chapterName,
-        'question_text': questionText,
-        'option_a': optionAController.text.trim(),
-        'option_b': optionBController.text.trim(),
-        'option_c': optionCController.text.trim(),
-        'option_d': optionDController.text.trim(),
-        'correct_option': correctOption,
-        'explanation': explanationController.text.trim(),
-        'question_hash': newHash,
-      });
+      // RPC-এর মাধ্যমে সংরক্ষণ: লিগ্যাসি NOT NULL কলাম / RLS সমস্যা এখানে
+      // সার্ভারেই সমাধান হয়। RPC না থাকলে repository স্বয়ংক্রিয়ভাবে fallback
+      // করে সরাসরি insert এ।
+      await _repository.saveQuestion(
+        academyId: widget.academyId,
+        className: widget.className,
+        subjectName: widget.subjectName,
+        chapterName: chapterName,
+        questionText: questionText,
+        optionA: options[0],
+        optionB: options[1],
+        optionC: options[2],
+        optionD: options[3],
+        correctOption: correctOption!.trim().toUpperCase(),
+        explanation: explanationController.text.trim(),
+        questionHash: newHash,
+      );
 
+      // ফলাফল নিশ্চিত হওয়ার পরেই সফল বার্তা + তাৎক্ষণিক রিফ্রেশ।
+      widget.onSaved?.call();
       Get.snackbar(
         "সফল",
-        "প্রশ্নটি সফলভাবে সংরক্ষিত হয়েছে!",
+        "প্রশ্নটি সফলভাবে সংরক্ষিত হয়েছে! আরেকটি প্রশ্ন যোগ করতে পারেন।",
         backgroundColor: Colors.teal,
         colorText: Colors.white,
       );
@@ -159,11 +210,13 @@ class _CreateTestViewState extends State<CreateTestView> {
       _fetchExistingChapters();
     } catch (e) {
       debugPrint("Error saving question: $e");
+      final message = ModelTestRepository.friendlyError(e);
       Get.snackbar(
-        "ত্রুটি",
-        "প্রশ্ন সেভ করতে সমস্যা হয়েছে: $e",
+        "প্রশ্ন সংরক্ষণ ব্যর্থ",
+        message.replaceFirst('DUPLICATE:', '').trim(),
         backgroundColor: Colors.redAccent,
         colorText: Colors.white,
+        duration: const Duration(seconds: 6),
       );
     } finally {
       setState(() => isSaving = false);
@@ -173,23 +226,23 @@ class _CreateTestViewState extends State<CreateTestView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               '${widget.className} | বিষয়: ${widget.subjectName}',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ],
         ),
-        backgroundColor: Colors.indigo.shade800,
+        backgroundColor: AppTheme.tileInkOf(context, Colors.indigo),
         foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: Column(
@@ -198,36 +251,38 @@ class _CreateTestViewState extends State<CreateTestView> {
               // শিক্ষক ইনফো কার্ড সম্পূর্ণ রিমুভ করা হয়েছে
 
               // অধ্যায় নির্বাচন ড্রপডাউন বা নতুন লেখার অপশন
-              const Text(
+              Text(
                 'অধ্যায় সিলেক্ট করুন অথবা নতুন লিখুন:',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: AppTheme.inkOf(context),
                 ),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: 6),
               isLoadingChapters
-                  ? const Center(child: LinearProgressIndicator())
+                  ? Center(child: LinearProgressIndicator())
                   : Column(
                       children: [
                         // ১. বিদ্যমান অধ্যায়ের ড্রপডাউন
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
+                            border: Border.all(
+                              color: AppTheme.borderOf(context),
+                            ),
                             borderRadius: BorderRadius.circular(10),
-                            color: Colors.white,
+                            color: AppTheme.surfaceOf(context),
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
                               value: selectedChapter,
                               isExpanded: true,
-                              hint: const Text(
+                              hint: Text(
                                 "আগের অধ্যায়গুলোর তালিকা থেকে বেছে নিন (ঐচ্ছিক)",
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.grey,
+                                  color: AppTheme.mutedOf(context),
                                 ),
                               ),
                               items: existingChapters.map((String chapter) {
@@ -281,18 +336,18 @@ class _CreateTestViewState extends State<CreateTestView> {
                         ),
                       ],
                     ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
 
               // প্রশ্ন লেখার বক্স
-              const Text(
+              Text(
                 'প্রশ্ন লিখুন:',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: AppTheme.inkOf(context),
                 ),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: 6),
               TextFormField(
                 controller: questionController,
                 maxLines: 3,
@@ -303,7 +358,7 @@ class _CreateTestViewState extends State<CreateTestView> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderSide: BorderSide(
-                      color: Colors.indigo.shade800,
+                      color: AppTheme.tileInkOf(context, Colors.indigo),
                       width: 2,
                     ),
                     borderRadius: BorderRadius.circular(10),
@@ -315,15 +370,15 @@ class _CreateTestViewState extends State<CreateTestView> {
                     ? 'দয়া করে প্রশ্ন লিখুন'
                     : null,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
 
               // অপশনসমূহ
-              const Text(
+              Text(
                 'অপশনসমূহ দিন এবং সঠিক উত্তর সিলেক্ট করুন:',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: AppTheme.inkOf(context),
                 ),
               ),
               const SizedBox(height: 8),
@@ -341,14 +396,14 @@ class _CreateTestViewState extends State<CreateTestView> {
                 optionBController,
                 'B',
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               _buildOptionField(
                 'গ',
                 'অপশন গ (Option C)',
                 optionCController,
                 'C',
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               _buildOptionField(
                 'ঘ',
                 'অপশন ঘ (Option D)',
@@ -356,15 +411,15 @@ class _CreateTestViewState extends State<CreateTestView> {
                 'D',
               ),
 
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
 
               // উত্তর ব্যাখ্যা
-              const Text(
+              Text(
                 'ব্যাখ্যা (যদি থাকে - ঐচ্ছিক):',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: AppTheme.inkOf(context),
                 ),
               ),
               const SizedBox(height: 6),
@@ -380,14 +435,14 @@ class _CreateTestViewState extends State<CreateTestView> {
                   fillColor: Colors.white,
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: 24),
 
               // সেইভ বাটন
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo.shade800,
+                    backgroundColor: AppTheme.tileInkOf(context, Colors.indigo),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -405,7 +460,7 @@ class _CreateTestViewState extends State<CreateTestView> {
                             strokeWidth: 2,
                           ),
                         )
-                      : const Text(
+                      : Text(
                           'সুপাবেসে প্রশ্ন সেভ করুন',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -431,10 +486,12 @@ class _CreateTestViewState extends State<CreateTestView> {
 
     return Container(
       decoration: BoxDecoration(
-        color: isSelected ? Colors.teal.shade50 : Colors.white,
+        color: isSelected
+            ? AppTheme.tileOf(context, Colors.teal)
+            : Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: isSelected ? Colors.teal : Colors.grey.shade300,
+          color: isSelected ? Colors.teal : AppTheme.borderOf(context),
           width: isSelected ? 2 : 1,
         ),
       ),
@@ -455,7 +512,9 @@ class _CreateTestViewState extends State<CreateTestView> {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 15,
-              color: isSelected ? Colors.teal.shade800 : Colors.black54,
+              color: isSelected
+                  ? AppTheme.tileInkOf(context, Colors.teal)
+                  : AppTheme.mutedOf(context),
             ),
           ),
           const SizedBox(width: 12),

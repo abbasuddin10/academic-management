@@ -1,5 +1,6 @@
-﻿import 'package:academy_management/services/ad_service.dart';
-import 'package:academy_management/views/admin/AcademyQRCodeView.dart';
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/services/ad_service.dart';
+import 'package:academy_management/views/admin/academy_qr_code_view.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -89,7 +90,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
       deviceId = sha256
           .convert(
             utf8.encode(
-              DateTime.now().toIso8601String() + '_' + widget.academyId,
+              '${DateTime.now().toIso8601String()}_${widget.academyId}',
             ),
           )
           .toString();
@@ -176,7 +177,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
         }
       }
     } catch (e) {
-      print("Error fetching data: $e");
+      debugPrint("Error fetching data: $e");
     } finally {
       if (mounted) {
         setState(() {
@@ -219,7 +220,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
 
     try {
       Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        locationSettings: LocationSettings(accuracy: LocationAccuracy.high),
       );
       if (position.isMocked) {
         Get.back();
@@ -245,6 +246,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
 
       bool updateLocationPin = false;
 
+      if (!mounted) return;
       showDialog(
         context: context,
         builder: (context) {
@@ -297,7 +299,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: timeController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'ইন-টাইম (যেমন: 09:00:00)',
                           prefixIcon: Icon(
                             Icons.access_time,
@@ -306,28 +308,28 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                           border: OutlineInputBorder(),
                         ),
                       ),
-                      const SizedBox(height: 15),
+                      SizedBox(height: 15),
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.amber.shade50,
+                          color: AppTheme.tileOf(context, Colors.amber),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.amber.shade200),
+                          border: Border.all(color: AppTheme.tileOf(context, Colors.amber)),
                         ),
                         child: CheckboxListTile(
-                          title: const Text(
+                          title: Text(
                             'নতুন কিউআর কোড জেনারেট করুন',
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
-                              color: Colors.black87,
+                              color: AppTheme.inkOf(context),
                             ),
                           ),
-                          subtitle: const Text(
+                          subtitle: Text(
                             'শুধুমাত্র লোকেশন পরিবর্তন বা সিকিউরিটি রিসেট করার প্রয়োজন হলে টিক দিন।',
                             style: TextStyle(
                               fontSize: 11,
-                              color: Colors.black54,
+                              color: AppTheme.mutedOf(context),
                             ),
                           ),
                           value: updateLocationPin,
@@ -523,7 +525,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
 
     try {
       Position currentPosition = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        locationSettings: LocationSettings(accuracy: LocationAccuracy.high),
       );
 
       if (currentPosition.isMocked) {
@@ -710,13 +712,14 @@ class _AttendancePageViewState extends State<AttendancePageView> {
             });
           }
 
+          if (!mounted) return;
           Get.snackbar(
             "সফল",
             attendanceStatus == 'Late'
                 ? "হাজিরা রেকর্ড হয়েছে (বিলম্বিত বা Late)!"
                 : "হাজিরা সফলভাবে রেকর্ড করা হয়েছে (Present)!",
             backgroundColor: attendanceStatus == 'Late'
-                ? Colors.amber.shade800
+                ? AppTheme.tileInkOf(context, Colors.amber)
                 : Colors.green,
             colorText: Colors.white,
           );
@@ -725,7 +728,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
             await _fetchAcademyDataAndUsers(isBackground: true);
           }
         } catch (insertError) {
-          print("Insert Error Detail: $insertError");
+          debugPrint("Insert Error Detail: $insertError");
           Get.snackbar(
             "আজকে নেওয়া হয়ে গেছে",
             "আপনার হাজিরা আজকে ইতিমধ্যে সফলভাবে রেকর্ড করা আছে!",
@@ -800,19 +803,19 @@ class _AttendancePageViewState extends State<AttendancePageView> {
             )
           : null,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.teal))
+          ? Center(child: CircularProgressIndicator(color: Colors.teal))
           : RefreshIndicator(
               onRefresh: () => _fetchAcademyDataAndUsers(isBackground: true),
               child: ListView(
-                padding: const EdgeInsets.all(16.0),
+                padding: EdgeInsets.all(16.0),
                 children: [
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.teal.shade50,
+                      color: AppTheme.tileOf(context, Colors.teal),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.teal.shade200),
+                      border: Border.all(color: AppTheme.tileOf(context, Colors.teal)),
                     ),
                     child: Column(
                       children: [
@@ -821,7 +824,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                           size: 40,
                           color: Colors.teal,
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: 4),
                         Text(
                           _savedLocation != null
                               ? 'লোকেশন: $_savedLocation\nসীমাবদ্ধতা: $_allowedRadius মিটার | ইন-টাইম: $_startTime'
@@ -830,7 +833,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                           style: TextStyle(
                             fontSize: 13,
                             color: _savedLocation != null
-                                ? Colors.black87
+                                ? AppTheme.inkOf(context)
                                 : Colors.red,
                           ),
                         ),
@@ -857,7 +860,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                     Container(
                       alignment: Alignment.center,
                       height: _inListBannerAd!.size.height.toDouble(),
-                      margin: const EdgeInsets.only(bottom: 20),
+                      margin: EdgeInsets.only(bottom: 20),
                       child: AdWidget(ad: _inListBannerAd!),
                     ),
                   ],
@@ -865,12 +868,12 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'আজকের উপস্থিতি তালিকা (রিয়েল-টাইম)',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          color: AppTheme.inkOf(context),
                         ),
                       ),
                       if (_isListLoading)
@@ -917,25 +920,25 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                                 attendance['check_in_time'],
                               );
                               DateTime bdTime = parsedTime.isUtc
-                                  ? parsedTime.add(const Duration(hours: 6))
+                                  ? parsedTime.add(Duration(hours: 6))
                                   : parsedTime;
                               timeStr = DateFormat('hh:mm a').format(bdTime);
                             }
 
                             Color statusColor = status == 'Late'
-                                ? Colors.amber.shade800
+                                ? AppTheme.tileInkOf(context, Colors.amber)
                                 : (isPresent ? Colors.green : Colors.red);
 
                             return Card(
                               elevation: 2,
-                              margin: const EdgeInsets.only(bottom: 10),
+                              margin: EdgeInsets.only(bottom: 10),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: ListTile(
                                 leading: CircleAvatar(
                                   radius: 24,
-                                  backgroundColor: Colors.grey.shade200,
+                                  backgroundColor: AppTheme.borderOf(context),
                                   backgroundImage:
                                       (photoUrl != null &&
                                           photoUrl.toString().isNotEmpty)
@@ -944,15 +947,15 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                                   child:
                                       (photoUrl == null ||
                                           photoUrl.toString().isEmpty)
-                                      ? const Icon(
+                                      ? Icon(
                                           Icons.person,
-                                          color: Colors.grey,
+                                          color: AppTheme.mutedOf(context),
                                         )
                                       : null,
                                 ),
                                 title: Text(
                                   userName,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 15,
                                   ),
@@ -960,21 +963,21 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const SizedBox(height: 2),
+                                    SizedBox(height: 2),
                                     Text(
                                       userPhone,
                                       style: TextStyle(
-                                        color: Colors.grey.shade600,
+                                        color: AppTheme.mutedOf(context),
                                         fontSize: 13,
                                       ),
                                     ),
                                     if (isPresent) ...[
-                                      const SizedBox(height: 2),
+                                      SizedBox(height: 2),
                                       Text(
                                         'সময়: $timeStr ($status)',
                                         style: TextStyle(
                                           color: status == 'Late'
-                                              ? Colors.amber.shade800
+                                              ? AppTheme.tileInkOf(context, Colors.amber)
                                               : Colors.green,
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
@@ -992,15 +995,15 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                             );
                           },
                         ),
-                  const SizedBox(height: 25),
-                  const Divider(thickness: 2),
-                  const SizedBox(height: 10),
-                  const Text(
+                  SizedBox(height: 25),
+                  Divider(thickness: 2),
+                  SizedBox(height: 10),
+                  Text(
                     'গত ৩ দিনের স্কান রেজাল্ট',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: AppTheme.inkOf(context),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -1022,7 +1025,7 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                       child: ExpansionTile(
                         title: Text(
                           formattedDateHeader,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                             color: Colors.teal,
@@ -1030,20 +1033,20 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                         ),
                         subtitle: Text(
                           'মোট উপস্থিত: ${dayRecords.length} জন',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey,
+                            color: AppTheme.mutedOf(context),
                           ),
                         ),
                         children: [
                           dayRecords.isEmpty
-                              ? const Padding(
+                              ? Padding(
                                   padding: EdgeInsets.all(12.0),
                                   child: Text(
                                     'এই তারিখে কোনো উপস্থিতি রেকর্ড পাওয়া যায়নি।',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey,
+                                      color: AppTheme.mutedOf(context),
                                     ),
                                   ),
                                 )
@@ -1083,18 +1086,18 @@ class _AttendancePageViewState extends State<AttendancePageView> {
                                       ),
                                       subtitle: Text(
                                         'সময়: $tStr',
-                                        style: const TextStyle(fontSize: 11),
+                                        style: TextStyle(fontSize: 11),
                                       ),
                                       trailing: Chip(
                                         label: Text(
                                           status,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 10,
                                             color: Colors.white,
                                           ),
                                         ),
                                         backgroundColor: status == 'Late'
-                                            ? Colors.amber.shade800
+                                            ? AppTheme.tileInkOf(context, Colors.amber)
                                             : Colors.green,
                                         padding: EdgeInsets.zero,
                                       ),

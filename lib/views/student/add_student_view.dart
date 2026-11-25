@@ -1,5 +1,7 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'dart:io';
 import 'dart:math';
+import 'package:academy_management/services/password_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
@@ -305,7 +307,7 @@ class _AddStudentViewState extends State<AddStudentView> {
       AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
-          children: const [
+          children: [
             Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
             SizedBox(width: 8),
             Text('রোল ইতিমধ্যে বিদ্যমান!', style: TextStyle(fontSize: 18)),
@@ -317,15 +319,15 @@ class _AddStudentViewState extends State<AddStudentView> {
           children: [
             Text(
               'এই প্রতিষ্ঠানে এই শ্রেণিতে এই রোল নম্বরের একজন শিক্ষার্থী ইতিমধ্যেই রেজিস্টার্ড রয়েছে:',
-              style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+              style: TextStyle(color: AppTheme.mutedOf(context), fontSize: 13),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
+                color: AppTheme.tileOf(context, Colors.orange),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.orange.shade200),
+                border: Border.all(color: AppTheme.tileOf(context, Colors.orange)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,6 +369,7 @@ class _AddStudentViewState extends State<AddStudentView> {
   Future<String> _generateUniquePassword(
     SupabaseClient supabase,
     String fullName,
+    String academyId,
   ) async {
     String cleanName = fullName.trim();
     String prefix = "ST";
@@ -386,17 +389,25 @@ class _AddStudentViewState extends State<AddStudentView> {
     bool isUnique = false;
     String finalPassword = "";
 
+    // Hashes are salted, so uniqueness is checked by verifying the candidate
+    // against the stored hashes of this academy only.
+    final rows = await supabase
+        .from('students')
+        .select('custom_password')
+        .eq('academy_id', academyId);
+
+    final storedHashes = rows
+        .map((row) => row['custom_password']?.toString() ?? '')
+        .where((value) => value.isNotEmpty)
+        .toList();
+
     while (!isUnique) {
       int randomDigits = 1000 + random.nextInt(9000);
       finalPassword = "$prefix$randomDigits";
 
-      final existing = await supabase
-          .from('students')
-          .select('custom_password')
-          .eq('custom_password', finalPassword)
-          .maybeSingle();
-
-      if (existing == null) isUnique = true;
+      isUnique = !storedHashes.any(
+        (hash) => PasswordService.verify(finalPassword, hash),
+      );
     }
 
     return finalPassword;
@@ -416,15 +427,15 @@ class _AddStudentViewState extends State<AddStudentView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: AppTheme.altSurfaceOf(context),
       appBar: AppBar(
-        title: const Text('নতুন শিক্ষার্থী ভর্তি'),
+        title: Text('নতুন শিক্ষার্থী ভর্তি'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: Column(
@@ -437,7 +448,7 @@ class _AddStudentViewState extends State<AddStudentView> {
                     children: [
                       CircleAvatar(
                         radius: 55,
-                        backgroundColor: Colors.teal.shade100,
+                        backgroundColor: AppTheme.tileOf(context, Colors.teal),
                         backgroundImage: _selectedImage != null
                             ? FileImage(_selectedImage!)
                             : null,
@@ -445,7 +456,7 @@ class _AddStudentViewState extends State<AddStudentView> {
                             ? Icon(
                                 Icons.person,
                                 size: 65,
-                                color: Colors.teal.shade800,
+                                color: AppTheme.tileInkOf(context, Colors.teal),
                               )
                             : null,
                       ),
@@ -742,6 +753,7 @@ class _AddStudentViewState extends State<AddStudentView> {
       final String generatedPassword = await _generateUniquePassword(
         supabase,
         studentName,
+        academyId,
       );
 
       // স্টুডেন্ট ইনসার্ট
@@ -754,7 +766,7 @@ class _AddStudentViewState extends State<AddStudentView> {
         'phone': _phoneController.text.trim(),
         'monthly_fee': double.tryParse(_feeController.text.trim()) ?? 0.0,
         'address': _addressController.text.trim(),
-        'custom_password': generatedPassword,
+        'custom_password': PasswordService.hash(generatedPassword),
         'image_url': uploadedImageUrl,
       });
 

@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -46,7 +47,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
     // পেজ ওপেন হওয়ার সাথে সাথে ইন্টারস্টিশিয়াল অ্যাড লোড করা শুরু করা
     AdService.loadInterstitialAd();
 
-    // বটমে ফিক্সড ব্যানার অ্যাড লোড করা[cite: 18]
+    // বটমে ফিক্সড ব্যানার অ্যাড লোড করা
     _bannerAd = AdService.createBannerAd()
       ..load().then((_) {
         if (mounted) {
@@ -56,7 +57,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
         }
       });
 
-    // লিস্টের মাঝে দেখানোর জন্য ১ম ব্যানার অ্যাড লোড করা[cite: 18]
+    // লিস্টের মাঝে দেখানোর জন্য ১ম ব্যানার অ্যাড লোড করা
     _inListBannerAd1 = AdService.createBannerAd()
       ..load().then((_) {
         if (mounted) {
@@ -66,7 +67,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
         }
       });
 
-    // লিস্টের মাঝে দেখানোর জন্য ২য় ব্যানার অ্যাড লোড করা[cite: 18]
+    // লিস্টের মাঝে দেখানোর জন্য ২য় ব্যানার অ্যাড লোড করা
     _inListBannerAd2 = AdService.createBannerAd()
       ..load().then((_) {
         if (mounted) {
@@ -86,7 +87,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
     super.dispose();
   }
 
-  // ব্যাকগ্রাউন্ডে ডাটা ফেচ করার ফাংশন[cite: 18]
+  // ব্যাকগ্রাউন্ডে ডাটা ফেচ করার ফাংশন
   Future<void> fetchStaffAndAdmins() async {
     try {
       setState(() {
@@ -96,7 +97,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
 
       final supabase = Supabase.instance.client;
 
-      // users টেবিল থেকে নির্দিষ্ট একাডেমির শিক্ষক, সুপার অ্যাডমিন এবং স্টাফ ফেচ করা[cite: 18]
+      // users টেবিল থেকে নির্দিষ্ট একাডেমির শিক্ষক, সুপার অ্যাডমিন এবং স্টাফ ফেচ করা
       final response = await supabase
           .from('users')
           .select()
@@ -109,7 +110,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
         isLoading = false;
       });
     } catch (e) {
-      print("Error fetching staff: $e");
+      debugPrint("Error fetching staff: $e");
       if (!mounted) return;
       setState(() {
         isLoading = false;
@@ -124,8 +125,8 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
       Get.snackbar(
         'দুঃখিত',
         'এই ব্যবহারকারীর কোনো মোবাইল নম্বর যুক্ত করা নেই।',
-        backgroundColor: Colors.red.shade100,
-        colorText: Colors.red.shade900,
+        backgroundColor: AppTheme.tileOf(context, Colors.red),
+        colorText: AppTheme.tileInkOf(context, Colors.red),
       );
       return;
     }
@@ -138,7 +139,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
     );
   }
 
-  // কল করার আগে পপআপ দেখানোর ফাংশন[cite: 18]
+  // কল করার আগে পপআপ দেখানোর ফাংশন
   void _showCallConfirmationDialog(String phoneNumber, String name) {
     Get.defaultDialog(
       title: "কল করার পূর্বে",
@@ -152,13 +153,13 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
       confirmTextColor: Colors.white,
       buttonColor: Colors.indigo,
       onConfirm: () {
-        Get.back(); // পপআপ বন্ধ করা[cite: 18]
+        Get.back(); // পপআপ বন্ধ করা
         _makePhoneCall(phoneNumber);
       },
     );
   }
 
-  // ডায়ালপ্যাডে ফোন নম্বর ওপেন করার ফাংশন[cite: 18]
+  // ডায়ালপ্যাডে ফোন নম্বর ওপেন করার ফাংশন
   Future<void> _makePhoneCall(String phoneNumber) async {
     final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
     try {
@@ -168,18 +169,18 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
         Get.snackbar('ত্রুটি', 'কল করা সম্ভব হচ্ছে না');
       }
     } catch (e) {
-      print("Call error: $e");
+      debugPrint("Call error: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // ফিল্টার এবং সার্চ অনুযায়ী ডাটা ফিল্টার করা[cite: 18]
+    // ফিল্টার এবং সার্চ অনুযায়ী ডাটা ফিল্টার করা
     List<Map<String, dynamic>> filteredList = staffList.where((staff) {
       String role = staff['role'] ?? '';
       bool matchesFilter = true;
       if (selectedFilter == 'শিক্ষক') {
-        // 'শিক্ষক' ফিল্টারে সুপার অ্যাডমিন এবং শিক্ষক উভয়কেই দেখানো হবে[cite: 18]
+        // 'শিক্ষক' ফিল্টারে সুপার অ্যাডমিন এবং শিক্ষক উভয়কেই দেখানো হবে
         matchesFilter = (role == 'teacher' || role == 'super_admin');
       } else if (selectedFilter == 'স্টাফ') {
         matchesFilter = (role == 'staff');
@@ -191,7 +192,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
       return matchesFilter && matchesSearch;
     }).toList();
 
-    // 'শিক্ষক' ট্যাবের অধীনে সুপার অ্যাডমিনদের যেন সবার উপরে দেখানো হয়, সেজন্য লিস্ট সর্ট করা[cite: 18]
+    // 'শিক্ষক' ট্যাবের অধীনে সুপার অ্যাডমিনদের যেন সবার উপরে দেখানো হয়, সেজন্য লিস্ট সর্ট করা
     if (selectedFilter == 'শিক্ষক') {
       filteredList.sort((a, b) {
         String roleA = a['role'] ?? '';
@@ -202,7 +203,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
       });
     }
 
-    // কাউন্ট বের করা[cite: 18]
+    // কাউন্ট বের করা
     int totalCount = staffList.length;
     int teacherCount = staffList
         .where((s) => s['role'] == 'teacher' || s['role'] == 'super_admin')
@@ -258,14 +259,14 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
       body: hasError
           ? Center(
               child: Padding(
-                padding: const EdgeInsets.all(20.0),
+                padding: EdgeInsets.all(20.0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.wifi_off_rounded,
                       size: 60,
-                      color: Colors.grey,
+                      color: AppTheme.mutedOf(context),
                     ),
                     const SizedBox(height: 12),
                     const Text(
@@ -291,7 +292,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
               children: [
                 Column(
                   children: [
-                    // অ্যাপবারের নিচে ফিল্টার বাটনসমূহ (সংখ্য়া সহ)[cite: 18]
+                    // অ্যাপবারের নিচে ফিল্টার বাটনসমূহ (সংখ্য়া সহ)
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -320,14 +321,14 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
                         ],
                       ),
                     ),
-                    const Divider(height: 1, color: Colors.grey),
+                    Divider(height: 1, color: Colors.grey),
                     Expanded(
                       child: staffList.isEmpty && !isLoading
-                          ? const Center(
+                          ? Center(
                               child: Text(
                                 'এই মুহূর্তে কোনো শিক্ষক বা অ্যাডমিন সংযুক্ত নেই।',
                                 style: TextStyle(
-                                  color: Colors.grey,
+                                  color: AppTheme.mutedOf(context),
                                   fontSize: 15,
                                 ),
                               ),
@@ -336,7 +337,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
                               padding: const EdgeInsets.all(16),
                               itemCount: filteredList.length + 2,
                               itemBuilder: (context, index) {
-                                // মাঝের কার্ডগুলোর মাঝে ব্যানার অ্যাড সেট করার লজিক[cite: 18]
+                                // মাঝের কার্ডগুলোর মাঝে ব্যানার অ্যাড সেট করার লজিক
                                 if (index == 2 &&
                                     _isInListBannerAd1Loaded &&
                                     _inListBannerAd1 != null) {
@@ -360,7 +361,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
                                   );
                                 }
 
-                                // আসল লিস্টের ডেটা ইনডেক্স এডজাস্ট করা[cite: 18]
+                                // আসল লিস্টের ডেটা ইনডেক্স এডজাস্ট করা
                                 int staffIndex = index;
                                 if (index > 2 && _isInListBannerAd1Loaded) {
                                   staffIndex--;
@@ -380,7 +381,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
                                 String role = staff['role'] ?? '';
                                 String? photoUrl = staff['photo_url'];
 
-                                // রোল অনুযায়ী ইউজার টাইপ নির্ধারণ[cite: 18]
+                                // রোল অনুযায়ী ইউজার টাইপ নির্ধারণ
                                 String roleDisplayName = role == 'super_admin'
                                     ? 'সুপার অ্যাডমিন'
                                     : (role == 'staff' ? 'স্টাফ' : 'শিক্ষক');
@@ -391,26 +392,26 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
                                           : Colors.indigo);
 
                                 return Container(
-                                  margin: const EdgeInsets.only(bottom: 14),
+                                  margin: EdgeInsets.only(bottom: 14),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: AppTheme.surfaceOf(context),
                                     borderRadius: BorderRadius.circular(16),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.indigo.withOpacity(0.06),
+                                        color: Colors.indigo.withValues(alpha: 0.06),
                                         blurRadius: 10,
-                                        offset: const Offset(0, 4),
+                                        offset: Offset(0, 4),
                                       ),
                                     ],
                                   ),
                                   child: Padding(
-                                    padding: const EdgeInsets.all(16.0),
+                                    padding: EdgeInsets.all(16.0),
                                     child: Row(
                                       children: [
                                         CircleAvatar(
                                           radius: 28,
                                           backgroundColor:
-                                              Colors.indigo.shade50,
+                                              AppTheme.tileOf(context, Colors.indigo),
                                           backgroundImage:
                                               (photoUrl != null &&
                                                   photoUrl.isNotEmpty)
@@ -442,11 +443,11 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
                                                   Expanded(
                                                     child: Text(
                                                       name,
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                         fontSize: 16,
                                                         fontWeight:
                                                             FontWeight.bold,
-                                                        color: Colors.black87,
+                                                        color: AppTheme.inkOf(context),
                                                       ),
                                                       overflow:
                                                           TextOverflow.ellipsis,
@@ -460,7 +461,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
                                                         ),
                                                     decoration: BoxDecoration(
                                                       color: roleColor
-                                                          .withOpacity(0.1),
+                                                          .withValues(alpha: 0.1),
                                                       borderRadius:
                                                           BorderRadius.circular(
                                                             6,
@@ -478,32 +479,32 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
                                                   ),
                                                 ],
                                               ),
-                                              const SizedBox(height: 4),
+                                              SizedBox(height: 4),
                                               Text(
                                                 widget.academyName,
                                                 style: TextStyle(
                                                   fontSize: 12,
-                                                  color: Colors.grey.shade600,
+                                                  color: AppTheme.mutedOf(context),
                                                   fontWeight: FontWeight.w500,
                                                 ),
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                               ),
-                                              const SizedBox(height: 6),
+                                              SizedBox(height: 6),
                                               Row(
                                                 children: [
-                                                  const Icon(
+                                                  Icon(
                                                     Icons.phone_outlined,
                                                     size: 13,
-                                                    color: Colors.grey,
+                                                    color: AppTheme.mutedOf(context),
                                                   ),
-                                                  const SizedBox(width: 4),
+                                                  SizedBox(width: 4),
                                                   Expanded(
                                                     child: Text(
                                                       phone,
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                         fontSize: 12,
-                                                        color: Colors.grey,
+                                                        color: AppTheme.mutedOf(context),
                                                       ),
                                                       overflow:
                                                           TextOverflow.ellipsis,
@@ -514,15 +515,15 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
                                             ],
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
+                                        SizedBox(width: 8),
                                         IconButton(
                                           onPressed: () =>
                                               _onCallButtonPressed(phone, name),
-                                          icon: const Icon(Icons.phone_rounded),
+                                          icon: Icon(Icons.phone_rounded),
                                           color: Colors.green,
                                           style: IconButton.styleFrom(
                                             backgroundColor:
-                                                Colors.green.shade50,
+                                                AppTheme.tileOf(context, Colors.green),
                                           ),
                                         ),
                                       ],
@@ -551,7 +552,7 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
               ],
             ),
 
-      // পেজের বোটমে ফিক্সড ব্যানার অ্যাড দেখানোর অংশ[cite: 18]
+      // পেজের বোটমে ফিক্সড ব্যানার অ্যাড দেখানোর অংশ
       bottomNavigationBar: _isBannerAdLoaded && _bannerAd != null
           ? Container(
               alignment: Alignment.center,
@@ -559,19 +560,19 @@ class _StudentTeachersViewState extends State<StudentTeachersView> {
               height: _bannerAd!.size.height.toDouble(),
               child: AdWidget(ad: _bannerAd!),
             )
-          : const SizedBox.shrink(),
+          : SizedBox.shrink(),
     );
   }
 
-  // ফিল্টার চিপ বাটন ডিজাইন তৈরির মেথড[cite: 18]
+  // ফিল্টার চিপ বাটন ডিজাইন তৈরির মেথড
   Widget _buildFilterChip(String title, int count, bool isSelected) {
     return ChoiceChip(
       label: Text('$title ($count)'),
       selected: isSelected,
-      selectedColor: Colors.indigo.shade100,
-      backgroundColor: Colors.grey.shade200,
+      selectedColor: AppTheme.tileOf(context, Colors.indigo),
+      backgroundColor: AppTheme.borderOf(context),
       labelStyle: TextStyle(
-        color: isSelected ? Colors.indigo.shade900 : Colors.black87,
+        color: isSelected ? AppTheme.tileInkOf(context, Colors.indigo) : AppTheme.inkOf(context),
         fontWeight: FontWeight.bold,
         fontSize: 13,
       ),

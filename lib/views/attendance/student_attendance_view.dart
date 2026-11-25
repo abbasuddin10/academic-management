@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -181,7 +182,7 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.indigo.withOpacity(0.2),
+                      color: Colors.indigo.withValues(alpha: 0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -210,21 +211,21 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
                   ],
                 ),
               ),
-              const SizedBox(height: 25),
+              SizedBox(height: 25),
 
               // ২. সর্বশেষ ৬ দিনের রেকর্ড সেকশন
-              const Text(
+              Text(
                 'সর্বশেষ ৬ দিনের উপস্থিতি রেকর্ড',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: AppTheme.inkOf(context),
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
 
               attendanceList.isEmpty && isFetching
-                  ? const Center(
+                  ? Center(
                       child: Padding(
                         padding: EdgeInsets.all(30.0),
                         child: CircularProgressIndicator(color: Colors.indigo),
@@ -232,9 +233,9 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
                     )
                   : last6DaysList.isEmpty
                   ? Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.surfaceOf(context),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: const Center(
@@ -265,19 +266,19 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
                         } catch (_) {}
 
                         return Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.symmetric(
+                          margin: EdgeInsets.only(bottom: 10),
+                          padding: EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 12,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: AppTheme.surfaceOf(context),
                             borderRadius: BorderRadius.circular(14),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.grey.withOpacity(0.06),
+                                color: Colors.grey.withValues(alpha: 0.06),
                                 blurRadius: 8,
-                                offset: const Offset(0, 3),
+                                offset: Offset(0, 3),
                               ),
                             ],
                           ),
@@ -287,11 +288,11 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
                               Row(
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.all(8),
+                                    padding: EdgeInsets.all(8),
                                     decoration: BoxDecoration(
                                       color: isPresent
-                                          ? Colors.green.shade50
-                                          : Colors.red.shade50,
+                                          ? AppTheme.tileOf(context, Colors.green)
+                                          : AppTheme.tileOf(context, Colors.red),
                                       shape: BoxShape.circle,
                                     ),
                                     child: Icon(
@@ -302,25 +303,25 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
                                       size: 20,
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
+                                  SizedBox(width: 12),
                                   Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         dayName,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.black87,
+                                          color: AppTheme.inkOf(context),
                                         ),
                                       ),
-                                      const SizedBox(height: 2),
+                                      SizedBox(height: 2),
                                       Text(
                                         formattedDate,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 12,
-                                          color: Colors.grey,
+                                          color: AppTheme.mutedOf(context),
                                         ),
                                       ),
                                     ],
@@ -328,14 +329,14 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
                                 ],
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(
+                                padding: EdgeInsets.symmetric(
                                   horizontal: 10,
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
                                   color: isPresent
-                                      ? Colors.green.shade50
-                                      : Colors.red.shade50,
+                                      ? AppTheme.tileOf(context, Colors.green)
+                                      : AppTheme.tileOf(context, Colors.red),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -354,15 +355,15 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
                         );
                       },
                     ),
-              const SizedBox(height: 25),
+              SizedBox(height: 25),
 
               // ৩. মাস ভিত্তিক সামারি সেকশন (এক লাইনে ৩টি করে স্মার্ট কার্ড)
-              const Text(
+              Text(
                 'মাসভিত্তিক উপস্থিতি সামারি',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: AppTheme.inkOf(context),
                 ),
               ),
               const SizedBox(height: 12),
@@ -387,13 +388,13 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
                         int presentDays = monthlyPresentMap[monthKey]!;
 
                         return Container(
-                          padding: const EdgeInsets.all(10),
+                          padding: EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: AppTheme.surfaceOf(context),
                             borderRadius: BorderRadius.circular(14),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.grey.withOpacity(0.06),
+                                color: Colors.grey.withValues(alpha: 0.06),
                                 blurRadius: 8,
                                 offset: const Offset(0, 3),
                               ),
@@ -404,20 +405,20 @@ class _StudentAttendanceView extends State<StudentAttendanceView> {
                             children: [
                               Text(
                                 monthKey,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.indigo,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
-                              const SizedBox(height: 6),
+                              SizedBox(height: 6),
                               Text(
                                 '$presentDays দিন',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
+                                  color: AppTheme.inkOf(context),
                                 ),
                               ),
                               const SizedBox(height: 2),

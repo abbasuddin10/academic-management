@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:get/get.dart';
@@ -68,7 +69,7 @@ class _SyllabusViewState extends State<SyllabusView> {
       setState(() {
         isLoadingData = false;
       });
-      print("Syllabus status fetch error: $e");
+      debugPrint("Syllabus status fetch error: $e");
     }
   }
 
@@ -175,12 +176,13 @@ class _SyllabusViewState extends State<SyllabusView> {
       // প্রোগ্রেস দেখানোর জন্য ডায়ালগ ওপেন করা
       ValueNotifier<double> progressNotifier = ValueNotifier<double>(0.0);
 
+      if (!mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) {
-          return WillPopScope(
-            onWillPop: () async => false,
+          return PopScope(
+            canPop: false,
             child: AlertDialog(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -188,7 +190,7 @@ class _SyllabusViewState extends State<SyllabusView> {
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     'সিলেবাস ডাউনলোড হচ্ছে...',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
@@ -196,7 +198,7 @@ class _SyllabusViewState extends State<SyllabusView> {
                       color: Colors.teal,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  SizedBox(height: 20),
                   ValueListenableBuilder<double>(
                     valueListenable: progressNotifier,
                     builder: (context, value, child) {
@@ -204,7 +206,7 @@ class _SyllabusViewState extends State<SyllabusView> {
                         children: [
                           LinearProgressIndicator(
                             value: value,
-                            backgroundColor: Colors.teal.shade50,
+                            backgroundColor: AppTheme.tileOf(context, Colors.teal),
                             color: Colors.teal,
                             minHeight: 8,
                           ),
@@ -241,6 +243,7 @@ class _SyllabusViewState extends State<SyllabusView> {
       );
 
       // ডায়ালগ বন্ধ করা
+      if (!mounted) return;
       Navigator.pop(context);
 
       Get.snackbar(
@@ -252,6 +255,7 @@ class _SyllabusViewState extends State<SyllabusView> {
       );
     } catch (e) {
       // যদি ডায়ালগ খোলা থাকে তবে তা বন্ধ করা
+      if (!mounted) return;
       if (Navigator.canPop(context)) {
         Navigator.pop(context);
       }
@@ -338,6 +342,7 @@ class _SyllabusViewState extends State<SyllabusView> {
                   });
                 }
 
+                if (!context.mounted) return;
                 Navigator.pop(context);
 
                 setState(() {
@@ -380,17 +385,17 @@ class _SyllabusViewState extends State<SyllabusView> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
+                    Text(
                       'লোকাল ডিভাইস থেকে PDF অথবা ছবি (মাল্টিপল) সিলেক্ট করুন:',
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                     ElevatedButton.icon(
                       onPressed: isUploading ? null : pickFiles,
-                      icon: const Icon(Icons.folder_open, size: 16),
-                      label: const Text('ফাইল সিলেক্ট করুন'),
+                      icon: Icon(Icons.folder_open, size: 16),
+                      label: Text('ফাইল সিলেক্ট করুন'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal.shade50,
+                        backgroundColor: AppTheme.tileOf(context, Colors.teal),
                         foregroundColor: Colors.teal,
                         elevation: 0,
                       ),
@@ -470,7 +475,7 @@ class _SyllabusViewState extends State<SyllabusView> {
             )
           : ListView.builder(
               itemCount: classesList.length,
-              padding: const EdgeInsets.all(12.0),
+              padding: EdgeInsets.all(12.0),
               itemBuilder: (context, index) {
                 var cls = classesList[index];
                 String className =
@@ -479,16 +484,16 @@ class _SyllabusViewState extends State<SyllabusView> {
                 bool isUploaded = uploadedStatus[className] == true;
 
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
+                  margin: EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.surfaceOf(context),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.teal.shade200, width: 1.2),
+                    border: Border.all(color: AppTheme.tileOf(context, Colors.teal), width: 1.2),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.05),
+                        color: Colors.grey.withValues(alpha: 0.05),
                         blurRadius: 3,
-                        offset: const Offset(0, 2),
+                        offset: Offset(0, 2),
                       ),
                     ],
                   ),
@@ -496,13 +501,13 @@ class _SyllabusViewState extends State<SyllabusView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.all(12.0),
+                        padding: EdgeInsets.all(12.0),
                         child: Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(8),
+                              padding: EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.teal.shade50,
+                                color: AppTheme.tileOf(context, Colors.teal),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Icon(
@@ -511,11 +516,11 @@ class _SyllabusViewState extends State<SyllabusView> {
                                 size: 20,
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            SizedBox(width: 10),
                             Expanded(
                               child: Text(
                                 className,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.teal,
@@ -528,10 +533,10 @@ class _SyllabusViewState extends State<SyllabusView> {
                       Divider(
                         height: 1,
                         thickness: 1,
-                        color: Colors.teal.shade100,
+                        color: AppTheme.tileOf(context, Colors.teal),
                       ),
                       Padding(
-                        padding: const EdgeInsets.symmetric(
+                        padding: EdgeInsets.symmetric(
                           horizontal: 12.0,
                           vertical: 8.0,
                         ),
@@ -543,23 +548,23 @@ class _SyllabusViewState extends State<SyllabusView> {
                                 label: 'ভিউ',
                                 icon: Icons.visibility,
                                 color: Colors.blue.shade700,
-                                bgColor: Colors.blue.shade50,
+                                bgColor: AppTheme.tileOf(context, Colors.blue),
                                 onTap: () => _openSyllabusFile(className),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             Expanded(
                               child: _buildActionButton(
                                 label: 'ডাউনলোড',
                                 icon: Icons.download,
                                 color: Colors.green.shade700,
-                                bgColor: Colors.green.shade50,
+                                bgColor: AppTheme.tileOf(context, Colors.green),
                                 onTap: () => _downloadSyllabusFile(
                                   className,
                                 ), // প্রোগ্রেস সহ ডাউনলোড ফাংশন যুক্ত করা হলো
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            SizedBox(width: 8),
                             Expanded(
                               child: _buildActionButton(
                                 label: isUploaded ? 'রি-আপলোড' : 'আপলোড',
@@ -568,8 +573,8 @@ class _SyllabusViewState extends State<SyllabusView> {
                                     ? Colors.purple.shade700
                                     : Colors.deepOrange.shade700,
                                 bgColor: isUploaded
-                                    ? Colors.purple.shade50
-                                    : Colors.deepOrange.shade50,
+                                    ? AppTheme.tileOf(context, Colors.purple)
+                                    : AppTheme.tileOf(context, Colors.deepOrange),
                                 onTap: () => _showUploadDialog(className),
                               ),
                             ),
@@ -599,7 +604,7 @@ class _SyllabusViewState extends State<SyllabusView> {
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -73,7 +74,7 @@ class _CreateNoticeViewState extends State<CreateNoticeView> {
       setState(() {
         isLoadingAcademy = false;
       });
-      print("Academy fetch error: $e");
+      debugPrint("Academy fetch error: $e");
     }
   }
 
@@ -149,7 +150,7 @@ class _CreateNoticeViewState extends State<CreateNoticeView> {
           .getPublicUrl(filePath);
       return publicUrl;
     } catch (e) {
-      print("Upload error: $e");
+      debugPrint("Upload error: $e");
       return null;
     }
   }
@@ -281,8 +282,11 @@ class _CreateNoticeViewState extends State<CreateNoticeView> {
     );
 
     await Printing.layoutPdf(
-      onLayout: (format) async =>
-          await Printing.convertHtml(format: format, html: htmlContent),
+      onLayout: (format) async {
+        // No cross-platform replacement exists for HTML->PDF in printing yet.
+        // ignore: deprecated_member_use
+        return await Printing.convertHtml(format: format, html: htmlContent);
+      },
     );
   }
 
@@ -369,15 +373,20 @@ class _CreateNoticeViewState extends State<CreateNoticeView> {
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
-                      color: Colors.teal.shade50,
+                      color: AppTheme.tileOf(context, AppTheme.brandOf(context)),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.teal.shade200),
+                      border: Border.all(
+                        color: AppTheme.brandOf(context).withValues(alpha: 0.4),
+                      ),
                     ),
                     child: Text(
                       'স্বয়ংক্রিয় তৈরি স্মারক নং: $generatedMemoNo',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.teal,
+                        color: AppTheme.tileInkOf(
+                          context,
+                          AppTheme.brandOf(context),
+                        ),
                       ),
                     ),
                   ),
@@ -430,7 +439,7 @@ class _CreateNoticeViewState extends State<CreateNoticeView> {
                                 });
                               }
                             } catch (e) {
-                              print("File picker error: $e");
+                              debugPrint("File picker error: $e");
                             }
                           },
                           icon: const Icon(Icons.attach_file, size: 18),

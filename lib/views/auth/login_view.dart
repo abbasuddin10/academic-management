@@ -1,5 +1,6 @@
-import 'package:academy_management/views/auth/StudentLoginWidget.dart';
-import 'package:academy_management/views/auth/TeacherLoginWidget.dart';
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/views/auth/student_login_widget.dart';
+import 'package:academy_management/views/auth/teacher_login_widget.dart';
 import 'package:flutter/material.dart';
 
 class LoginView extends StatefulWidget {
@@ -15,11 +16,11 @@ class _LoginViewState extends State<LoginView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: AppTheme.altSurfaceOf(context),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20.0),
+            padding: EdgeInsets.all(20.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -27,11 +28,11 @@ class _LoginViewState extends State<LoginView> {
                 // লোগো বা আইকন
                 Center(
                   child: Container(
-                    padding: const EdgeInsets.all(15),
+                    padding: EdgeInsets.all(15),
                     decoration: BoxDecoration(
                       color: selectedRoleIndex == 0
-                          ? Colors.teal.shade50
-                          : Colors.indigo.shade50,
+                          ? AppTheme.tileOf(context, Colors.teal)
+                          : AppTheme.tileOf(context, Colors.indigo),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
@@ -53,24 +54,24 @@ class _LoginViewState extends State<LoginView> {
                       ? 'Academy Manager'
                       : 'Student Manager',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 5),
-                const Text(
+                SizedBox(height: 5),
+                Text(
                   'আপনার রোল সিলেক্ট করে লগইন করুন',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: Colors.grey),
                 ),
-                const SizedBox(height: 25),
+                SizedBox(height: 25),
 
                 // কাস্টম বাটন লেআউট (বাটনগুলো যেন গায়ে গায়ে লেগে না থাকে)
                 Container(
-                  padding: const EdgeInsets.all(4),
+                  padding: EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
+                    color: AppTheme.borderOf(context),
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: Row(
@@ -95,16 +96,16 @@ class _LoginViewState extends State<LoginView> {
                                   size: 18,
                                   color: selectedRoleIndex == 0
                                       ? Colors.white
-                                      : Colors.black87,
+                                      : AppTheme.inkOf(context),
                                 ),
-                                const SizedBox(width: 6),
+                                SizedBox(width: 6),
                                 Text(
                                   'শিক্ষক / অ্যাডমিন',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: selectedRoleIndex == 0
                                         ? Colors.white
-                                        : Colors.black87,
+                                        : AppTheme.inkOf(context),
                                     fontSize: 13,
                                   ),
                                 ),
@@ -136,16 +137,16 @@ class _LoginViewState extends State<LoginView> {
                                   size: 18,
                                   color: selectedRoleIndex == 1
                                       ? Colors.white
-                                      : Colors.black87,
+                                      : AppTheme.inkOf(context),
                                 ),
-                                const SizedBox(width: 6),
+                                SizedBox(width: 6),
                                 Text(
                                   'শিক্ষার্থী',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: selectedRoleIndex == 1
                                         ? Colors.white
-                                        : Colors.black87,
+                                        : AppTheme.inkOf(context),
                                     fontSize: 13,
                                   ),
                                 ),

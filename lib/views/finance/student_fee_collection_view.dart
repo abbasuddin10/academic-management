@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -310,22 +311,22 @@ class _StudentFeeCollectionPageState extends State<StudentFeeCollectionPage> {
                       border: OutlineInputBorder(),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
                   TextField(
                     controller: noteController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'নোট (ঐচ্ছিক বিবরণ)',
                       border: OutlineInputBorder(),
                     ),
                   ),
-                  const SizedBox(height: 15),
+                  SizedBox(height: 15),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isFormValid
                             ? Colors.indigo
-                            : Colors.indigo.shade200,
+                            : AppTheme.tileOf(context, Colors.indigo),
                         foregroundColor: Colors.white,
                       ),
                       onPressed: !isFormValid
@@ -386,7 +387,7 @@ class _StudentFeeCollectionPageState extends State<StudentFeeCollectionPage> {
                                 );
                               }
                             },
-                      child: const Text('সাবমিট করুন'),
+                      child: Text('সাবমিট করুন'),
                     ),
                   ),
                 ],
@@ -404,7 +405,7 @@ class _StudentFeeCollectionPageState extends State<StudentFeeCollectionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppTheme.altSurfaceOf(context),
       appBar: AppBar(
         title: const Text('বেতন ও ফি সংগ্রহ'),
         backgroundColor: Colors.teal,
@@ -426,23 +427,23 @@ class _StudentFeeCollectionPageState extends State<StudentFeeCollectionPage> {
             color: Colors.white,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               itemCount: _classList.length,
               itemBuilder: (context, index) {
                 final className = _classList[index];
                 final isSelected = _selectedClassFilter == className;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: EdgeInsets.symmetric(horizontal: 4),
                   child: ChoiceChip(
                     label: Text(className),
                     selected: isSelected,
                     selectedColor: Colors.teal,
                     labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black87,
+                      color: isSelected ? Colors.white : AppTheme.inkOf(context),
                       fontWeight: FontWeight.bold,
                       fontSize: 13,
                     ),
-                    backgroundColor: Colors.grey.shade200,
+                    backgroundColor: AppTheme.borderOf(context),
                     onSelected: (bool selected) {
                       setState(() {
                         _selectedClassFilter = className;
@@ -463,10 +464,10 @@ class _StudentFeeCollectionPageState extends State<StudentFeeCollectionPage> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'শিক্ষার্থীর নাম বা রোল দিয়ে খুঁজুন...',
-                prefixIcon: const Icon(Icons.search, color: Colors.teal),
+                prefixIcon: Icon(Icons.search, color: Colors.teal),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear),
+                        icon: Icon(Icons.clear),
                         onPressed: () {
                           _searchController.clear();
                           _filterStudents();
@@ -475,7 +476,7 @@ class _StudentFeeCollectionPageState extends State<StudentFeeCollectionPage> {
                     : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
+                  borderSide: BorderSide(color: AppTheme.borderOf(context)),
                 ),
                 filled: true,
                 fillColor: Colors.white,
@@ -525,19 +526,19 @@ class _StudentFeeCollectionPageState extends State<StudentFeeCollectionPage> {
 
                       return Card(
                         elevation: 3,
-                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        margin: EdgeInsets.symmetric(vertical: 6),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(10),
+                          padding: EdgeInsets.all(10),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               // প্রোফাইল ছবি
                               CircleAvatar(
                                 radius: 24,
-                                backgroundColor: Colors.teal.shade100,
+                                backgroundColor: AppTheme.tileOf(context, Colors.teal),
                                 backgroundImage:
                                     student['image_url'] != null &&
                                         student['image_url']
@@ -565,25 +566,25 @@ class _StudentFeeCollectionPageState extends State<StudentFeeCollectionPage> {
                                   children: [
                                     Text(
                                       studentName,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 15,
                                       ),
                                     ),
-                                    const SizedBox(height: 2),
+                                    SizedBox(height: 2),
                                     Text(
                                       '$studentClass | রোল: $studentRoll',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.w500,
                                         fontSize: 12,
-                                        color: Colors.black87,
+                                        color: AppTheme.inkOf(context),
                                       ),
                                     ),
-                                    const SizedBox(height: 2),
+                                    SizedBox(height: 2),
                                     Text(
                                       'মাসিক ফি: ৳ $monthlyFee\nমোবাইল: $phone\nপিতা: $fatherName',
                                       style: TextStyle(
-                                        color: Colors.grey.shade700,
+                                        color: AppTheme.mutedOf(context),
                                         fontSize: 11,
                                         height: 1.2,
                                       ),

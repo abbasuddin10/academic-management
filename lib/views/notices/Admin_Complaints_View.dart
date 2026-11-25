@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,6 +20,11 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
     String complaintId,
     String newStatus,
   ) async {
+    // Resolve colors before the await so no BuildContext crosses the gap.
+    final successBg = AppTheme.tileOf(context, Colors.green);
+    final successInk = AppTheme.tileInkOf(context, Colors.green);
+    final errorBg = AppTheme.tileOf(context, Colors.red);
+    final errorInk = AppTheme.tileInkOf(context, Colors.red);
     try {
       await _supabase
           .from('complaints')
@@ -28,8 +34,8 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
       Get.snackbar(
         'সফল',
         'অভিযোগের স্ট্যাটাস আপডেট করা হয়েছে ($newStatus)',
-        backgroundColor: Colors.green.shade50,
-        colorText: Colors.green.shade900,
+        backgroundColor: successBg,
+        colorText: successInk,
         snackPosition: SnackPosition.BOTTOM,
       );
       setState(() {}); // UI রিফ্রেশ করার জন্য
@@ -37,8 +43,8 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
       Get.snackbar(
         'ত্রুটি',
         'স্ট্যাটাস আপডেট করতে সমস্যা হয়েছে: $e',
-        backgroundColor: Colors.red.shade50,
-        colorText: Colors.red.shade900,
+        backgroundColor: errorBg,
+        colorText: errorInk,
         snackPosition: SnackPosition.BOTTOM,
       );
     }
@@ -66,11 +72,11 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
     }
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -80,10 +86,10 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14.5,
-                      color: Colors.black87,
+                      color: AppTheme.inkOf(context),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -96,7 +102,7 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
+                    color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -110,10 +116,10 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
             Text(
               details,
-              style: const TextStyle(fontSize: 12.5, color: Colors.black54),
+              style: TextStyle(fontSize: 12.5, color: AppTheme.mutedOf(context)),
             ),
             const SizedBox(height: 10),
             const Divider(height: 1),
@@ -128,12 +134,12 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
                     children: [
                       // ৩টি লাইন নিচে নিচে সাজানো হয়েছে
                       if (isAnonymous)
-                        const Text(
+                        Text(
                           'প্রেরক: গোপন (Anonymous)',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
-                            color: Colors.grey,
+                            color: AppTheme.mutedOf(context),
                           ),
                         )
                       else ...[
@@ -154,10 +160,10 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
                             color: Colors.indigo,
                           ),
                         ),
-                        const SizedBox(height: 2),
+                        SizedBox(height: 2),
                         Text(
                           'ক্লাস: $className',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                             color: Colors.indigo,
@@ -165,12 +171,12 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
                         ),
                       ],
                       if (dateStr.isNotEmpty) ...[
-                        const SizedBox(height: 4),
+                        SizedBox(height: 4),
                         Text(
                           'তারিখ: $dateStr',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
-                            color: Colors.grey,
+                            color: AppTheme.mutedOf(context),
                           ),
                         ),
                       ],
@@ -269,18 +275,18 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
+                children: [
                   Icon(
                     Icons.check_circle_outline,
                     size: 60,
-                    color: Colors.grey,
+                    color: AppTheme.mutedOf(context),
                   ),
                   SizedBox(height: 12),
                   Text(
                     'কোনো অভিযোগ পাওয়া যায়নি!',
                     style: TextStyle(
                       fontSize: 15,
-                      color: Colors.grey,
+                      color: AppTheme.mutedOf(context),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -309,14 +315,14 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Expanded(
                   flex: 1,
                   child: pendingList.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             'কোনো পেন্ডিং অভিযোগ নেই।',
-                            style: TextStyle(color: Colors.grey, fontSize: 13),
+                            style: TextStyle(color: AppTheme.mutedOf(context), fontSize: 13),
                           ),
                         )
                       : ListView.builder(
@@ -347,14 +353,14 @@ class _AdminComplaintsViewState extends State<AdminComplaintsView> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Expanded(
                   flex: 1,
                   child: resolvedList.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             'এখনো কোনো অভিযোগ সমাধান করা হয়নি।',
-                            style: TextStyle(color: Colors.grey, fontSize: 13),
+                            style: TextStyle(color: AppTheme.mutedOf(context), fontSize: 13),
                           ),
                         )
                       : ListView.builder(

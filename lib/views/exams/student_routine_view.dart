@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'dart:async';
 import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
@@ -133,7 +134,7 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
         });
       }
     } catch (e) {
-      print("Error fetching routine: $e");
+      debugPrint("Error fetching routine: $e");
     }
   }
 
@@ -355,25 +356,25 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
                       ),
                     ),
 
-                    const SizedBox(height: 24),
-                    const Text(
+                    SizedBox(height: 24),
+                    Text(
                       'সকল দিনের রুটিন',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                        color: AppTheme.inkOf(context),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
 
                     routineList.isEmpty
-                        ? const Padding(
+                        ? Padding(
                             padding: EdgeInsets.only(top: 30.0),
                             child: Center(
                               child: Text(
                                 'এই ক্লাসের জন্য কোনো রুটিন পাওয়া যায়নি।',
                                 style: TextStyle(
-                                  color: Colors.grey,
+                                  color: AppTheme.mutedOf(context),
                                   fontSize: 15,
                                 ),
                               ),
@@ -410,9 +411,9 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
                               bool isToday = (day == todayBengali);
 
                               return Container(
-                                margin: const EdgeInsets.only(bottom: 12),
+                                margin: EdgeInsets.only(bottom: 12),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: AppTheme.surfaceOf(context),
                                   borderRadius: BorderRadius.circular(14),
                                   border: isToday
                                       ? Border.all(
@@ -422,7 +423,7 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
                                       : null,
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.grey.withOpacity(0.1),
+                                      color: Colors.grey.withValues(alpha: 0.1),
                                       spreadRadius: 1,
                                       blurRadius: 4,
                                       offset: const Offset(0, 2),
@@ -432,7 +433,7 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
                                 child: ExpansionTile(
                                   initiallyExpanded:
                                       isToday, // আজকের দিনটি ডিফল্টভাবে খোলা থাকবে, বাকিগুলো বন্ধ
-                                  shape: const RoundedRectangleBorder(
+                                  shape: RoundedRectangleBorder(
                                     side: BorderSide.none,
                                   ),
                                   title: Row(
@@ -444,18 +445,18 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
                                           fontSize: 16,
                                           color: isToday
                                               ? Colors.indigo
-                                              : Colors.black87,
+                                              : AppTheme.inkOf(context),
                                         ),
                                       ),
                                       if (isToday) ...[
-                                        const SizedBox(width: 8),
+                                        SizedBox(width: 8),
                                         Container(
-                                          padding: const EdgeInsets.symmetric(
+                                          padding: EdgeInsets.symmetric(
                                             horizontal: 6,
                                             vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.indigo.shade50,
+                                            color: AppTheme.tileOf(context, Colors.indigo),
                                             borderRadius: BorderRadius.circular(
                                               4,
                                             ),
@@ -474,9 +475,9 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
                                   ),
                                   subtitle: Text(
                                     'মোট ক্লাস: ${dayRoutines.length}টি',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey,
+                                      color: AppTheme.mutedOf(context),
                                     ),
                                   ),
                                   children: dayRoutines.map((routine) {
@@ -491,16 +492,16 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
 
                                     return Container(
                                       width: double.infinity,
-                                      padding: const EdgeInsets.all(12),
-                                      margin: const EdgeInsets.symmetric(
+                                      padding: EdgeInsets.all(12),
+                                      margin: EdgeInsets.symmetric(
                                         horizontal: 16,
                                         vertical: 6,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFFF9FAFB),
+                                        color: Color(0xFFF9FAFB),
                                         borderRadius: BorderRadius.circular(10),
                                         border: Border.all(
-                                          color: Colors.grey.shade200,
+                                          color: AppTheme.borderOf(context),
                                         ),
                                       ),
                                       child: Column(
@@ -513,22 +514,22 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
                                             children: [
                                               Text(
                                                 'বিষয়: ${routine['subject'] ?? 'তথ্য নেই'}',
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.bold,
-                                                  color: Colors.black87,
+                                                  color: AppTheme.inkOf(context),
                                                 ),
                                               ),
                                               if (timeText.isNotEmpty)
                                                 Container(
                                                   padding:
-                                                      const EdgeInsets.symmetric(
+                                                      EdgeInsets.symmetric(
                                                         horizontal: 6,
                                                         vertical: 2,
                                                       ),
                                                   decoration: BoxDecoration(
                                                     color:
-                                                        Colors.indigo.shade50,
+                                                        AppTheme.tileOf(context, Colors.indigo),
                                                     borderRadius:
                                                         BorderRadius.circular(
                                                           4,
@@ -546,12 +547,12 @@ class _StudentRoutineViewState extends State<StudentRoutineView> {
                                                 ),
                                             ],
                                           ),
-                                          const SizedBox(height: 4),
+                                          SizedBox(height: 4),
                                           Text(
                                             'শিক্ষক: ${routine['teacher_name'] ?? 'তথ্য নেই'}',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 12,
-                                              color: Colors.grey,
+                                              color: AppTheme.mutedOf(context),
                                             ),
                                           ),
                                         ],

@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -160,7 +161,7 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
         });
       }
     } catch (e) {
-      print("Error fetching profile data by IDs: $e");
+      debugPrint("Error fetching profile data by IDs: $e");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -209,12 +210,12 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                         );
                       }
                     },
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text('গ্যালারি থেকে ছবি পরিবর্তন করুন'),
+                    icon: Icon(Icons.photo_library),
+                    label: Text('গ্যালারি থেকে ছবি পরিবর্তন করুন'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal.shade50,
-                      foregroundColor: Colors.teal.shade800,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: AppTheme.tileOf(context, Colors.teal),
+                      foregroundColor: AppTheme.tileInkOf(context, Colors.teal),
+                      padding: EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
                 ),
@@ -224,11 +225,11 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('বাতিল', style: TextStyle(color: Colors.grey)),
+              child: Text('বাতিল', style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal.shade800,
+                backgroundColor: AppTheme.tileInkOf(context, Colors.teal),
                 foregroundColor: Colors.white,
               ),
               onPressed: () async {
@@ -265,18 +266,19 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
             .eq('academy_id', widget.academyId.trim());
 
         await _fetchDataByIDs(background: true);
+        if (!mounted) return;
 
         Get.snackbar(
           'সফল হয়েছে',
           'প্রোফাইল সফলভাবে আপডেট করা হয়েছে!',
-          backgroundColor: Colors.teal.shade800,
+          backgroundColor: AppTheme.tileInkOf(context, Colors.teal),
           colorText: Colors.white,
           snackPosition: SnackPosition.BOTTOM,
           margin: const EdgeInsets.all(16),
         );
       }
     } catch (e) {
-      print("Error updating profile: $e");
+      debugPrint("Error updating profile: $e");
       Get.snackbar(
         'ত্রুটি',
         'আপডেট করতে সমস্যা হয়েছে!',
@@ -301,7 +303,7 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
 
       await _updateProfileInSupabase(newPhone: phone, newPhotoUrl: imageUrl);
     } catch (e) {
-      print("Storage upload error: $e");
+      debugPrint("Storage upload error: $e");
       setState(() => _isUpdating = false);
       Get.snackbar(
         'ত্রুটি',
@@ -315,13 +317,13 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'শিক্ষক প্রোফাইল ও প্রগ্রেস',
           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
         ),
-        backgroundColor: Colors.teal.shade800,
+        backgroundColor: AppTheme.tileInkOf(context, Colors.teal),
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
@@ -360,18 +362,18 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                           children: [
                             Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.fromLTRB(
+                              padding: EdgeInsets.fromLTRB(
                                 16,
                                 16,
                                 45,
                                 16,
                               ), // ডানপাশে আইকনের জন্য জায়গা রাখা হয়েছে
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: AppTheme.surfaceOf(context),
                                 borderRadius: BorderRadius.circular(16),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.03),
+                                    color: Colors.black.withValues(alpha: 0.03),
                                     blurRadius: 10,
                                     offset: const Offset(0, 4),
                                   ),
@@ -397,7 +399,7 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                                       children: [
                                         CircleAvatar(
                                           radius: 35,
-                                          backgroundColor: Colors.teal.shade50,
+                                          backgroundColor: AppTheme.tileOf(context, Colors.teal),
                                           backgroundImage:
                                               (_teacherData!['photo_url'] !=
                                                       null &&
@@ -425,9 +427,9 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                                           bottom: 0,
                                           right: 0,
                                           child: Container(
-                                            padding: const EdgeInsets.all(4),
+                                            padding: EdgeInsets.all(4),
                                             decoration: BoxDecoration(
-                                              color: Colors.teal.shade800,
+                                              color: AppTheme.tileInkOf(context, Colors.teal),
                                               shape: BoxShape.circle,
                                               border: Border.all(
                                                 color: Colors.white,
@@ -472,30 +474,30 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                                             color: Colors.teal.shade700,
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
+                                        SizedBox(height: 4),
                                         Text(
                                           _teacherData!['email'] ?? 'ইমেইল নেই',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 12,
-                                            color: Colors.grey,
+                                            color: AppTheme.mutedOf(context),
                                           ),
                                         ),
-                                        const SizedBox(height: 3),
+                                        SizedBox(height: 3),
                                         Row(
                                           children: [
                                             Icon(
                                               Icons.phone_android,
                                               size: 13,
-                                              color: Colors.teal.shade800,
+                                              color: AppTheme.tileInkOf(context, Colors.teal),
                                             ),
-                                            const SizedBox(width: 4),
+                                            SizedBox(width: 4),
                                             Text(
                                               _teacherData!['phone'] ??
                                                   'নম্বর দেওয়া নেই',
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w600,
-                                                color: Colors.teal.shade900,
+                                                color: AppTheme.tileInkOf(context, Colors.teal),
                                               ),
                                             ),
                                           ],
@@ -514,15 +516,15 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                                 onTap: _showEditProfileDialog,
                                 borderRadius: BorderRadius.circular(20),
                                 child: Container(
-                                  padding: const EdgeInsets.all(6),
+                                  padding: EdgeInsets.all(6),
                                   decoration: BoxDecoration(
-                                    color: Colors.teal.shade50,
+                                    color: AppTheme.tileOf(context, Colors.teal),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
                                     Icons.edit,
                                     size: 16,
-                                    color: Colors.teal.shade800,
+                                    color: AppTheme.tileInkOf(context, Colors.teal),
                                   ),
                                 ),
                               ),
@@ -560,7 +562,7 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                         const SizedBox(height: 24),
 
                         // ৩. সাম্প্রতিক হাজিরা হিস্টোরি
-                        const Text(
+                        Text(
                           'সাম্প্রতিক হাজিরা হিস্টোরি',
                           style: TextStyle(
                             fontSize: 16,
@@ -568,20 +570,20 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                             color: Color(0xFF1E293B),
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        SizedBox(height: 10),
                         _attendanceHistory.isEmpty
                             ? Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.all(24),
+                                padding: EdgeInsets.all(24),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: AppTheme.surfaceOf(context),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: const Center(
+                                child: Center(
                                   child: Text(
                                     'কোনো হাজিরা রেকর্ড পাওয়া যায়নি।',
                                     style: TextStyle(
-                                      color: Colors.grey,
+                                      color: AppTheme.mutedOf(context),
                                       fontSize: 13,
                                     ),
                                   ),
@@ -611,16 +613,16 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                                       (status.toLowerCase() == 'late');
 
                                   return Container(
-                                    padding: const EdgeInsets.symmetric(
+                                    padding: EdgeInsets.symmetric(
                                       horizontal: 12,
                                       vertical: 10,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.white,
+                                      color: AppTheme.surfaceOf(context),
                                       borderRadius: BorderRadius.circular(12),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withOpacity(0.02),
+                                          color: Colors.black.withValues(alpha: 0.02),
                                           blurRadius: 4,
                                           offset: const Offset(0, 2),
                                         ),
@@ -635,7 +637,7 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                                                 (isLate
                                                         ? Colors.amber
                                                         : Colors.green)
-                                                    .withOpacity(0.1),
+                                                    .withValues(alpha: 0.1),
                                             shape: BoxShape.circle,
                                           ),
                                           child: Icon(
@@ -643,7 +645,7 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                                                 ? Icons.access_time_filled
                                                 : Icons.check_circle,
                                             color: isLate
-                                                ? Colors.amber.shade800
+                                                ? AppTheme.tileInkOf(context, Colors.amber)
                                                 : Colors.green.shade700,
                                             size: 18,
                                           ),
@@ -662,30 +664,30 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w600,
                                                   color: isLate
-                                                      ? Colors.amber.shade900
-                                                      : Colors.black87,
+                                                      ? AppTheme.tileInkOf(context, Colors.amber)
+                                                      : AppTheme.inkOf(context),
                                                 ),
                                               ),
-                                              const SizedBox(height: 2),
+                                              SizedBox(height: 2),
                                               Text(
                                                 dateStr,
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 11,
-                                                  color: Colors.grey,
+                                                  color: AppTheme.mutedOf(context),
                                                 ),
                                               ),
                                             ],
                                           ),
                                         ),
                                         Container(
-                                          padding: const EdgeInsets.symmetric(
+                                          padding: EdgeInsets.symmetric(
                                             horizontal: 8,
                                             vertical: 4,
                                           ),
                                           decoration: BoxDecoration(
                                             color: isLate
-                                                ? Colors.amber.shade50
-                                                : Colors.teal.shade50,
+                                                ? AppTheme.tileOf(context, Colors.amber)
+                                                : AppTheme.tileOf(context, Colors.teal),
                                             borderRadius: BorderRadius.circular(
                                               6,
                                             ),
@@ -696,8 +698,8 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                                               fontSize: 11,
                                               fontWeight: FontWeight.w600,
                                               color: isLate
-                                                  ? Colors.amber.shade800
-                                                  : Colors.teal.shade800,
+                                                  ? AppTheme.tileInkOf(context, Colors.amber)
+                                                  : AppTheme.tileInkOf(context, Colors.teal),
                                             ),
                                           ),
                                         ),
@@ -712,8 +714,8 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
                 ),
                 if (_isUpdating)
                   Container(
-                    color: Colors.black.withOpacity(0.2),
-                    child: const Center(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    child: Center(
                       child: CircularProgressIndicator(color: Colors.teal),
                     ),
                   ),
@@ -731,15 +733,15 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
     required bool isPrimary,
   }) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isPrimary ? Colors.teal.shade800 : Colors.white,
+        color: isPrimary ? AppTheme.tileInkOf(context, Colors.teal) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
-            offset: const Offset(0, 3),
+            offset: Offset(0, 3),
           ),
         ],
       ),
@@ -754,21 +756,21 @@ class _TeacherProfileViewState extends State<TeacherProfileView> {
               color: isPrimary ? Colors.white70 : Colors.grey.shade600,
             ),
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             '${percentage.toStringAsFixed(0)}%',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: isPrimary ? Colors.white : Colors.teal.shade800,
+              color: isPrimary ? Colors.white : AppTheme.tileInkOf(context, Colors.teal),
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           LinearProgressIndicator(
             value: percentage / 100,
             backgroundColor: isPrimary
-                ? Colors.teal.shade900
-                : Colors.grey.shade100,
+                ? AppTheme.tileInkOf(context, Colors.teal)
+                : AppTheme.altSurfaceOf(context),
             color: percentage >= 75 ? Colors.greenAccent : Colors.amberAccent,
             minHeight: 6,
             borderRadius: BorderRadius.circular(3),

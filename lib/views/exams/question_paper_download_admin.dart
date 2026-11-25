@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -225,7 +226,7 @@ class _QuestionPaperDownloadAdminState
     if (timestamp == null || timestamp.isEmpty) return '';
     try {
       DateTime utcDate = DateTime.parse(timestamp).toUtc();
-      DateTime bdDate = utcDate.add(const Duration(hours: 6));
+      DateTime bdDate = utcDate.add(Duration(hours: 6));
       return DateFormat('dd MMM yyyy, hh:mm a').format(bdDate);
     } catch (e) {
       return timestamp.substring(0, 16);
@@ -241,7 +242,7 @@ class _QuestionPaperDownloadAdminState
               .toList();
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppTheme.altSurfaceOf(context),
       appBar: AppBar(
         title: Text(widget.examTitle),
         backgroundColor: Colors.deepPurple,
@@ -277,21 +278,21 @@ class _QuestionPaperDownloadAdminState
                   color: Colors.white,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: EdgeInsets.symmetric(horizontal: 12),
                     itemCount: _classList.length,
                     itemBuilder: (context, index) {
                       String className = _classList[index];
                       bool isSelected = (className == _selectedClass);
 
                       return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
+                        padding: EdgeInsets.only(right: 8.0),
                         child: ChoiceChip(
                           label: Text(className),
                           selected: isSelected,
                           selectedColor: Colors.deepPurple,
-                          backgroundColor: Colors.grey.shade200,
+                          backgroundColor: AppTheme.borderOf(context),
                           labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : Colors.black87,
+                            color: isSelected ? Colors.white : AppTheme.inkOf(context),
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
                           ),
@@ -305,15 +306,15 @@ class _QuestionPaperDownloadAdminState
                     },
                   ),
                 ),
-                const Divider(height: 1, thickness: 1),
+                Divider(height: 1, thickness: 1),
 
                 // ফাইল বা প্রশ্নগুলোর কার্ড লিস্ট
                 Expanded(
                   child: filteredList.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             'এই ক্যাটাগরিতে কোনো প্রশ্ন বা ফাইল পাওয়া যায়নি।',
-                            style: TextStyle(color: Colors.grey, fontSize: 15),
+                            style: TextStyle(color: AppTheme.mutedOf(context), fontSize: 15),
                           ),
                         )
                       : ListView.builder(
@@ -332,24 +333,24 @@ class _QuestionPaperDownloadAdminState
                             );
 
                             return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 6),
+                              margin: EdgeInsets.symmetric(vertical: 6),
                               elevation: 2,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Padding(
-                                padding: const EdgeInsets.all(12.0),
+                                padding: EdgeInsets.all(12.0),
                                 child: Row(
                                   children: [
                                     CircleAvatar(
                                       backgroundColor:
-                                          Colors.deepPurple.shade50,
+                                          AppTheme.tileOf(context, Colors.deepPurple),
                                       child: const Icon(
                                         Icons.insert_drive_file,
                                         color: Colors.deepPurple,
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
+                                    SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -357,26 +358,26 @@ class _QuestionPaperDownloadAdminState
                                         children: [
                                           Text(
                                             'বিষয়: $subjectName',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 16,
-                                              color: Colors.black87,
+                                              color: AppTheme.inkOf(context),
                                             ),
                                           ),
-                                          const SizedBox(height: 3),
+                                          SizedBox(height: 3),
                                           Text(
                                             'শ্রেণি: $className | আপলোডকারী: $uploaderName',
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: Colors.grey.shade700,
+                                              color: AppTheme.mutedOf(context),
                                             ),
                                           ),
-                                          const SizedBox(height: 2),
+                                          SizedBox(height: 2),
                                           Text(
                                             'সময়: $formattedTime',
                                             style: TextStyle(
                                               fontSize: 11,
-                                              color: Colors.grey.shade500,
+                                              color: AppTheme.mutedOf(context),
                                             ),
                                           ),
                                         ],

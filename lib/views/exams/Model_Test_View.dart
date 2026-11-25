@@ -1,13 +1,83 @@
-﻿import 'package:flutter/material.dart';
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/models/model_test.dart';
+import 'package:academy_management/repositories/exam_repository.dart';
+import 'package:academy_management/repositories/model_test_repository.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
-// আলাদা করা ফাইলটি ইম্পোর্ট করা হলো (আপনার প্রজেক্টের পাথ অনুযায়ী এটি ঠিক করে নেবেন)[cite: 21]
+// আলাদা করা ফাইলটি ইম্পোর্ট করা হলো (আপনার প্রজেক্টের পাথ অনুযায়ী এটি ঠিক করে নেবেন)
 import 'create_custom_model_test_view.dart';
+import 'model_test_ai_builder_view.dart';
+import 'model_test_results_view.dart';
 import 'package:academy_management/views/exams/question_create_teacher.dart';
 
-// অধ্যায়ের প্রশ্নগুলো দেখানোর জন্য ডেডিকেটেড পেইজ (সার্চ ফিচার সহ)[cite: 21]
+/// Shared validation for both question-bank edit dialogs.
+String? validateQuestionInput(
+  String questionText,
+  List<String> options,
+  String correctOption,
+) {
+  if (questionText.trim().isEmpty) return 'প্রশ্ন খালি রাখা যাবে না।';
+  if (options.length < 2 || options.any((item) => item.trim().isEmpty)) {
+    return 'প্রতিটি অপশন পূরণ করতে হবে।';
+  }
+  final normalized = options.map((item) => item.trim().toLowerCase()).toList();
+  if (normalized.toSet().length != normalized.length) {
+    return 'একই অপশন একাধিকবার দেওয়া যাবে না।';
+  }
+  if (!['A', 'B', 'C', 'D'].contains(correctOption.trim().toUpperCase())) {
+    return 'সঠিক অপশন নির্বাচন করুন।';
+  }
+  return null;
+}
+
+/// Deletes a bank question. Published tests keep their immutable snapshot, so
+/// this never corrupts an existing test or a student's recorded answers.
+Future<void> confirmDeleteQuestion({
+  required SupabaseClient supabase,
+  required Map<String, dynamic> question,
+  required Future<void> Function() onDeleted,
+}) async {
+  final confirm = await Get.dialog<bool>(
+    AlertDialog(
+      title: const Text('প্রশ্ন মুছুন'),
+      content: const Text('এই প্রশ্নটি কি সত্যিই মুছে ফেলতে চান?'),
+      actions: [
+        TextButton(
+          onPressed: () => Get.back(result: false),
+          child: const Text('বাতিল'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          onPressed: () => Get.back(result: true),
+          child: const Text('মুছুন'),
+        ),
+      ],
+    ),
+  );
+  if (confirm != true) return;
+  try {
+    await supabase.from('academy_questions').delete().eq('id', question['id']);
+    await onDeleted();
+    Get.snackbar(
+      'সফল',
+      'প্রশ্নটি মুছে ফেলা হয়েছে।',
+      backgroundColor: Colors.green,
+      colorText: Colors.white,
+    );
+  } catch (e) {
+    Get.snackbar(
+      'ত্রুটি',
+      ModelTestRepository.friendlyError(e),
+      backgroundColor: Colors.red,
+      colorText: Colors.white,
+    );
+  }
+}
+
+// অধ্যায়ের প্রশ্নগুলো দেখানোর জন্য ডেডিকেটেড পেইজ (সার্চ ফিচার সহ)
 class ChapterQuestionsView extends StatefulWidget {
   final String academyId;
   final String className;
@@ -50,16 +120,15 @@ class _ChapterQuestionsViewState extends State<ChapterQuestionsView> {
   Future<void> _loadQuestions() async {
     setState(() => isLoading = true);
     try {
-      final response = await supabase
-          .from('academy_questions')
-          .select()
-          .eq('academy_id', widget.academyId)
-          .eq('class_name', widget.className)
-          .eq('subject_name', widget.subjectName)
-          .eq('chapter_name', widget.chapterName);
+      final loaded = await ExamRepository().fetchQuestions(
+        academyId: widget.academyId,
+        className: widget.className,
+        subjectName: widget.subjectName,
+        chapterName: widget.chapterName,
+      );
 
       setState(() {
-        questions = List<Map<String, dynamic>>.from(response ?? []);
+        questions = loaded.map((question) => question.toMap()).toList();
         filteredQuestions = questions;
         isLoading = false;
       });
@@ -195,22 +264,40 @@ class _ChapterQuestionsViewState extends State<ChapterQuestionsView> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('বাতিল')),
+          TextButton(onPressed: () => Get.back(), child: Text('বাতিল')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.indigo.shade800,
+              backgroundColor: AppTheme.tileInkOf(context, Colors.indigo),
               foregroundColor: Colors.white,
             ),
             onPressed: () async {
+              final options = optionControllers
+                  .map((controller) => controller.text.trim())
+                  .toList();
+              final validation = validateQuestionInput(
+                textController.text,
+                options,
+                currentCorrectOption,
+              );
+              if (validation != null) {
+                Get.snackbar(
+                  'সতর্কতা',
+                  validation,
+                  backgroundColor: Colors.orange,
+                  colorText: Colors.white,
+                );
+                return;
+              }
               try {
+                // question_hash is kept accurate by the DB trigger in 0007.
                 await supabase
                     .from('academy_questions')
                     .update({
                       'question_text': textController.text.trim(),
-                      'option_a': optionControllers[0].text.trim(),
-                      'option_b': optionControllers[1].text.trim(),
-                      'option_c': optionControllers[2].text.trim(),
-                      'option_d': optionControllers[3].text.trim(),
+                      'option_a': options[0],
+                      'option_b': options[1],
+                      'option_c': options[2],
+                      'option_d': options[3],
                       'correct_option': currentCorrectOption,
                     })
                     .eq('id', qData['id']);
@@ -223,7 +310,7 @@ class _ChapterQuestionsViewState extends State<ChapterQuestionsView> {
                 Get.snackbar("ত্রুটি", "প্রশ্ন আপডেট করতে সমস্যা হয়েছে।");
               }
             },
-            child: const Text('সংরক্ষণ'),
+            child: Text('সংরক্ষণ'),
           ),
         ],
       ),
@@ -234,7 +321,7 @@ class _ChapterQuestionsViewState extends State<ChapterQuestionsView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.indigo.shade800,
+        backgroundColor: AppTheme.tileInkOf(context, Colors.indigo),
         foregroundColor: Colors.white,
         title: _isSearching
             ? TextField(
@@ -287,11 +374,11 @@ class _ChapterQuestionsViewState extends State<ChapterQuestionsView> {
                         .toUpperCase();
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  margin: EdgeInsets.symmetric(vertical: 8),
                   elevation: 1,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.grey.shade300),
+                    side: BorderSide(color: AppTheme.borderOf(context)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(12),
@@ -318,6 +405,19 @@ class _ChapterQuestionsViewState extends State<ChapterQuestionsView> {
                               ),
                               onPressed: () => _editQuestion(qData),
                             ),
+                            IconButton(
+                              tooltip: 'প্রশ্ন মুছুন',
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: Colors.red,
+                              ),
+                              onPressed: () => confirmDeleteQuestion(
+                                supabase: supabase,
+                                question: qData,
+                                onDeleted: _loadQuestions,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -328,19 +428,19 @@ class _ChapterQuestionsViewState extends State<ChapterQuestionsView> {
                           bool isCorrect = optionLetter == correctOptionKey;
 
                           return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 2),
-                            padding: const EdgeInsets.symmetric(
+                            margin: EdgeInsets.symmetric(vertical: 2),
+                            padding: EdgeInsets.symmetric(
                               horizontal: 8,
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
                               color: isCorrect
-                                  ? Colors.green.shade50
-                                  : Colors.grey.shade50,
+                                  ? AppTheme.tileOf(context, Colors.green)
+                                  : AppTheme.altSurfaceOf(context),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
                                 color: isCorrect
-                                    ? Colors.green.shade300
+                                    ? AppTheme.tileOf(context, Colors.green)
                                     : Colors.transparent,
                               ),
                             ),
@@ -353,14 +453,17 @@ class _ChapterQuestionsViewState extends State<ChapterQuestionsView> {
                                   size: 16,
                                   color: isCorrect ? Colors.green : Colors.grey,
                                 ),
-                                const SizedBox(width: 8),
+                                SizedBox(width: 8),
                                 Text(
                                   '$optionLetter. ',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: isCorrect
-                                        ? Colors.green.shade900
-                                        : Colors.black87,
+                                        ? AppTheme.tileInkOf(
+                                            context,
+                                            Colors.green,
+                                          )
+                                        : AppTheme.inkOf(context),
                                   ),
                                 ),
                                 Expanded(
@@ -369,8 +472,11 @@ class _ChapterQuestionsViewState extends State<ChapterQuestionsView> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: isCorrect
-                                          ? Colors.green.shade900
-                                          : Colors.black87,
+                                          ? AppTheme.tileInkOf(
+                                              context,
+                                              Colors.green,
+                                            )
+                                          : AppTheme.inkOf(context),
                                       fontWeight: isCorrect
                                           ? FontWeight.bold
                                           : FontWeight.normal,
@@ -391,7 +497,7 @@ class _ChapterQuestionsViewState extends State<ChapterQuestionsView> {
   }
 }
 
-// সকল প্রশ্ন একসাথে দেখানোর জন্য ডেডিকেটেড পেইজ (সার্চ ফিচার সহ)[cite: 21]
+// সকল প্রশ্ন একসাথে দেখানোর জন্য ডেডিকেটেড পেইজ (সার্চ ফিচার সহ)
 class AllSubjectQuestionsView extends StatefulWidget {
   final String academyId;
   final String className;
@@ -441,7 +547,7 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
           .eq('subject_name', widget.subjectName);
 
       setState(() {
-        questions = List<Map<String, dynamic>>.from(response ?? []);
+        questions = List<Map<String, dynamic>>.from(response);
         filteredQuestions = questions;
         isLoading = false;
       });
@@ -577,22 +683,40 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('বাতিল')),
+          TextButton(onPressed: () => Get.back(), child: Text('বাতিল')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.indigo.shade800,
+              backgroundColor: AppTheme.tileInkOf(context, Colors.indigo),
               foregroundColor: Colors.white,
             ),
             onPressed: () async {
+              final options = optionControllers
+                  .map((controller) => controller.text.trim())
+                  .toList();
+              final validation = validateQuestionInput(
+                textController.text,
+                options,
+                currentCorrectOption,
+              );
+              if (validation != null) {
+                Get.snackbar(
+                  'সতর্কতা',
+                  validation,
+                  backgroundColor: Colors.orange,
+                  colorText: Colors.white,
+                );
+                return;
+              }
               try {
+                // question_hash is kept accurate by the DB trigger in 0007.
                 await supabase
                     .from('academy_questions')
                     .update({
                       'question_text': textController.text.trim(),
-                      'option_a': optionControllers[0].text.trim(),
-                      'option_b': optionControllers[1].text.trim(),
-                      'option_c': optionControllers[2].text.trim(),
-                      'option_d': optionControllers[3].text.trim(),
+                      'option_a': options[0],
+                      'option_b': options[1],
+                      'option_c': options[2],
+                      'option_d': options[3],
                       'correct_option': currentCorrectOption,
                     })
                     .eq('id', qData['id']);
@@ -605,7 +729,7 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
                 Get.snackbar("ত্রুটি", "প্রশ্ন আপডেট করতে সমস্যা হয়েছে।");
               }
             },
-            child: const Text('সংরক্ষণ'),
+            child: Text('সংরক্ষণ'),
           ),
         ],
       ),
@@ -616,7 +740,7 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.indigo.shade800,
+        backgroundColor: AppTheme.tileInkOf(context, Colors.indigo),
         foregroundColor: Colors.white,
         title: _isSearching
             ? TextField(
@@ -672,11 +796,11 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
                         .toUpperCase();
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  margin: EdgeInsets.symmetric(vertical: 8),
                   elevation: 1,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.grey.shade300),
+                    side: BorderSide(color: AppTheme.borderOf(context)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(12),
@@ -703,6 +827,19 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
                               ),
                               onPressed: () => _editQuestion(qData),
                             ),
+                            IconButton(
+                              tooltip: 'প্রশ্ন মুছুন',
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: Colors.red,
+                              ),
+                              onPressed: () => confirmDeleteQuestion(
+                                supabase: supabase,
+                                question: qData,
+                                onDeleted: _loadAllQuestions,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -713,19 +850,19 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
                           bool isCorrect = optionLetter == correctOptionKey;
 
                           return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 2),
-                            padding: const EdgeInsets.symmetric(
+                            margin: EdgeInsets.symmetric(vertical: 2),
+                            padding: EdgeInsets.symmetric(
                               horizontal: 8,
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
                               color: isCorrect
-                                  ? Colors.green.shade50
-                                  : Colors.grey.shade50,
+                                  ? AppTheme.tileOf(context, Colors.green)
+                                  : AppTheme.altSurfaceOf(context),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
                                 color: isCorrect
-                                    ? Colors.green.shade300
+                                    ? AppTheme.tileOf(context, Colors.green)
                                     : Colors.transparent,
                               ),
                             ),
@@ -738,14 +875,17 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
                                   size: 16,
                                   color: isCorrect ? Colors.green : Colors.grey,
                                 ),
-                                const SizedBox(width: 8),
+                                SizedBox(width: 8),
                                 Text(
                                   '$optionLetter. ',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: isCorrect
-                                        ? Colors.green.shade900
-                                        : Colors.black87,
+                                        ? AppTheme.tileInkOf(
+                                            context,
+                                            Colors.green,
+                                          )
+                                        : AppTheme.inkOf(context),
                                   ),
                                 ),
                                 Expanded(
@@ -754,8 +894,11 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: isCorrect
-                                          ? Colors.green.shade900
-                                          : Colors.black87,
+                                          ? AppTheme.tileInkOf(
+                                              context,
+                                              Colors.green,
+                                            )
+                                          : AppTheme.inkOf(context),
                                       fontWeight: isCorrect
                                           ? FontWeight.bold
                                           : FontWeight.normal,
@@ -776,7 +919,7 @@ class _AllSubjectQuestionsViewState extends State<AllSubjectQuestionsView> {
   }
 }
 
-// মূল ModelTestView ক্লাস[cite: 21]
+// মূল ModelTestView ক্লাস
 class ModelTestView extends StatefulWidget {
   final String academyId;
   final String? currentUserId;
@@ -807,6 +950,8 @@ class _ModelTestViewState extends State<ModelTestView> {
   String? selectedSubject;
 
   List<Map<String, dynamic>> modelTests = [];
+  final Map<String, ModelTest> _testById = <String, ModelTest>{};
+  final _modelTestRepository = ModelTestRepository();
   int totalSubjectQuestions = 0;
 
   final Map<String, int> _selectedButtonIndices = {};
@@ -832,7 +977,7 @@ class _ModelTestViewState extends State<ModelTestView> {
           uniqueClasses.add(className);
         }
       }
-    
+
       setState(() {
         availableClasses = uniqueClasses.toList();
         availableClasses.sort();
@@ -860,7 +1005,7 @@ class _ModelTestViewState extends State<ModelTestView> {
           uniqueSubjects.add(subjectName);
         }
       }
-    
+
       setState(() {
         availableSubjects = uniqueSubjects.toList();
         availableSubjects.sort();
@@ -901,123 +1046,170 @@ class _ModelTestViewState extends State<ModelTestView> {
     await _loadTotalQuestionsCount();
 
     try {
-      final response = await supabase
-          .from('exam_schedules')
-          .select()
-          .eq('academy_id', widget.academyId)
-          .eq('class_name', selectedClass!)
-          .eq('subject_name', selectedSubject!);
+      final tests = await _modelTestRepository.fetchTests(
+        academyId: widget.academyId,
+        className: selectedClass,
+        // Staff must see drafts so they can edit/publish them. Student screens
+        // leave this false and only ever receive published/expired tests.
+        includeUnpublished: true,
+      );
+      final scoped = tests
+          .where((test) => test.subjectName == selectedSubject)
+          .toList();
 
-      List<Map<String, dynamic>> loadedTests = [];
-      DateTime now = DateTime.now();
-      for (var schedule in (response as List)) {
-        bool isActiveFromDb = schedule['is_active'] ?? false;
-        String? endTimeStr = schedule['end_time'];
-
-        if (endTimeStr != null) {
-          DateTime endDt = DateTime.parse(endTimeStr).toLocal();
-          if (endDt.isBefore(now) && isActiveFromDb) {
-            isActiveFromDb = false;
-            await supabase
-                .from('exam_schedules')
-                .update({'is_active': false})
-                .eq('id', schedule['id']);
-          }
-        }
-
-        loadedTests.add({
-          'id': schedule['id'],
-          'exam_title': schedule['exam_title'] ?? 'নামবিহীন মডেল টেস্ট',
-          'start_time': schedule['start_time'],
-          'end_time': endTimeStr,
-          'is_active': isActiveFromDb,
-          'question_count': schedule['question_count'] ?? 0,
-          'question_creator_id': schedule['question_creator_id'],
-          'question_creator_name': schedule['question_creator_name'],
+      final loaded = <Map<String, dynamic>>[];
+      _testById.clear();
+      for (final test in scoped) {
+        _testById[test.id] = test;
+        loaded.add({
+          'id': test.id,
+          'exam_title': test.examTitle,
+          'start_time': test.startAt?.toIso8601String(),
+          'end_time': test.endAt?.toIso8601String(),
+          'is_active': test.isPublished,
+          'status': test.status,
+          'question_count': test.questionCount,
+          'question_creator_id': test.creatorId,
+          'question_creator_name': test.creatorName,
+          'duration_minutes': test.durationMinutes,
+          'total_marks': test.totalMarks,
         });
       }
-    
+      if (!mounted) return;
       setState(() {
-        modelTests = loadedTests;
+        modelTests = loaded;
         _selectedButtonIndices.clear();
       });
     } catch (e) {
-      debugPrint("Error loading model tests: $e");
+      debugPrint('Error loading model tests: $e');
+      if (mounted) {
+        Get.snackbar(
+          'ত্রুটি',
+          ModelTestRepository.friendlyError(e),
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
     } finally {
-      setState(() => isLoadingTests = false);
+      if (mounted) setState(() => isLoadingTests = false);
     }
   }
 
-  // পরীক্ষার নাম এডিট করার ফাংশন[cite: 21]
-  Future<void> _editExamTitle(String oldTitle, dynamic examId) async {
-    final TextEditingController titleController = TextEditingController(
-      text: oldTitle,
+  // পরীক্ষার নাম এডিট করার ফাংশন
+  /// Opens the full editor (title, schedule, duration, marks, questions,
+  /// publish state) instead of the old title-only dialog.
+  Future<void> _editTest(Map<String, dynamic> test) async {
+    final modelTest = _testById[test['id']?.toString()];
+    if (modelTest == null) {
+      Get.snackbar(
+        'ত্রুটি',
+        'পরীক্ষার তথ্য পাওয়া যায়নি।',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return;
+    }
+    final saved = await Get.to(
+      () => CreateCustomModelTestView(
+        academyId: widget.academyId,
+        className: selectedClass!,
+        subjectName: selectedSubject!,
+        totalSubjectQuestions: totalSubjectQuestions,
+        currentUserId: widget.currentUserId,
+        currentUserName: widget.currentUserName,
+        existingTest: modelTest,
+      ),
     );
+    if (saved == true) _loadModelTests();
+  }
 
-    await Get.dialog(
-      AlertDialog(
-        title: const Text(
-          'পরীক্ষার নাম এডিট করুন',
-          style: TextStyle(fontSize: 16),
-        ),
-        content: TextField(
-          controller: titleController,
-          decoration: const InputDecoration(
-            labelText: 'নতুন নাম',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('বাতিল')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.indigo.shade800,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              String newTitle = titleController.text.trim();
-              if (newTitle.isEmpty) {
-                Get.snackbar(
-                  "ত্রুটি",
-                  "নাম খালি রাখা যাবে না।",
-                  backgroundColor: Colors.red,
-                  colorText: Colors.white,
-                );
-                return;
-              }
+  Future<void> _openResults(Map<String, dynamic> test) async {
+    final modelTest = _testById[test['id']?.toString()];
+    if (modelTest == null) return;
+    await Get.to(() => ModelTestResultsView(test: modelTest));
+  }
 
-              try {
-                await supabase
-                    .from('exam_schedules')
-                    .update({'exam_title': newTitle})
-                    .eq('id', examId);
-
-                Get.back();
-                Get.snackbar(
-                  "সফল",
-                  "পরীক্ষার নাম সফলভাবে আপডেট করা হয়েছে।",
-                  backgroundColor: Colors.green,
-                  colorText: Colors.white,
-                );
-                _loadModelTests();
-              } catch (e) {
-                debugPrint("Error updating exam title: $e");
-                Get.snackbar(
-                  "ত্রুটি",
-                  "নাম আপডেট করতে সমস্যা হয়েছে: $e",
-                  backgroundColor: Colors.red,
-                  colorText: Colors.white,
-                );
-              }
-            },
-            child: const Text('সংরক্ষণ'),
-          ),
-        ],
+  void _openAiBuilder() {
+    if (selectedClass == null || selectedClass!.trim().isEmpty) {
+      Get.snackbar(
+        'প্রথমে ক্লাস বাছুন',
+        'AI বিল্ডার ব্যবহার করতে উপর থেকে ক্লাস সিলেক্ট করুন।',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+      return;
+    }
+    Get.to(
+      () => ModelTestAiBuilderView(
+        academyId: widget.academyId,
+        className: selectedClass!,
+        subjectName: selectedSubject,
+        availableSubjects: availableSubjects,
+        currentUserId: widget.currentUserId,
+        currentUserName: widget.currentUserName,
+        existingTests: _testById.values.toList(),
+        onCreated: () {
+          _loadTotalQuestionsCount();
+          _loadModelTests();
+        },
       ),
     );
   }
 
-  // ডিলেট লজিক ফাংশন[cite: 21]
+  Future<void> _openCreateTest() async {
+    await Get.to(
+      () => CreateCustomModelTestView(
+        academyId: widget.academyId,
+        className: selectedClass!,
+        subjectName: selectedSubject!,
+        totalSubjectQuestions: totalSubjectQuestions,
+        currentUserId: widget.currentUserId,
+        currentUserName: widget.currentUserName,
+      ),
+    );
+    _loadModelTests();
+  }
+
+  Future<void> _openCreateQuestion() async {
+    await Get.to(
+      () => CreateTestView(
+        academyId: widget.academyId,
+        className: selectedClass!,
+        subjectName: selectedSubject!,
+        currentUserId: widget.currentUserId,
+        currentUserName: widget.currentUserName,
+        onSaved: () {
+          // Immediately refresh the visible question count and chapter list
+          // behind the form.
+          _loadTotalQuestionsCount();
+        },
+      ),
+    );
+    _loadTotalQuestionsCount();
+    _loadModelTests();
+  }
+
+  Future<void> _publishTest(Map<String, dynamic> test) async {
+    try {
+      await _modelTestRepository.setStatus(test['id'].toString(), 'published');
+      Get.snackbar(
+        'সফল',
+        'পরীক্ষাটি প্রকাশিত হয়েছে।',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+      _loadModelTests();
+    } catch (e) {
+      Get.snackbar(
+        'ত্রুটি',
+        ModelTestRepository.friendlyError(e),
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  // ডিলেট লজিক ফাংশন
   Future<void> _deleteExamCard(Map<String, dynamic> test) async {
     String testTitle = test['exam_title'];
     dynamic examId = test['id'];
@@ -1048,7 +1240,10 @@ class _ModelTestViewState extends State<ModelTestView> {
         onConfirm: () async {
           Get.back();
           try {
-            await supabase.from('exam_schedules').delete().eq('id', examId);
+            await _modelTestRepository.deleteTest(
+              testId: examId.toString(),
+              academyId: widget.academyId,
+            );
 
             Get.snackbar(
               "সফল",
@@ -1080,255 +1275,12 @@ class _ModelTestViewState extends State<ModelTestView> {
             "এই পরীক্ষাটি আপনি তৈরি করেননি। এটি তৈরি করেছেন: $nameToShow। পরীক্ষাটি ডিলিট করতে চাইলে উনার সাথে যোগাযোগ করুন।",
         textConfirm: "ঠিক আছে",
         confirmTextColor: Colors.white,
-        buttonColor: Colors.indigo.shade800,
+        buttonColor: AppTheme.tileInkOf(context, Colors.indigo),
         onConfirm: () {
           Get.back();
         },
       );
     }
-  }
-
-  Future<void> _setExamSchedule(String testTitle, dynamic examId) async {
-    DateTime? startDate;
-    TimeOfDay? startTime;
-
-    DateTime? endDate;
-    TimeOfDay? endTime;
-
-    await Get.dialog(
-      AlertDialog(
-        title: Text(
-          '$testTitle\nপরীক্ষার সময় নির্ধারণ করুন',
-          style: const TextStyle(fontSize: 16),
-        ),
-        content: StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'শুরুর সময়:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            DateTime? pickedDate = await showDatePicker(
-                              context: context,
-                              initialDate: DateTime.now(),
-                              firstDate: DateTime.now(),
-                              lastDate: DateTime(2030),
-                            );
-                            if (pickedDate != null) {
-                              setStateDialog(() => startDate = pickedDate);
-                            }
-                          },
-                          icon: const Icon(Icons.calendar_today, size: 16),
-                          label: Text(
-                            startDate == null
-                                ? 'তারিখ বাছুন'
-                                : DateFormat('yyyy-MM-dd').format(startDate!),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            TimeOfDay? pickedTime = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay.now(),
-                            );
-                            if (pickedTime != null) {
-                              setStateDialog(() => startTime = pickedTime);
-                            }
-                          },
-                          icon: const Icon(Icons.access_time, size: 16),
-                          label: Text(
-                            startTime == null
-                                ? 'সময় বাছুন'
-                                : startTime!.format(context),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'শেষের সময়:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            DateTime? pickedDate = await showDatePicker(
-                              context: context,
-                              initialDate: startDate ?? DateTime.now(),
-                              firstDate: DateTime.now(),
-                              lastDate: DateTime(2030),
-                            );
-                            if (pickedDate != null) {
-                              setStateDialog(() => endDate = pickedDate);
-                            }
-                          },
-                          icon: const Icon(Icons.calendar_today, size: 16),
-                          label: Text(
-                            endDate == null
-                                ? 'তারিখ বাছুন'
-                                : DateFormat('yyyy-MM-dd').format(endDate!),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            TimeOfDay? pickedTime = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay.now(),
-                            );
-                            if (pickedTime != null) {
-                              setStateDialog(() => endTime = pickedTime);
-                            }
-                          },
-                          icon: const Icon(Icons.access_time, size: 16),
-                          label: Text(
-                            endTime == null
-                                ? 'সময় বাছুন'
-                                : endTime!.format(context),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-        actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('বাতিল')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.indigo.shade800,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () async {
-              if (startDate == null ||
-                  startTime == null ||
-                  endDate == null ||
-                  endTime == null) {
-                Get.snackbar(
-                  "সতর্কতা",
-                  "দয়া করে শুরু এবং শেষের উভয় তারিখ ও সময় সিলেক্ট করুন।",
-                  backgroundColor: Colors.orange,
-                  colorText: Colors.white,
-                );
-                return;
-              }
-
-              // লোকাল টাইম অনুযায়ী DateTime তৈরি করা
-              DateTime startDateTime = DateTime(
-                startDate!.year,
-                startDate!.month,
-                startDate!.day,
-                startTime!.hour,
-                startTime!.minute,
-              );
-
-              DateTime endDateTime = DateTime(
-                endDate!.year,
-                endDate!.month,
-                endDate!.day,
-                endTime!.hour,
-                endTime!.minute,
-              );
-
-              if (endDateTime.isBefore(startDateTime)) {
-                Get.snackbar(
-                  "ত্রুটি",
-                  "শেষের সময় শুরুর সময়ের আগে হতে পারে না।",
-                  backgroundColor: Colors.red,
-                  colorText: Colors.white,
-                );
-                return;
-              }
-
-              try {
-                // এই ক্লাসে নির্দিষ্ট সময়ে বা overlapping সময়ে অন্য কোনো active model test আছে কিনা চেক করা[cite: 21]
-                final existingSchedules = await supabase
-                    .from('exam_schedules')
-                    .select()
-                    .eq('academy_id', widget.academyId)
-                    .eq('class_name', selectedClass!)
-                    .eq('is_active', true)
-                    .neq('id', examId);
-
-                bool hasConflict = false;
-                for (var schedule in (existingSchedules as List)) {
-                  if (schedule['start_time'] != null &&
-                      schedule['end_time'] != null) {
-                    DateTime existingStart = DateTime.parse(
-                      schedule['start_time'],
-                    ).toLocal();
-                    DateTime existingEnd = DateTime.parse(
-                      schedule['end_time'],
-                    ).toLocal();
-
-                    if (startDateTime.isBefore(existingEnd) &&
-                        endDateTime.isAfter(existingStart)) {
-                      hasConflict = true;
-                      break;
-                    }
-                  }
-                }
-
-                if (hasConflict) {
-                  Get.snackbar(
-                    "সতর্কতা",
-                    "এই ক্লাসে এই নির্দিষ্ট সময়ে বা এর মধ্যে ইতিমধ্যে অন্য একটি মডেল টেস্ট চালু (Active) রয়েছে!",
-                    backgroundColor: Colors.red,
-                    colorText: Colors.white,
-                    duration: const Duration(seconds: 4),
-                  );
-                  return;
-                }
-
-                await supabase
-                    .from('exam_schedules')
-                    .update({
-                      'start_time': startDateTime.toIso8601String(),
-                      'end_time': endDateTime.toIso8601String(),
-                      'is_active': true,
-                    })
-                    .eq('id', examId);
-
-                Get.back();
-                Get.snackbar(
-                  "সফল",
-                  "পরীক্ষার সময় সফলভাবে নির্ধারণ করা হয়েছে।",
-                  backgroundColor: Colors.green,
-                  colorText: Colors.white,
-                );
-                _loadModelTests();
-              } catch (e) {
-                debugPrint("Error saving exam schedule: $e");
-                Get.snackbar("ত্রুটি", "সময় সংরক্ষণ করতে সমস্যা হয়েছে।");
-              }
-            },
-            child: const Text('সংরক্ষণ'),
-          ),
-        ],
-      ),
-    );
   }
 
   // পরীক্ষা বাতিল করার লজিক (ক্রিয়েটর চেক সহ)
@@ -1362,10 +1314,10 @@ class _ModelTestViewState extends State<ModelTestView> {
         onConfirm: () async {
           Get.back();
           try {
-            await supabase
-                .from('exam_schedules')
-                .update({'is_active': false})
-                .eq('id', examId);
+            await _modelTestRepository.setStatus(
+              examId.toString(),
+              'cancelled',
+            );
 
             Get.snackbar(
               "সফল",
@@ -1392,7 +1344,7 @@ class _ModelTestViewState extends State<ModelTestView> {
             "এই পরীক্ষাটি আপনি তৈরি করেননি। এটি তৈরি করেছেন: $nameToShow। পরীক্ষাটি বাতিল করতে চাইলে উনার সাথে যোগাযোগ করুন।",
         textConfirm: "ঠিক আছে",
         confirmTextColor: Colors.white,
-        buttonColor: Colors.indigo.shade800,
+        buttonColor: AppTheme.tileInkOf(context, Colors.indigo),
         onConfirm: () {
           Get.back();
         },
@@ -1403,29 +1355,37 @@ class _ModelTestViewState extends State<ModelTestView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'মডেল টেস্ট ও খাতা মূল্যায়ন',
           style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
         ),
-        backgroundColor: Colors.indigo.shade800,
+        backgroundColor: AppTheme.tileInkOf(context, Colors.indigo),
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'AI দিয়ে মডেল টেস্ট তৈরি করুন',
+            onPressed: _openAiBuilder,
+            icon: const Icon(Icons.auto_awesome, color: Colors.amberAccent),
+          ),
+          const SizedBox(width: 6),
+        ],
       ),
       body: isLoadingClasses
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator())
           : Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: EdgeInsets.all(16.0),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.surfaceOf(context),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
+                        color: Colors.black.withValues(alpha: 0.03),
                         blurRadius: 8,
-                        offset: const Offset(0, 4),
+                        offset: Offset(0, 4),
                       ),
                     ],
                   ),
@@ -1433,21 +1393,23 @@ class _ModelTestViewState extends State<ModelTestView> {
                     children: [
                       Expanded(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
+                            border: Border.all(
+                              color: AppTheme.borderOf(context),
+                            ),
                             borderRadius: BorderRadius.circular(8),
-                            color: Colors.grey.shade50,
+                            color: AppTheme.altSurfaceOf(context),
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
                               value: selectedClass,
                               isExpanded: true,
-                              hint: const Text(
+                              hint: Text(
                                 "ক্লাস সিলেক্ট করুন",
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.grey,
+                                  color: AppTheme.mutedOf(context),
                                 ),
                               ),
                               items: availableClasses.map((String className) {
@@ -1474,24 +1436,26 @@ class _ModelTestViewState extends State<ModelTestView> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: 12),
                       Expanded(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: EdgeInsets.symmetric(horizontal: 12),
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
+                            border: Border.all(
+                              color: AppTheme.borderOf(context),
+                            ),
                             borderRadius: BorderRadius.circular(8),
-                            color: Colors.grey.shade50,
+                            color: AppTheme.altSurfaceOf(context),
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
                               value: selectedSubject,
                               isExpanded: true,
-                              hint: const Text(
+                              hint: Text(
                                 "বিষয় সিলেক্ট করুন",
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.grey,
+                                  color: AppTheme.mutedOf(context),
                                 ),
                               ),
                               items: availableSubjects.map((String subject) {
@@ -1523,7 +1487,7 @@ class _ModelTestViewState extends State<ModelTestView> {
                 ),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: EdgeInsets.all(16.0),
                     child: (selectedClass == null || selectedSubject == null)
                         ? Center(
                             child: Column(
@@ -1532,14 +1496,17 @@ class _ModelTestViewState extends State<ModelTestView> {
                                 Icon(
                                   Icons.touch_app_outlined,
                                   size: 56,
-                                  color: Colors.indigo.shade200,
+                                  color: AppTheme.tileOf(
+                                    context,
+                                    Colors.indigo,
+                                  ),
                                 ),
-                                const SizedBox(height: 12),
-                                const Text(
+                                SizedBox(height: 12),
+                                Text(
                                   'দয়া করে ওপর থেকে ক্লাস এবং বিষয় সিলেক্ট করুন',
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: Colors.grey,
+                                    color: AppTheme.mutedOf(context),
                                     fontWeight: FontWeight.w500,
                                   ),
                                   textAlign: TextAlign.center,
@@ -1560,25 +1527,34 @@ class _ModelTestViewState extends State<ModelTestView> {
                                       style: TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.indigo.shade900,
+                                        color: AppTheme.tileInkOf(
+                                          context,
+                                          Colors.indigo,
+                                        ),
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(
+                                    padding: EdgeInsets.symmetric(
                                       horizontal: 10,
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.indigo.shade50,
+                                      color: AppTheme.tileOf(
+                                        context,
+                                        Colors.indigo,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
                                       'মোট মডেল টেস্ট: ${modelTests.length}',
                                       style: TextStyle(
                                         fontSize: 12,
-                                        color: Colors.indigo.shade800,
+                                        color: AppTheme.tileInkOf(
+                                          context,
+                                          Colors.indigo,
+                                        ),
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
@@ -1592,25 +1568,37 @@ class _ModelTestViewState extends State<ModelTestView> {
                                         child: CircularProgressIndicator(),
                                       )
                                     : ListView.builder(
+                                        // Keeps the last card clear of the two
+                                        // floating action buttons at the bottom.
+                                        padding: const EdgeInsets.only(
+                                          bottom: 96,
+                                        ),
                                         itemCount: modelTests.length + 1,
                                         itemBuilder: (context, index) {
                                           if (index == 0) {
                                             return Container(
-                                              margin: const EdgeInsets.only(
+                                              margin: EdgeInsets.only(
                                                 bottom: 14,
                                               ),
                                               decoration: BoxDecoration(
-                                                color: Colors.white,
+                                                color: AppTheme.surfaceOf(
+                                                  context,
+                                                ),
                                                 borderRadius:
                                                     BorderRadius.circular(12),
                                                 border: Border.all(
-                                                  color: Colors.indigo.shade100,
+                                                  color: AppTheme.tileOf(
+                                                    context,
+                                                    Colors.indigo,
+                                                  ),
                                                   width: 1.5,
                                                 ),
                                                 boxShadow: [
                                                   BoxShadow(
                                                     color: Colors.indigo
-                                                        .withOpacity(0.04),
+                                                        .withValues(
+                                                          alpha: 0.04,
+                                                        ),
                                                     blurRadius: 6,
                                                     offset: const Offset(0, 2),
                                                   ),
@@ -1625,14 +1613,14 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                 child: Row(
                                                   children: [
                                                     Container(
-                                                      padding:
-                                                          const EdgeInsets.all(
-                                                            10,
-                                                          ),
+                                                      padding: EdgeInsets.all(
+                                                        10,
+                                                      ),
                                                       decoration: BoxDecoration(
-                                                        color: Colors
-                                                            .indigo
-                                                            .shade50,
+                                                        color: AppTheme.tileOf(
+                                                          context,
+                                                          Colors.indigo,
+                                                        ),
                                                         borderRadius:
                                                             BorderRadius.circular(
                                                               10,
@@ -1640,9 +1628,11 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                       ),
                                                       child: Icon(
                                                         Icons.library_books,
-                                                        color: Colors
-                                                            .indigo
-                                                            .shade800,
+                                                        color:
+                                                            AppTheme.tileInkOf(
+                                                              context,
+                                                              Colors.indigo,
+                                                            ),
                                                         size: 22,
                                                       ),
                                                     ),
@@ -1660,9 +1650,10 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                                   FontWeight
                                                                       .bold,
                                                               fontSize: 15,
-                                                              color: Colors
-                                                                  .grey
-                                                                  .shade900,
+                                                              color:
+                                                                  AppTheme.mutedOf(
+                                                                    context,
+                                                                  ),
                                                             ),
                                                           ),
                                                           const SizedBox(
@@ -1685,9 +1676,11 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                     ),
                                                     ElevatedButton(
                                                       style: ElevatedButton.styleFrom(
-                                                        backgroundColor: Colors
-                                                            .indigo
-                                                            .shade800,
+                                                        backgroundColor:
+                                                            AppTheme.tileInkOf(
+                                                              context,
+                                                              Colors.indigo,
+                                                            ),
                                                         foregroundColor:
                                                             Colors.white,
                                                         elevation: 0,
@@ -1734,7 +1727,6 @@ class _ModelTestViewState extends State<ModelTestView> {
                                           String testTitle = test['exam_title'];
                                           String? creatorName =
                                               test['question_creator_name'];
-                                          dynamic examId = test['id'];
                                           int questionCount =
                                               test['question_count'];
 
@@ -1748,7 +1740,7 @@ class _ModelTestViewState extends State<ModelTestView> {
                                               'সময় নির্ধারণ করা হয়নি';
                                           if (startTimeStr != null &&
                                               endTimeStr != null) {
-                                            // লোকल টাইমজোন অনুযায়ী কনভার্ট করার জন্য .toLocal() ব্যবহার করা হয়েছে[cite: 21]
+                                            // লোকल টাইমজোন অনুযায়ী কনভার্ট করার জন্য .toLocal() ব্যবহার করা হয়েছে
                                             DateTime startDt = DateTime.parse(
                                               startTimeStr,
                                             ).toLocal();
@@ -1756,30 +1748,30 @@ class _ModelTestViewState extends State<ModelTestView> {
                                               endTimeStr,
                                             ).toLocal();
 
-                                            // ১২ ঘন্টার ফরম্যাট (AM/PM) এবং লোকাল টাইম দেখানোর জন্য[cite: 21]
+                                            // ১২ ঘন্টার ফরম্যাট (AM/PM) এবং লোকাল টাইম দেখানোর জন্য
                                             formattedTimeText =
                                                 'শুরু: ${DateFormat('dd MMM, hh:mm a').format(startDt)}  •  শেষ: ${DateFormat('dd MMM, hh:mm a').format(endDt)}';
                                           }
 
-                                          int selectedBtnIndex =
-                                              _selectedButtonIndices[testTitle] ??
-                                              -1;
-
                                           return Container(
-                                            margin: const EdgeInsets.symmetric(
+                                            margin: EdgeInsets.symmetric(
                                               vertical: 6,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.white,
+                                              color: AppTheme.surfaceOf(
+                                                context,
+                                              ),
                                               borderRadius:
                                                   BorderRadius.circular(12),
                                               border: Border.all(
-                                                color: Colors.grey.shade200,
+                                                color: AppTheme.borderOf(
+                                                  context,
+                                                ),
                                               ),
                                               boxShadow: [
                                                 BoxShadow(
                                                   color: Colors.black
-                                                      .withOpacity(0.02),
+                                                      .withValues(alpha: 0.02),
                                                   blurRadius: 4,
                                                   offset: const Offset(0, 2),
                                                 ),
@@ -1804,19 +1796,23 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                             Expanded(
                                                               child: Text(
                                                                 testTitle,
+                                                                maxLines: 2,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
                                                                 style: const TextStyle(
                                                                   fontWeight:
                                                                       FontWeight
                                                                           .bold,
                                                                   fontSize: 15,
+                                                                  height: 1.25,
                                                                 ),
                                                               ),
                                                             ),
                                                             InkWell(
                                                               onTap: () =>
-                                                                  _editExamTitle(
-                                                                    testTitle,
-                                                                    examId,
+                                                                  _editTest(
+                                                                    test,
                                                                   ),
                                                               borderRadius:
                                                                   BorderRadius.circular(
@@ -1824,62 +1820,77 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                                   ),
                                                               child: Padding(
                                                                 padding:
-                                                                    const EdgeInsets.all(
+                                                                    EdgeInsets.all(
                                                                       4.0,
                                                                     ),
                                                                 child: Icon(
                                                                   Icons.edit,
                                                                   size: 16,
-                                                                  color: Colors
-                                                                      .orange
-                                                                      .shade800,
+                                                                  color: AppTheme.tileInkOf(
+                                                                    context,
+                                                                    Colors
+                                                                        .orange,
+                                                                  ),
                                                                 ),
                                                               ),
                                                             ),
                                                           ],
                                                         ),
                                                       ),
-                                                      const SizedBox(width: 8),
+                                                      SizedBox(width: 8),
                                                       Container(
                                                         padding:
-                                                            const EdgeInsets.symmetric(
+                                                            EdgeInsets.symmetric(
                                                               horizontal: 8,
                                                               vertical: 3,
                                                             ),
                                                         decoration: BoxDecoration(
                                                           color: isActive
-                                                              ? Colors
-                                                                    .green
-                                                                    .shade50
-                                                              : Colors
-                                                                    .grey
-                                                                    .shade100,
+                                                              ? AppTheme.tileOf(
+                                                                  context,
+                                                                  Colors.green,
+                                                                )
+                                                              : AppTheme.altSurfaceOf(
+                                                                  context,
+                                                                ),
                                                           borderRadius:
                                                               BorderRadius.circular(
                                                                 6,
                                                               ),
                                                           border: Border.all(
                                                             color: isActive
-                                                                ? Colors
-                                                                      .green
-                                                                      .shade200
-                                                                : Colors
-                                                                      .grey
-                                                                      .shade300,
+                                                                ? AppTheme.tileOf(
+                                                                    context,
+                                                                    Colors
+                                                                        .green,
+                                                                  )
+                                                                : AppTheme.borderOf(
+                                                                    context,
+                                                                  ),
                                                           ),
                                                         ),
                                                         child: Text(
-                                                          isActive
-                                                              ? 'Active'
-                                                              : 'Inactive',
+                                                          switch (test['status']
+                                                              ?.toString()) {
+                                                            'draft' => 'খসড়া',
+                                                            'cancelled' =>
+                                                              'বাতিল',
+                                                            'expired' => 'শেষ',
+                                                            _ =>
+                                                              isActive
+                                                                  ? 'Active'
+                                                                  : 'Inactive',
+                                                          },
                                                           style: TextStyle(
                                                             fontSize: 10,
                                                             fontWeight:
                                                                 FontWeight.w600,
                                                             color: isActive
-                                                                ? Colors
-                                                                      .green
-                                                                      .shade800
+                                                                ? AppTheme.tileInkOf(
+                                                                    context,
+                                                                    Colors
+                                                                        .green,
+                                                                  )
                                                                 : Colors
                                                                       .grey
                                                                       .shade700,
@@ -1936,15 +1947,20 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                             .shade500,
                                                       ),
                                                       const SizedBox(width: 6),
-                                                      Text(
-                                                        'প্রণেতা (স্যার): ${creatorName ?? 'অজানা'}',
-                                                        style: TextStyle(
-                                                          fontSize: 11.5,
-                                                          color: Colors
-                                                              .grey
-                                                              .shade700,
-                                                          fontWeight:
-                                                              FontWeight.w500,
+                                                      Expanded(
+                                                        child: Text(
+                                                          'প্রণেতা (স্যার): ${creatorName ?? 'অজানা'}',
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                          style: TextStyle(
+                                                            fontSize: 11.5,
+                                                            color: Colors
+                                                                .grey
+                                                                .shade700,
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                          ),
                                                         ),
                                                       ),
                                                     ],
@@ -1955,78 +1971,63 @@ class _ModelTestViewState extends State<ModelTestView> {
                                                     color: Color(0xFFF1F5F9),
                                                   ),
                                                   const SizedBox(height: 10),
-                                                  Row(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment.end,
-                                                    children: [
-                                                      TextButton.icon(
-                                                        style: TextButton.styleFrom(
-                                                          foregroundColor:
-                                                              Colors
-                                                                  .red
-                                                                  .shade700,
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 8,
-                                                                vertical: 0,
+                                                  Align(
+                                                    alignment:
+                                                        Alignment.centerRight,
+                                                    child: Wrap(
+                                                      alignment:
+                                                          WrapAlignment.end,
+                                                      spacing: 8,
+                                                      runSpacing: 8,
+                                                      children: [
+                                                        _ModelTestActionButton(
+                                                          icon: Icons
+                                                              .assignment_outlined,
+                                                          label: 'ফলাফল',
+                                                          color: Colors.indigo,
+                                                          onPressed: () =>
+                                                              _openResults(
+                                                                test,
                                                               ),
-                                                          minimumSize:
-                                                              const Size(0, 32),
                                                         ),
-                                                        onPressed: () {
-                                                          _deleteExamCard(test);
-                                                        },
-                                                        icon: const Icon(
-                                                          Icons.delete_outline,
-                                                          size: 15,
-                                                        ),
-                                                        label: const Text(
-                                                          'পরিক্ষা ডিলিট করুন',
-                                                          style: TextStyle(
-                                                            fontSize: 12,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      if (isActive) ...[
-                                                        const SizedBox(
-                                                          width: 4,
-                                                        ),
-                                                        TextButton.icon(
-                                                          style: TextButton.styleFrom(
-                                                            foregroundColor:
-                                                                Colors
-                                                                    .orange
-                                                                    .shade800,
-                                                            padding:
-                                                                const EdgeInsets.symmetric(
-                                                                  horizontal: 8,
-                                                                  vertical: 0,
-                                                                ),
-                                                            minimumSize:
-                                                                const Size(
-                                                                  0,
-                                                                  32,
+                                                        if (test['status'] ==
+                                                            'draft')
+                                                          _ModelTestActionButton(
+                                                            icon: Icons.publish,
+                                                            label:
+                                                                'প্রকাশ করুন',
+                                                            color: Colors.green,
+                                                            onPressed: () =>
+                                                                _publishTest(
+                                                                  test,
                                                                 ),
                                                           ),
+                                                        _ModelTestActionButton(
+                                                          icon: Icons
+                                                              .delete_outline,
+                                                          label: 'ডিলিট',
+                                                          color: Colors
+                                                              .red
+                                                              .shade700,
                                                           onPressed: () {
-                                                            _cancelExam(
+                                                            _deleteExamCard(
                                                               test,
-                                                            ); // এখানে শুধু test পাস করতে হবে
+                                                            );
                                                           },
-                                                          icon: const Icon(
-                                                            Icons
-                                                                .stop_circle_outlined,
-                                                            size: 15,
-                                                          ),
-                                                          label: const Text(
-                                                            'পরিক্ষা বাদ দিন',
-                                                            style: TextStyle(
-                                                              fontSize: 12,
-                                                            ),
-                                                          ),
                                                         ),
+                                                        if (isActive)
+                                                          _ModelTestActionButton(
+                                                            icon: Icons
+                                                                .stop_circle_outlined,
+                                                            label: 'বন্ধ করুন',
+                                                            color:
+                                                                Colors.orange,
+                                                            onPressed: () {
+                                                              _cancelExam(test);
+                                                            },
+                                                          ),
                                                       ],
-                                                    ],
+                                                    ),
                                                   ),
                                                 ],
                                               ),
@@ -2043,70 +2044,116 @@ class _ModelTestViewState extends State<ModelTestView> {
             ),
       floatingActionButton: (selectedClass == null || selectedSubject == null)
           ? null
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                FloatingActionButton.extended(
-                  heroTag: 'createTestBtn',
-                  onPressed: () {
-                    Get.to(
-                      () => CreateCustomModelTestView(
-                        academyId: widget.academyId,
-                        className: selectedClass!,
-                        subjectName: selectedSubject!,
-                        totalSubjectQuestions: totalSubjectQuestions,
-                        currentUserId: widget.currentUserId,
-                        currentUserName: widget.currentUserName,
+          : Builder(
+              builder: (context) {
+                final isCompact = MediaQuery.sizeOf(context).width < 400;
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FloatingActionButton.extended(
+                      heroTag: 'createTestBtn',
+                      onPressed: _openCreateTest,
+                      backgroundColor: Colors.teal.shade700,
+                      elevation: 2,
+                      icon: const Icon(
+                        Icons.assignment_add,
+                        color: Colors.white,
+                        size: 18,
                       ),
-                    )?.then((_) {
-                      _loadModelTests();
-                    });
-                  },
-                  backgroundColor: Colors.teal.shade700,
-                  elevation: 2,
-                  icon: const Icon(
-                    Icons.assignment_add,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                  label: const Text(
-                    'মডেল টেস্ট তৈরি',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                FloatingActionButton.extended(
-                  heroTag: 'createQuestionBtn',
-                  onPressed: () {
-                    Get.to(
-                      () => CreateTestView(
-                        academyId: widget.academyId,
-                        className: selectedClass!,
-                        subjectName: selectedSubject!,
+                      label: const Text(
+                        'মডেল টেস্ট তৈরি',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
-                    )?.then((_) {
-                      _loadModelTests();
-                    });
-                  },
-                  backgroundColor: Colors.indigo.shade800,
-                  elevation: 2,
-                  icon: const Icon(Icons.add, color: Colors.white, size: 18),
-                  label: const Text(
-                    'নতুন প্রশ্ন তৈরি',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
                     ),
-                  ),
-                ),
-              ],
+                    const SizedBox(width: 10),
+                    if (isCompact)
+                      FloatingActionButton(
+                        heroTag: 'createQuestionBtn',
+                        onPressed: _openCreateQuestion,
+                        tooltip: 'নতুন প্রশ্ন তৈরি',
+                        backgroundColor: AppTheme.tileInkOf(
+                          context,
+                          Colors.indigo,
+                        ),
+                        elevation: 2,
+                        child: const Icon(
+                          Icons.add,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      )
+                    else
+                      FloatingActionButton.extended(
+                        heroTag: 'createQuestionBtn',
+                        onPressed: _openCreateQuestion,
+                        backgroundColor: AppTheme.tileInkOf(
+                          context,
+                          Colors.indigo,
+                        ),
+                        elevation: 2,
+                        icon: const Icon(
+                          Icons.add,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        label: const Text(
+                          'নতুন প্রশ্ন তৈরি',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
     );
   }
 }
 
+/// Compact, wrap-safe action button used on model test cards. A [Wrap] parent
+/// lets these chips flow onto a second line instead of overflowing on narrow
+/// screens.
+class _ModelTestActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+
+  const _ModelTestActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 15),
+      label: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: color,
+        backgroundColor: color.withValues(alpha: 0.05),
+        side: BorderSide(color: color.withValues(alpha: 0.35)),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        minimumSize: const Size(0, 34),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+}

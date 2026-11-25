@@ -1,14 +1,25 @@
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/controllers/app_state_controller.dart';
+import 'package:academy_management/models/notice.dart';
+import 'package:academy_management/repositories/notice_repository.dart';
+import 'package:academy_management/repositories/student_repository.dart';
 import 'package:academy_management/services/ad_service.dart';
+import 'package:academy_management/services/session_service.dart';
+import 'package:academy_management/widgets/async_state_view.dart';
+import 'package:academy_management/widgets/theme_mode_toggle.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'create_notice_view.dart'; // 👈 নতুন পেজ ইমপোর্ট করা হয়েছে
+
+import 'create_notice_view.dart';
+
+enum _NoticeFilter { all, unread }
 
 class NoticeBoardView extends StatefulWidget {
   final String academyId;
-  final String userRole; // 'super_admin', 'teacher', etc.
+  final String userRole; // 'super_admin', 'teacher', 'student', ...
 
   const NoticeBoardView({
     super.key,
@@ -22,91 +33,222 @@ class NoticeBoardView extends StatefulWidget {
 
 class _NoticeBoardViewState extends State<NoticeBoardView> {
   final supabase = Supabase.instance.client;
+  final NoticeRepository _noticeRepository = NoticeRepository();
+
   bool isLoading = true;
-  List<Map<String, dynamic>> noticesList = [];
+  String? _errorMessage;
+  List<Notice> _notices = [];
   List<String> availableClasses = [];
 
-  BannerAd? _bannerAd; // 👈 ব্যানার অ্যাড ভেরিয়েবল[cite: 2]
+  String _readerKey = '';
+  String _className = '';
+  _NoticeFilter _filter = _NoticeFilter.all;
+
+  RealtimeChannel? _channel;
+
+  BannerAd? _bannerAd;
   bool _isBannerAdLoaded = false;
+
+  AppStateController? get _appState =>
+      Get.isRegistered<AppStateController>() ? AppStateController.to : null;
+
+  bool get _isAdmin => widget.userRole == 'super_admin';
+
+  List<Notice> get _visibleNotices => _filter == _NoticeFilter.unread
+      ? _notices.where((notice) => !notice.isRead).toList()
+      : _notices;
 
   @override
   void initState() {
     super.initState();
-    _initBannerAd(); // 👈 ব্যানার অ্যাড ইনিশিয়ালাইজ[cite: 2]
-    _fetchNotices();
-    if (widget.userRole == 'super_admin') {
-      _fetchClasses();
-    }
+    _initBannerAd();
+    _initializeContext();
+    if (_isAdmin) _fetchClasses();
   }
 
-  // 👈 ব্যানার অ্যাড সেটআপ ফাংশন[cite: 2]
+  Future<void> _initializeContext() async {
+    final context = await SessionService.noticeContext();
+    if (!mounted) return;
+    setState(() {
+      _readerKey = context.readerKey;
+      _className = context.className;
+    });
+
+    _appState?.startNoticeWatch(
+      academyId: widget.academyId,
+      role: context.role,
+      readerKey: context.readerKey,
+      className: context.className,
+    );
+    _appState?.refreshUnreadNoticeCount();
+
+    await _fetchNotices();
+    if (!mounted) return;
+    _subscribeRealtime();
+  }
+
+  void _subscribeRealtime() {
+    _channel = supabase
+        .channel('notice-board-${widget.academyId}-$_readerKey')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'notices',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'academy_id',
+            value: widget.academyId,
+          ),
+          callback: (_) => _fetchNotices(),
+        )
+        .subscribe();
+  }
+
   void _initBannerAd() {
     _bannerAd = AdService.createBannerAd()
       ..load().then((_) {
         if (mounted) {
-          setState(() {
-            _isBannerAdLoaded = true;
-          });
+          setState(() => _isBannerAdLoaded = true);
         }
       });
   }
 
   @override
   void dispose() {
-    _bannerAd?.dispose(); // 👈 ব্যানার অ্যাড ডিসপোজ
+    if (_channel != null) {
+      supabase.removeChannel(_channel!);
+    }
+    _bannerAd?.dispose();
     super.dispose();
   }
 
   Future<void> _fetchClasses() async {
     try {
-      final res = await supabase
-          .from('students')
-          .select('class')
-          .eq('academy_id', widget.academyId);
-
-      Set<String> classes = {};
-      for (var item in (res as List)) {
-        String? cls = item['class']?.toString().trim();
-        if (cls != null && cls.isNotEmpty) {
-          classes.add(cls);
-        }
-      }
-      setState(() {
-        availableClasses = classes.toList();
-      });
+      final classes = await StudentRepository().classesForAcademy(
+        widget.academyId,
+      );
+      if (!mounted) return;
+      setState(() => availableClasses = classes);
     } catch (e) {
-      print("Error fetching classes: $e");
+      debugPrint('Error fetching classes: $e');
     }
   }
 
   Future<void> _fetchNotices() async {
     try {
-      setState(() => isLoading = true);
-      var query = supabase
-          .from('notices')
-          .select()
-          .eq('academy_id', widget.academyId)
-          .order('created_at', ascending: false);
-
-      final response = await query;
+      final notices = await _noticeRepository.fetch(
+        widget.academyId,
+        readerKey: _readerKey,
+        role: widget.userRole,
+        className: _className,
+      );
+      if (!mounted) return;
       setState(() {
-        noticesList = List<Map<String, dynamic>>.from(response);
+        _notices = notices;
+        _errorMessage = null;
         isLoading = false;
       });
+      _appState?.setUnreadNoticeCount(
+        notices.where((notice) => !notice.isRead).length,
+      );
     } catch (e) {
-      setState(() => isLoading = false);
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+        _errorMessage = e.toString();
+      });
       Get.snackbar(
-        "ত্রুটি",
-        "নোটিশ লোড করতে সমস্যা হয়েছে: $e",
+        'ত্রুটি',
+        'নোটিশ লোড করতে সমস্যা হয়েছে: $e',
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
     }
   }
 
-  // 👈 সুপাবেস থেকে নোটিশ ডিলিট করার ফাংশন
+  /// Optimistically flips one notice to read, rolls back on failure.
+  Future<void> _markNoticeRead(Notice notice) async {
+    if (notice.isRead || _readerKey.isEmpty) return;
+
+    void setRead(bool value) {
+      if (!mounted) return;
+      setState(() {
+        final index = _notices.indexWhere((item) => item.id == notice.id);
+        if (index != -1) {
+          _notices[index] = _notices[index].copyWith(isRead: value);
+        }
+      });
+    }
+
+    setRead(true);
+    _appState?.decrementUnreadNoticeCount();
+
+    try {
+      await _noticeRepository.markAsRead(
+        notice.id,
+        academyId: widget.academyId,
+        readerKey: _readerKey,
+      );
+    } catch (_) {
+      setRead(false);
+      _appState?.incrementUnreadNoticeCount();
+      if (mounted) {
+        Get.snackbar(
+          'ত্রুটি',
+          'পঠিত হিসেবে চিহ্নিত করা যায়নি।',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
+    }
+  }
+
+  Future<void> _markAllAsRead() async {
+    final unreadIds = _notices
+        .where((notice) => !notice.isRead)
+        .map((notice) => notice.id)
+        .toList();
+    if (unreadIds.isEmpty || _readerKey.isEmpty) return;
+
+    final ids = unreadIds.toSet();
+    final state = _appState;
+    if (state != null) {
+      state.setUnreadNoticeCount(state.unreadNoticeCount.value - ids.length);
+    }
+    if (mounted) {
+      setState(() {
+        _notices = _notices
+            .map(
+              (notice) => ids.contains(notice.id)
+                  ? notice.copyWith(isRead: true)
+                  : notice,
+            )
+            .toList();
+      });
+    }
+
+    try {
+      await _noticeRepository.markAllAsRead(
+        unreadIds,
+        academyId: widget.academyId,
+        readerKey: _readerKey,
+      );
+    } catch (_) {
+      await _fetchNotices();
+      await state?.refreshUnreadNoticeCount();
+      if (mounted) {
+        Get.snackbar(
+          'ত্রুটি',
+          'সব নোটিশ পঠিত হিসেবে চিহ্নিত করা যায়নি।',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
+    }
+  }
+
   Future<void> _deleteNotice(String noticeId) async {
-    bool? confirm = await Get.dialog<bool>(
+    final confirm = await Get.dialog<bool>(
       AlertDialog(
         title: const Text('নোটিশ মুছুন'),
         content: const Text('আপনি কি নিশ্চিত যে এই নোটিশটি মুছে ফেলতে চান?'),
@@ -129,18 +271,18 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
 
     if (confirm == true) {
       try {
-        await supabase.from('notices').delete().eq('id', noticeId);
-        _fetchNotices(); // রিয়েল-টাইম আপডেট
+        await _noticeRepository.delete(noticeId, widget.academyId);
+        _fetchNotices();
         Get.snackbar(
-          "সফল",
-          "নোটিশটি মুছে ফেলা হয়েছে!",
+          'সফল',
+          'নোটিশটি মুছে ফেলা হয়েছে!',
           backgroundColor: Colors.green,
           colorText: Colors.white,
         );
       } catch (e) {
         Get.snackbar(
-          "ত্রুটি",
-          "মুছে ফেলতে সমস্যা হয়েছে: $e",
+          'ত্রুটি',
+          'মুছে ফেলতে সমস্যা হয়েছে: $e',
           backgroundColor: Colors.red,
           colorText: Colors.white,
         );
@@ -148,14 +290,9 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
     }
   }
 
-  // 👈 সুপাবেসে নোটিশ এডিট করার ডায়ালগ ও ফাংশন
-  void _editNoticeDialog(Map<String, dynamic> notice) {
-    final titleEditController = TextEditingController(
-      text: notice['title'] ?? '',
-    );
-    final descEditController = TextEditingController(
-      text: notice['description'] ?? '',
-    );
+  void _editNoticeDialog(Notice notice) {
+    final titleEditController = TextEditingController(text: notice.title);
+    final descEditController = TextEditingController(text: notice.description);
 
     Get.dialog(
       AlertDialog(
@@ -191,7 +328,7 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
             onPressed: () async {
               if (titleEditController.text.trim().isEmpty ||
                   descEditController.text.trim().isEmpty) {
-                Get.snackbar("সতর্কতা", "শিরোনাম ও বিবরণ দিন!");
+                Get.snackbar('সতর্কতা', 'শিরোনাম ও বিবরণ দিন!');
                 return;
               }
               Get.back();
@@ -202,19 +339,19 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                       'title': titleEditController.text.trim(),
                       'description': descEditController.text.trim(),
                     })
-                    .eq('id', notice['id']);
+                    .eq('id', notice.id);
 
-                _fetchNotices(); // রিয়েল-টাইম আপডেট
+                _fetchNotices();
                 Get.snackbar(
-                  "সফল",
-                  "নোটিশ সফলভাবে আপডেট করা হয়েছে!",
+                  'সফল',
+                  'নোটিশ সফলভাবে আপডেট করা হয়েছে!',
                   backgroundColor: Colors.green,
                   colorText: Colors.white,
                 );
               } catch (e) {
                 Get.snackbar(
-                  "ত্রুটি",
-                  "আপডেট করতে সমস্যা হয়েছে: $e",
+                  'ত্রুটি',
+                  'আপডেট করতে সমস্যা হয়েছে: $e',
                   backgroundColor: Colors.red,
                   colorText: Colors.white,
                 );
@@ -230,17 +367,19 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
     );
   }
 
-  // 👈 পপ-আপ ডায়ালগে সম্পূর্ণ নোটিশ দেখানোর হেল্পার
   void _showNoticeDetailsDialog(
-    Map<String, dynamic> notice,
+    Notice notice,
     String targetText,
     String? fileUrl,
   ) {
+    // Opening a notice (tap or deep link) marks it read for this recipient.
+    _markNoticeRead(notice);
+
     Get.dialog(
       AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
-          notice['title'] ?? '',
+          notice.title,
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         content: SingleChildScrollView(
@@ -249,15 +388,21 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                notice['description'] ?? '',
-                style: const TextStyle(fontSize: 14, color: Colors.black87),
+                notice.description,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontSize: 14,
+                      color: AppTheme.inkOf(context),
+                    ),
               ),
               if (fileUrl != null && fileUrl.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.teal),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.brandOf(context),
+                    side: BorderSide(color: AppTheme.brandOf(context)),
+                  ),
                   onPressed: () async {
-                    final Uri uri = Uri.parse(fileUrl);
+                    final uri = Uri.parse(fileUrl);
                     if (await canLaunchUrl(uri)) {
                       await launchUrl(
                         uri,
@@ -275,17 +420,20 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                 children: [
                   Text(
                     targetText,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: Colors.teal,
+                      color: AppTheme.brandOf(context),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
-                    notice['created_at'] != null
-                        ? notice['created_at'].toString().substring(0, 10)
+                    notice.raw['created_at'] != null
+                        ? notice.raw['created_at'].toString().substring(0, 10)
                         : '',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.mutedOf(context),
+                    ),
                   ),
                 ],
               ),
@@ -302,12 +450,11 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
     );
   }
 
-  // 👈 নতুন পেজ ওপেন করার ফাংশন
   Future<void> _navigateToCreateNotice() async {
-    if (widget.userRole != 'super_admin') {
+    if (!_isAdmin) {
       Get.snackbar(
-        "অপারেশন নিষেধ",
-        "শুধুমাত্র অ্যাডমিন নোটিশ প্রকাশ করতে পারবেন!",
+        'অপারেশন নিষেধ',
+        'শুধুমাত্র অ্যাডমিন নোটিশ প্রকাশ করতে পারবেন!',
         backgroundColor: Colors.orange,
         colorText: Colors.white,
       );
@@ -322,15 +469,11 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
       ),
     );
 
-    // যদি নোটিশ সফলভাবে তৈরি হয়, তবে নোটিশ বোর্ড রিফ্রেশ হবে
-    if (result == true) {
-      _fetchNotices();
-    }
+    if (result == true) _fetchNotices();
   }
 
-  // 👈 প্রতি ৪টি কার্ড পর পর ব্যানার অ্যাড দেখানোর হেল্পার উইজেট[cite: 2]
   Widget _buildBannerAdItem() {
-    final BannerAd bannerAd = AdService.createBannerAd()..load();
+    final bannerAd = AdService.createBannerAd()..load();
     return Container(
       alignment: Alignment.center,
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -340,20 +483,73 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
     );
   }
 
+  String _targetText(Notice notice) {
+    switch (notice.targetType) {
+      case 'all_students':
+        return 'প্রাপক: সকল ছাত্র-ছাত্রী';
+      case 'class':
+        return 'প্রাপক ক্লাস: ${notice.targetClass}';
+      case 'teachers':
+        return 'প্রাপক: সকল শিক্ষক';
+      default:
+        return 'প্রাপক: সকলের জন্য';
+    }
+  }
+
+  Widget _buildFilterChips() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Row(
+        children: [
+          ChoiceChip(
+            label: Text(_appState?.tr('সব', 'All') ?? 'সব'),
+            selected: _filter == _NoticeFilter.all,
+            onSelected: (_) => setState(() => _filter = _NoticeFilter.all),
+          ),
+          const SizedBox(width: 8),
+          ChoiceChip(
+            label: Text(_appState?.tr('অপঠিত', 'Unread') ?? 'অপঠিত'),
+            selected: _filter == _NoticeFilter.unread,
+            onSelected: (_) => setState(() => _filter = _NoticeFilter.unread),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    bool isAdmin = (widget.userRole == 'super_admin');
+    final notices = _visibleNotices;
+    final english = _appState?.isEnglish.value ?? false;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('নোটিশ বোর্ড'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
+        actions: [
+          const ThemeModeToggle(color: Colors.white),
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: TextButton.icon(
+              onPressed: _markAllAsRead,
+              icon: const Icon(Icons.done_all, color: Colors.white, size: 20),
+              label: Text(
+                english ? 'Mark all read' : 'সবগুলো পঠিত হিসেবে চিহ্নিত করুন',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
-      floatingActionButton: isAdmin
+      floatingActionButton: _isAdmin
           ? FloatingActionButton.extended(
               backgroundColor: Colors.teal,
-              onPressed: _navigateToCreateNotice, // 👈 আলাদা পেজে নিয়ে যাবে
+              onPressed: _navigateToCreateNotice,
               icon: const Icon(Icons.add, color: Colors.white),
               label: const Text(
                 'নোটিশ দিন',
@@ -363,64 +559,56 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
           : null,
       body: Column(
         children: [
+          _buildFilterChips(),
           Expanded(
             child: isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: Colors.teal),
+                ? const AppLoadingState(message: 'নোটিশ লোড হচ্ছে...')
+                : _errorMessage != null
+                ? AppErrorState(
+                    message: 'নোটিশ লোড করতে সমস্যা হয়েছে।',
+                    onRetry: _fetchNotices,
                   )
-                : noticesList.isEmpty
-                ? const Center(
-                    child: Text(
-                      'এই মুহূর্তে কোনো নোটিশ নেই।',
-                      style: TextStyle(color: Colors.grey, fontSize: 15),
-                    ),
+                : notices.isEmpty
+                ? const AppEmptyState(
+                    icon: Icons.campaign_outlined,
+                    message: 'এই মুহূর্তে কোনো নোটিশ নেই।',
                   )
                 : RefreshIndicator(
                     onRefresh: _fetchNotices,
                     child: ListView.builder(
                       itemCount:
-                          noticesList.length +
-                          (noticesList.isNotEmpty
-                              ? (noticesList.length ~/ 4)
-                              : 0),
+                          notices.length +
+                          (notices.isNotEmpty ? notices.length ~/ 4 : 0),
                       padding: const EdgeInsets.all(12),
                       itemBuilder: (context, index) {
-                        // 👈 প্রতি ৪টি কার্ড পর পর ব্যানার অ্যাড রেন্ডার করার হিসাব
                         int realIndex = index;
                         for (int i = 0; i <= index; i++) {
                           if (i > 0 && (i + 1) % 5 == 0) {
-                            if (index == i) {
-                              return _buildBannerAdItem();
-                            }
+                            if (index == i) return _buildBannerAdItem();
                             realIndex--;
                           }
                         }
-
-                        if (realIndex >= noticesList.length) {
+                        if (realIndex >= notices.length) {
                           return const SizedBox.shrink();
                         }
 
-                        final notice = noticesList[realIndex];
-                        String targetText = '';
-                        String tType = notice['target_type'] ?? '';
-                        if (tType == 'all_students') {
-                          targetText = 'প্রাপক: সকল ছাত্র-ছাত্রী';
-                        } else if (tType == 'class') {
-                          targetText =
-                              'প্রাপক ক্লাস: ${notice['target_class']}';
-                        } else if (tType == 'teachers') {
-                          targetText = 'প্রাপক: সকল শিক্ষক';
-                        } else {
-                          targetText = 'প্রাপক: সকলের জন্য';
-                        }
-
-                        String? fileUrl = notice['file_url'];
+                        final notice = notices[realIndex];
+                        final fileUrl = notice.raw['file_url']?.toString();
+                        final targetText = _targetText(notice);
+                        final unread = !notice.isRead;
 
                         return Card(
-                          elevation: 2,
+                          elevation: unread ? 2 : 1,
                           margin: const EdgeInsets.symmetric(vertical: 6),
+                          color: unread
+                              ? AppTheme.tileOf(
+                                  context,
+                                  AppTheme.brandOf(context),
+                                )
+                              : AppTheme.surfaceOf(context),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: AppTheme.borderOf(context)),
                           ),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(12),
@@ -428,32 +616,45 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                               notice,
                               targetText,
                               fileUrl,
-                            ), // 👈 কার্ডে ক্লিক করলে পপ-আপ আসবে
+                            ),
                             child: Padding(
-                              padding: const EdgeInsets.all(12.0),
+                              padding: const EdgeInsets.all(12),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(
+                                      Icon(
                                         Icons.campaign,
-                                        color: Colors.teal,
+                                        color: AppTheme.brandOf(context),
                                         size: 22,
                                       ),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          notice['title'] ?? '',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
+                                          notice.title,
+                                          style: TextStyle(
+                                            fontWeight: unread
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
                                             fontSize: 16,
-                                            color: Colors.black87,
+                                            color: AppTheme.inkOf(context),
                                           ),
                                         ),
                                       ),
-                                      // 👈 অ্যাডমিনের জন্য এডিট ও ডিলিট বাটন
-                                      if (isAdmin) ...[
+                                      if (unread)
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          margin: const EdgeInsets.only(
+                                            right: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.brandOf(context),
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                      if (_isAdmin) ...[
                                         IconButton(
                                           icon: const Icon(
                                             Icons.edit,
@@ -473,9 +674,8 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                                             color: Colors.red,
                                             size: 20,
                                           ),
-                                          onPressed: () => _deleteNotice(
-                                            notice['id'].toString(),
-                                          ),
+                                          onPressed: () =>
+                                              _deleteNotice(notice.id),
                                           constraints: const BoxConstraints(),
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 4,
@@ -485,30 +685,31 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                                     ],
                                   ),
                                   const SizedBox(height: 6),
-                                  // 👈 বিবরণ সর্বোচ্চ ৩ লাইনে সীমাবদ্ধ রাখা হয়েছে
                                   Text(
-                                    notice['description'] ?? '',
+                                    notice.description,
                                     maxLines: 3,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.black54,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          fontSize: 13,
+                                          color: AppTheme.mutedOf(context),
+                                        ),
                                   ),
-
-                                  // ফাইল বা ইমেজ থাকলে ব্রাউজার বা অ্যাপে খোলার বাটন
                                   if (fileUrl != null &&
                                       fileUrl.isNotEmpty) ...[
                                     const SizedBox(height: 10),
                                     OutlinedButton.icon(
                                       style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.teal,
-                                        side: const BorderSide(
-                                          color: Colors.teal,
+                                        foregroundColor:
+                                            AppTheme.brandOf(context),
+                                        side: BorderSide(
+                                          color: AppTheme.brandOf(context),
                                         ),
                                       ),
                                       onPressed: () async {
-                                        final Uri uri = Uri.parse(fileUrl);
+                                        final uri = Uri.parse(fileUrl);
                                         try {
                                           if (await canLaunchUrl(uri)) {
                                             await launchUrl(
@@ -518,16 +719,16 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                                             );
                                           } else {
                                             Get.snackbar(
-                                              "ত্রুটি",
-                                              "ফাইলটি ওপেন করা সম্ভব হচ্ছে না!",
+                                              'ত্রুটি',
+                                              'ফাইলটি ওপেন করা সম্ভব হচ্ছে না!',
                                               backgroundColor: Colors.red,
                                               colorText: Colors.white,
                                             );
                                           }
                                         } catch (e) {
                                           Get.snackbar(
-                                            "ত্রুটি",
-                                            "সমস্যা হয়েছে: $e",
+                                            'ত্রুটি',
+                                            'সমস্যা হয়েছে: $e',
                                             backgroundColor: Colors.red,
                                             colorText: Colors.white,
                                           );
@@ -542,7 +743,6 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                                       ),
                                     ),
                                   ],
-
                                   const Divider(height: 16),
                                   Row(
                                     mainAxisAlignment:
@@ -554,7 +754,10 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                                           vertical: 2,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: Colors.teal.shade50,
+                                          color: AppTheme.tileOf(
+                                            context,
+                                            AppTheme.brandOf(context),
+                                          ),
                                           borderRadius: BorderRadius.circular(
                                             6,
                                           ),
@@ -563,20 +766,23 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                                           targetText,
                                           style: TextStyle(
                                             fontSize: 11,
-                                            color: Colors.teal.shade800,
+                                            color: AppTheme.tileInkOf(
+                                              context,
+                                              AppTheme.brandOf(context),
+                                            ),
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
                                       ),
                                       Text(
-                                        notice['created_at'] != null
-                                            ? notice['created_at']
+                                        notice.raw['created_at'] != null
+                                            ? notice.raw['created_at']
                                                   .toString()
                                                   .substring(0, 10)
                                             : '',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 11,
-                                          color: Colors.grey,
+                                          color: AppTheme.mutedOf(context),
                                         ),
                                       ),
                                     ],
@@ -590,7 +796,6 @@ class _NoticeBoardViewState extends State<NoticeBoardView> {
                     ),
                   ),
           ),
-          // 👈 স্ক্রিনের নিচে ফিক্সড ব্যানার অ্যাড উইজেট[cite: 2]
           if (_isBannerAdLoaded && _bannerAd != null)
             Container(
               alignment: Alignment.center,

@@ -1,16 +1,27 @@
-﻿import 'dart:async';
+import 'package:academy_management/config/app_theme.dart';
+import 'dart:async';
+import 'package:academy_management/controllers/app_state_controller.dart';
+import 'package:academy_management/models/notice.dart';
+import 'package:academy_management/repositories/notice_repository.dart';
 import 'package:academy_management/services/ad_service.dart';
+import 'package:academy_management/services/app_actions.dart';
+import 'package:academy_management/services/fcm_token_service.dart';
+import 'package:academy_management/services/session_service.dart';
 import 'package:academy_management/views/attendance/attendance_page_view.dart';
-import 'package:academy_management/views/exams/Academy_Result_Management_View.dart';
-import 'package:academy_management/views/exams/Model_Test_View.dart';
-import 'package:academy_management/views/exams/TeacherRoutineView.dart';
+import 'package:academy_management/views/exams/academy_result_management_view.dart';
+import 'package:academy_management/views/exams/model_test_view.dart';
+import 'package:academy_management/views/exams/teacher_routine_view.dart';
 import 'package:academy_management/views/exams/question_create_view.dart';
 import 'package:academy_management/views/attendance/student_attendance_page_view.dart';
 import 'package:academy_management/views/exams/teacher_exam_routine_view.dart';
 import 'package:academy_management/views/notices/notice_board_view.dart';
 import 'package:academy_management/views/privacy_policy_view.dart';
+import 'package:academy_management/views/settings/settings_view.dart';
 import 'package:academy_management/views/teacher/teacher_profile.dart';
 import 'package:academy_management/views/finance/teacher_salary_page.dart';
+import 'package:academy_management/views/student/student_notification_center_view.dart';
+import 'package:academy_management/widgets/notification_bell.dart';
+import 'package:academy_management/widgets/theme_mode_toggle.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -36,6 +47,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
   String teacherName = '';
   String teacherEmail = '';
   String academyId = '';
+  String _readerKey = '';
   String photoUrl = '';
   double monthlySalary = 0.0;
   double paidSalary = 0.0;
@@ -67,7 +79,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
     super.initState();
     _checkInternetAndFetchData();
 
-    AdService.loadInterstitialAd(); // 👈 ইন্টারস্টিশিয়াল অ্যাড লোড করা হলো[cite: 2]
+    AdService.loadInterstitialAd(); // 👈 ইন্টারস্টিশিয়াল অ্যাড লোড করা হলো
     _initBannerAd(); // 👈 ব্যানার অ্যাড ইনিশিয়ালাইজ
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -79,7 +91,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
     });
   }
 
-  // 👈 ব্যানার অ্যাড সেটআপ ফাংশন[cite: 2]
+  // 👈 ব্যানার অ্যাড সেটআপ ফাংশন
   void _initBannerAd() {
     _bannerAd = AdService.createBannerAd()
       ..load().then((_) {
@@ -191,7 +203,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
             tempAttendance = true;
           }
         } catch (e) {
-          print("Attendance fetch error: $e");
+          debugPrint("Attendance fetch error: $e");
         }
 
         try {
@@ -206,7 +218,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                 double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
           }
         } catch (e) {
-          print("Salary history fetch error: $e");
+          debugPrint("Salary history fetch error: $e");
         }
 
         tempDue = tempSalary - tempPaid;
@@ -221,7 +233,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
 
           tempRoutines = List<Map<String, dynamic>>.from(routineRes);
         } catch (e) {
-          print("Routine fetch error: $e");
+          debugPrint("Routine fetch error: $e");
         }
 
         try {
@@ -233,7 +245,9 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
               .limit(3);
 
           tempNotices = List<Map<String, dynamic>>.from(noticeRes);
-        } catch (e) {}
+        } catch (e) {
+          debugPrint('Notice preview unavailable: $e');
+        }
       }
 
       if (mounted) {
@@ -250,20 +264,101 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
           photoUrl = tempPhoto;
         });
       }
+
+      // Keep the live unread badge in sync for this teacher tenant, including
+      // salary payments written to the shared app_notifications inbox.
+      final appState = Get.isRegistered<AppStateController>()
+          ? AppStateController.to
+          : null;
+      if (appState != null && tempAcademyId.isNotEmpty) {
+        _readerKey = appState.readerKey.value?.isNotEmpty == true
+            ? appState.readerKey.value!
+            : SessionService.readerKeyFor(role: 'teacher', userId: tempId);
+        appState.startNoticeWatch(
+          academyId: tempAcademyId,
+          role: 'teacher',
+          readerKey: _readerKey,
+        );
+        appState.startActivityWatch(
+          academyId: tempAcademyId,
+          readerKey: _readerKey,
+        );
+        appState.refreshUnreadNoticeCount();
+        appState.refreshUnreadActivityCount();
+        unawaited(FcmTokenService.syncNow());
+      }
     } catch (e) {
-      print("Error fetching teacher data: $e");
+      debugPrint("Error fetching teacher data: $e");
     }
   }
 
   Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    // Removes only auth keys; device id / ad counters are preserved.
+    await SessionService.signOut();
 
+    if (mounted) {
+      Get.offAll(() => const LoginView());
+    }
+  }
+
+  /// Opens the same unified inbox students use, scoped to this teacher's
+  /// reader key, so salary payments appear beside notices and mark read there.
+  Future<void> _openNotificationCenter() async {
+    if (academyId.isEmpty) {
+      Get.snackbar(
+        'ত্রুটি',
+        'একাডেমি আইডি পাওয়া যায়নি!',
+        backgroundColor: AppTheme.errorOf(context),
+        colorText: AppTheme.onStatusOf(context),
+      );
+      return;
+    }
+
+    final readerKey = _readerKey.isNotEmpty
+        ? _readerKey
+        : SessionService.readerKeyFor(role: 'teacher', userId: teacherId);
+    _readerKey = readerKey;
+
+    List<Notice> notices = <Notice>[];
     try {
-      await supabase.auth.signOut();
-    } catch (e) {}
+      notices = await NoticeRepository().fetch(
+        academyId,
+        readerKey: readerKey,
+        role: 'teacher',
+      );
+    } catch (_) {
+      // An offline notice fetch must not block the notification inbox.
+    }
+    if (!mounted) return;
 
-    Get.offAll(() => const LoginView());
+    await Get.to(
+      () => StudentNotificationCenterView(
+        academyId: academyId,
+        readerKey: readerKey,
+        className: '',
+        notices: notices,
+        onOpen: (route, _) => _openNotificationTarget(route),
+      ),
+    );
+  }
+
+  void _openNotificationTarget(String route) {
+    if (route == 'teacher_salary' || route == 'fee') {
+      unawaited(
+        Get.to(
+          () => TeacherSalaryPageView(
+            academyId: academyId,
+            teacherEmail: teacherEmail,
+            teacherName: teacherName,
+            teacherId: teacherId,
+          ),
+        ),
+      );
+      return;
+    }
+    unawaited(
+      Get.to(() => NoticeBoardView(academyId: academyId, userRole: 'teacher')),
+    );
   }
 
   @override
@@ -313,14 +408,31 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
       }
     }
 
+    // Resolved on every build, so flipping the theme in Settings instantly
+    // repaints this screen, its drawer and all of its cards.
+    final isDark = AppTheme.isDark(context);
+    final surface = AppTheme.surfaceOf(context);
+    final brand = AppTheme.brandOf(context);
+    final appBarForeground = isDark ? AppTheme.nightInk : Colors.white;
+    final heroGradient = LinearGradient(
+      colors: isDark
+          ? const <Color>[Color(0xFF0F3D3A), Color(0xFF0B2E2B)]
+          : const <Color>[Color(0xFF00796B), Color(0xFF004D40)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
+      backgroundColor: AppTheme.canvasOf(context),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.teal,
-        title: const Text(
+        backgroundColor: isDark ? AppTheme.nightSurfaceAlt : brand,
+        title: Text(
           'শিক্ষক প্যানেল',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: appBarForeground,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         actions: [
           // প্রফাইল পিকচার সার্কেল আইকন (বামে ও উপরে সবুজ ডট সহ) এবং ক্লিক লজিক
@@ -340,8 +452,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                   Get.snackbar(
                     "ত্রুটি",
                     "শিক্ষকের তথ্য লোড হয়নি, কিছুক্ষণ অপেক্ষা করুন।",
-                    backgroundColor: Colors.red,
-                    colorText: Colors.white,
+                    backgroundColor: AppTheme.errorOf(context),
+                    colorText: AppTheme.onStatusOf(context),
                   );
                 }
               },
@@ -350,7 +462,9 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                   // প্রফাইল ছবি বা ডিফল্ট আইকন
                   CircleAvatar(
                     radius: 18,
-                    backgroundColor: Colors.white,
+                    backgroundColor: isDark
+                        ? AppTheme.nightCanvas
+                        : Colors.white,
                     child: ClipOval(
                       child:
                           (photoUrl.isNotEmpty && photoUrl.startsWith('http'))
@@ -360,18 +474,14 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                               width: 36,
                               height: 36,
                               errorBuilder: (context, error, stackTrace) {
-                                return const Icon(
+                                return Icon(
                                   Icons.person,
                                   size: 20,
-                                  color: Colors.teal,
+                                  color: brand,
                                 );
                               },
                             )
-                          : const Icon(
-                              Icons.person,
-                              size: 20,
-                              color: Colors.teal,
-                            ),
+                          : Icon(Icons.person, size: 20, color: brand),
                     ),
                   ),
                   // বামে ও উপরে এক্টিভ সবুজ ডট
@@ -392,57 +502,12 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
             ),
           ),
 
-          // নোটিফিকেশন আইকন
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2.0),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.notifications,
-                    color: Colors.white,
-                    size: 28,
-                  ),
-                  onPressed: () {
-                    if (academyId.isNotEmpty) {
-                      Get.to(
-                        () => NoticeBoardView(
-                          academyId: academyId,
-                          userRole: 'teacher',
-                        ),
-                      );
-                    } else {
-                      Get.snackbar(
-                        "ত্রুটি",
-                        "একাডেমি আইডি পাওয়া যায়নি!",
-                        backgroundColor: Colors.red,
-                        colorText: Colors.white,
-                      );
-                    }
-                  },
-                ),
-                // ডানে ও উপরে লাল ব্যাজ (এখানে চাইলে সংখ্যা বা শুধু লাল ডট রাখা যাবে)
-                Positioned(
-                  left: 10,
-                  top: 10,
-                  child: Container(
-                    // padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: Colors.red, // লাল রঙ
-                      shape: BoxShape.circle,
-                      //border: Border.all(color: Colors.teal),
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 10,
-                      minHeight: 10,
-                    ),
-                    // যদি সংখ্যা দেখাতে চান যেমন '3', তবে এখানে Text উইজেট দিতে পারেন।
-                    // শুধু ডট রাখতে চাইলে child: null বা ফাঁকা রাখতে পারেন।
-                  ),
-                ),
-              ],
-            ),
+          ThemeModeToggle(color: appBarForeground),
+          // নোটিফিকেশন আইকন — লাইভ আনরিড ব্যাজ সহ
+          NotificationBell(
+            icon: Icons.notifications,
+            color: appBarForeground,
+            onTap: _openNotificationCenter,
           ),
         ],
       ),
@@ -453,21 +518,24 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
             // কাস্টম হেডার সেকশন (অ্যাপবারের সাথে মিল রেখে সলিড টিল কালার এবং তথ্য মাঝবরাবর করা হয়েছে)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.only(
+              padding: EdgeInsets.only(
                 top: 48,
                 bottom: 20,
                 left: 16,
                 right: 16,
               ),
-              color:
-                  Colors.teal, // অ্যাপবারের কালারের সাথে হুবহু মিল রাখা হয়েছে
+              color: isDark
+                  ? AppTheme.nightSurfaceAlt
+                  : brand, // অ্যাপবারের সাথে মিল রাখা হয়েছে
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   CircleAvatar(
                     radius: 32,
-                    backgroundColor: Colors.white,
+                    backgroundColor: isDark
+                        ? AppTheme.nightCanvas
+                        : Colors.white,
                     child: ClipOval(
                       child:
                           (photoUrl.isNotEmpty && photoUrl.startsWith('http'))
@@ -477,35 +545,34 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                               width: 64,
                               height: 64,
                               errorBuilder: (context, error, stackTrace) {
-                                return const Icon(
+                                return Icon(
                                   Icons.person,
                                   size: 32,
-                                  color: Colors.teal,
+                                  color: brand,
                                 );
                               },
                             )
-                          : const Icon(
-                              Icons.person,
-                              size: 32,
-                              color: Colors.teal,
-                            ),
+                          : Icon(Icons.person, size: 32, color: brand),
                     ),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     teacherName.isNotEmpty ? teacherName : 'শিক্ষক',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      color: Colors.white,
+                      color: appBarForeground,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     teacherEmail.isNotEmpty ? teacherEmail : '',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style: TextStyle(
+                      color: appBarForeground.withValues(alpha: 0.78),
+                      fontSize: 12,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -523,7 +590,10 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    leading: const Icon(Icons.home, color: Colors.teal),
+                    leading: Icon(
+                      Icons.home,
+                      color: AppTheme.tileInkOf(context, Colors.teal),
+                    ),
                     title: const Text(
                       'হোম',
                       style: TextStyle(
@@ -537,7 +607,10 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    leading: const Icon(Icons.groups, color: Colors.blue),
+                    leading: Icon(
+                      Icons.groups,
+                      color: AppTheme.tileInkOf(context, Colors.blue),
+                    ),
                     title: const Text(
                       'ছাত্রছাত্রী তালিকা',
                       style: TextStyle(
@@ -554,7 +627,10 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    leading: const Icon(Icons.fact_check, color: Colors.green),
+                    leading: Icon(
+                      Icons.fact_check,
+                      color: AppTheme.tileInkOf(context, Colors.green),
+                    ),
                     title: const Text(
                       'ছাত্রছাত্রীদের হাজিরা',
                       style: TextStyle(
@@ -577,8 +653,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         Get.snackbar(
                           "ত্রুটি",
                           "একাডেমি আইডি পাওয়া যায়নি!",
-                          backgroundColor: Colors.red,
-                          colorText: Colors.white,
+                          backgroundColor: AppTheme.errorOf(context),
+                          colorText: AppTheme.onStatusOf(context),
                         );
                       }
                     },
@@ -587,9 +663,9 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    leading: const Icon(
+                    leading: Icon(
                       Icons.notifications_active,
-                      color: Colors.orange,
+                      color: AppTheme.tileInkOf(context, Colors.orange),
                     ),
                     title: const Text(
                       'নোটিশ বোর্ড',
@@ -612,9 +688,15 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                   ),
 
                   // --- ডিভাইডার দিয়ে আলাদা সেকশন ---
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: Divider(thickness: 1, color: Colors.grey),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    child: Divider(
+                      thickness: 1,
+                      color: AppTheme.borderOf(context),
+                    ),
                   ),
 
                   // --- এক্সট্রা সেটিংস ও পলিসি সেকশন ---
@@ -622,9 +704,9 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    leading: const Icon(
+                    leading: Icon(
                       Icons.settings_outlined,
-                      color: Colors.blueGrey,
+                      color: AppTheme.tileInkOf(context, Colors.blueGrey),
                     ),
                     title: const Text(
                       'সেটিংস',
@@ -635,16 +717,16 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      Get.snackbar("সেটিংস", "সেটিংস ফিচারটি খুব শীঘ্রই আসছে!");
+                      Get.to(() => const SettingsView());
                     },
                   ),
                   ListTile(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    leading: const Icon(
+                    leading: Icon(
                       Icons.feedback_outlined,
-                      color: Colors.amber,
+                      color: AppTheme.tileInkOf(context, Colors.amber),
                     ),
                     title: const Text(
                       'ফিডব্যাক দিন',
@@ -655,11 +737,14 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      Get.snackbar("ফিডব্যাক", "আপনার মতামতের জন্য ধন্যবাদ!");
+                      AppActions.showFeedbackDialog();
                     },
                   ),
                   ListTile(
-                    leading: const Icon(Icons.privacy_tip, color: Colors.teal),
+                    leading: Icon(
+                      Icons.privacy_tip,
+                      color: AppTheme.tileInkOf(context, Colors.teal),
+                    ),
                     title: const Text('প্রাইভেসি পলিসি'),
                     onTap: () {
                       Navigator.push(
@@ -674,9 +759,9 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    leading: const Icon(
+                    leading: Icon(
                       Icons.share_outlined,
-                      color: Colors.teal,
+                      color: AppTheme.tileInkOf(context, Colors.teal),
                     ),
                     title: const Text(
                       'অ্যাপ শেয়ার করুন',
@@ -687,31 +772,28 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      Get.snackbar(
-                        "শেয়ার",
-                        "প্লে-স্টোর লিংক কপি বা শেয়ার অপশন শীঘ্রই আসছে!",
-                      );
+                      AppActions.showShareUnavailable();
                     },
                   ),
                 ],
               ),
             ),
 
-            const Divider(height: 1),
+            Divider(height: 1),
 
             // লগআউট অপশন
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: ListTile(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
-                tileColor: Colors.red.shade50,
-                leading: const Icon(Icons.logout, color: Colors.red),
-                title: const Text(
+                tileColor: AppTheme.tileOf(context, Colors.red),
+                leading: Icon(Icons.logout, color: AppTheme.errorOf(context)),
+                title: Text(
                   'লগআউট',
                   style: TextStyle(
-                    color: Colors.red,
+                    color: AppTheme.errorOf(context),
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
@@ -721,12 +803,12 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
             ),
 
             // একদম নিচে অ্যাপের ভার্সন প্রদর্শন
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(bottom: 16.0, top: 4.0),
               child: Text(
                 'App Version: 1.0.0',
                 style: TextStyle(
-                  color: Colors.grey,
+                  color: AppTheme.mutedOf(context),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -740,17 +822,21 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
           if (!hasInternet)
             Container(
               width: double.infinity,
-              color: Colors.red,
+              color: AppTheme.errorOf(context),
               padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.wifi_off, color: Colors.white, size: 16),
-                  SizedBox(width: 8),
+                  Icon(
+                    Icons.wifi_off,
+                    color: AppTheme.onStatusOf(context),
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
                   Text(
                     'ইন্টারনেট সংযোগ নেই! দয়া করে ইন্টারনেট কানেক্ট করুন।',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppTheme.onStatusOf(context),
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),
@@ -771,11 +857,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF00796B), Color(0xFF004D40)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                        gradient: heroGradient,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Column(
@@ -928,11 +1010,11 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10),
                     GridView.count(
                       crossAxisCount: 3,
                       shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
+                      physics: NeverScrollableScrollPhysics(),
                       crossAxisSpacing: 8,
                       mainAxisSpacing: 8,
                       childAspectRatio: 1.0,
@@ -940,15 +1022,13 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         _buildMenuCard(
                           title: 'ছাত্রছাত্রী তালিকা',
                           icon: Icons.groups,
-                          color: Colors.blue.shade50,
-                          iconColor: Colors.blue.shade700,
+                          color: AppTheme.tileOf(context, Colors.blue),
+                          iconColor: AppTheme.tileInkOf(context, Colors.blue),
                           onTap: () {
                             AdService.showAdWithTracking(
                               onComplete: () {
-                                // 👈 অ্যাড উইথ ট্র্যাকিং (সর্বোচ্চ ৩টি দৈনিক)[cite: 2]
-                                Get.to(
-                                  () => const StudentsView(userRole: 'teacher'),
-                                );
+                                // 👈 অ্যাড উইথ ট্র্যাকিং (সর্বোচ্চ ৩টি দৈনিক)
+                                Get.to(() => StudentsView(userRole: 'teacher'));
                               },
                             );
                           },
@@ -956,8 +1036,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         _buildMenuCard(
                           title: 'ছাত্রছাত্রীদের হাজিরা',
                           icon: Icons.fact_check,
-                          color: Colors.green.shade50,
-                          iconColor: Colors.green.shade700,
+                          color: AppTheme.tileOf(context, Colors.green),
+                          iconColor: AppTheme.tileInkOf(context, Colors.green),
                           onTap: () {
                             AdService.showAdWithTracking(
                               onComplete: () {
@@ -974,8 +1054,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                                   Get.snackbar(
                                     "ত্রুটি",
                                     "একাডেমি আইডি পাওয়া যায়নি!",
-                                    backgroundColor: Colors.red,
-                                    colorText: Colors.white,
+                                    backgroundColor: AppTheme.errorOf(context),
+                                    colorText: AppTheme.onStatusOf(context),
                                   );
                                 }
                               },
@@ -985,8 +1065,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         _buildMenuCard(
                           title: 'আমার হাজিরা',
                           icon: Icons.how_to_reg,
-                          color: Colors.teal.shade50,
-                          iconColor: Colors.teal.shade700,
+                          color: AppTheme.tileOf(context, Colors.teal),
+                          iconColor: AppTheme.tileInkOf(context, Colors.teal),
                           onTap: () {
                             AdService.showAdWithTracking(
                               onComplete: () async {
@@ -1005,8 +1085,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                                   Get.snackbar(
                                     "ত্রুটি",
                                     "একাডেমি আইডি পাওয়া যায়নি!",
-                                    backgroundColor: Colors.red,
-                                    colorText: Colors.white,
+                                    backgroundColor: AppTheme.errorOf(context),
+                                    colorText: AppTheme.onStatusOf(context),
                                   );
                                 }
                               },
@@ -1017,8 +1097,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         _buildMenuCard(
                           title: 'ক্লাস রুটিন',
                           icon: Icons.schedule,
-                          color: Colors.purple.shade50,
-                          iconColor: Colors.purple.shade700,
+                          color: AppTheme.tileOf(context, Colors.purple),
+                          iconColor: AppTheme.tileInkOf(context, Colors.purple),
                           onTap: () {
                             AdService.showAdWithTracking(
                               onComplete: () {
@@ -1037,8 +1117,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                                   Get.snackbar(
                                     "ত্রুটি",
                                     "শিক্ষকের আইডি বা একাডেমি আইডি পাওয়া যায়নি!",
-                                    backgroundColor: Colors.red,
-                                    colorText: Colors.white,
+                                    backgroundColor: AppTheme.errorOf(context),
+                                    colorText: AppTheme.onStatusOf(context),
                                   );
                                 }
                               },
@@ -1049,8 +1129,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         _buildMenuCard(
                           title: 'পরীক্ষার ফলাফল',
                           icon: Icons.assessment,
-                          color: Colors.indigo.shade50,
-                          iconColor: Colors.indigo.shade700,
+                          color: AppTheme.tileOf(context, Colors.indigo),
+                          iconColor: AppTheme.tileInkOf(context, Colors.indigo),
                           onTap: () {
                             AdService.showAdWithTracking(
                               onComplete: () {
@@ -1069,8 +1149,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                                   Get.snackbar(
                                     "ত্রুটি",
                                     "একাডেমি আইডি পাওয়া যায়নি!",
-                                    backgroundColor: Colors.red,
-                                    colorText: Colors.white,
+                                    backgroundColor: AppTheme.errorOf(context),
+                                    colorText: AppTheme.onStatusOf(context),
                                   );
                                 }
                               },
@@ -1080,8 +1160,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         _buildMenuCard(
                           title: 'এক্সাম রুটিন',
                           icon: Icons.event_note,
-                          color: Colors.cyan.shade50,
-                          iconColor: Colors.cyan.shade700,
+                          color: AppTheme.tileOf(context, Colors.cyan),
+                          iconColor: AppTheme.tileInkOf(context, Colors.cyan),
                           onTap: () {
                             AdService.showAdWithTracking(
                               onComplete: () {
@@ -1095,8 +1175,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                                   Get.snackbar(
                                     "ত্রুটি",
                                     "একাডেমি আইডি পাওয়া যায়নি!",
-                                    backgroundColor: Colors.red,
-                                    colorText: Colors.white,
+                                    backgroundColor: AppTheme.errorOf(context),
+                                    colorText: AppTheme.onStatusOf(context),
                                   );
                                 }
                               },
@@ -1107,8 +1187,11 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         _buildMenuCard(
                           title: 'বেতন ও বকেয়া',
                           icon: Icons.account_balance_wallet,
-                          color: const Color.fromARGB(255, 236, 238, 249),
-                          iconColor: const Color.fromARGB(255, 7, 120, 165),
+                          color: AppTheme.tileOf(context, Colors.lightBlue),
+                          iconColor: AppTheme.tileInkOf(
+                            context,
+                            Colors.lightBlue,
+                          ),
                           onTap: () {
                             AdService.showAdWithTracking(
                               onComplete: () {
@@ -1127,8 +1210,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                                   Get.snackbar(
                                     "ত্রুটি",
                                     "শিক্ষকের তথ্য লোড হয়নি, কিছুক্ষণ অপেক্ষা করুন।",
-                                    backgroundColor: Colors.red,
-                                    colorText: Colors.white,
+                                    backgroundColor: AppTheme.errorOf(context),
+                                    colorText: AppTheme.onStatusOf(context),
                                   );
                                 }
                               },
@@ -1138,8 +1221,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         _buildMenuCard(
                           title: 'পরীক্ষা তৈরি',
                           icon: Icons.assignment_add,
-                          color: Colors.teal.shade50,
-                          iconColor: Colors.teal.shade700,
+                          color: AppTheme.tileOf(context, Colors.teal),
+                          iconColor: AppTheme.tileInkOf(context, Colors.teal),
                           onTap: () {
                             AdService.showAdWithTracking(
                               onComplete: () {
@@ -1158,8 +1241,10 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                                   Get.snackbar(
                                     "অপেক্ষা করুন",
                                     "শিক্ষকের তথ্য লোড হচ্ছে, অনুগ্রহ করে একটু পরে আবার চেষ্টা করুন।",
-                                    backgroundColor: Colors.orange,
-                                    colorText: Colors.white,
+                                    backgroundColor: AppTheme.warningOf(
+                                      context,
+                                    ),
+                                    colorText: AppTheme.onStatusOf(context),
                                   );
                                 }
                               },
@@ -1169,8 +1254,11 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         _buildMenuCard(
                           icon: Icons.quiz_rounded,
                           title: 'প্রশ্ন তৈরি',
-                          color: Colors.deepPurple.shade50,
-                          iconColor: Colors.deepPurple.shade800,
+                          color: AppTheme.tileOf(context, Colors.deepPurple),
+                          iconColor: AppTheme.tileInkOf(
+                            context,
+                            Colors.deepPurple,
+                          ),
                           onTap: () {
                             AdService.showAdWithTracking(
                               onComplete: () {
@@ -1193,8 +1281,8 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                                   Get.snackbar(
                                     "ত্রুটি",
                                     "একাডেমি আইডি পাওয়া যায়নি!",
-                                    backgroundColor: Colors.red,
-                                    colorText: Colors.white,
+                                    backgroundColor: AppTheme.errorOf(context),
+                                    colorText: AppTheme.onStatusOf(context),
                                   );
                                 }
                               },
@@ -1231,10 +1319,16 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                     ),
                     const SizedBox(height: 5),
                     latestNotices.isEmpty
-                        ? const Card(
+                        ? Card(
                             elevation: 0,
-                            color: Colors.white,
-                            child: Padding(
+                            color: surface,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(
+                                color: AppTheme.borderOf(context),
+                              ),
+                            ),
+                            child: const Padding(
                               padding: EdgeInsets.all(16.0),
                               child: Center(
                                 child: Text('কোনো নোটিশ পাওয়া যায়নি'),
@@ -1244,25 +1338,25 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
                         : ListView.builder(
                             itemCount: latestNotices.length,
                             shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
+                            physics: NeverScrollableScrollPhysics(),
                             itemBuilder: (context, index) {
                               final notice = latestNotices[index];
                               return Card(
                                 elevation: 0,
-                                margin: const EdgeInsets.only(bottom: 10),
+                                margin: EdgeInsets.only(bottom: 10),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                   side: BorderSide(
-                                    color: Colors.grey.shade300,
+                                    color: AppTheme.borderOf(context),
                                     width: 1,
                                   ),
                                 ),
                                 child: ListTile(
-                                  leading: const CircleAvatar(
-                                    backgroundColor: Colors.teal,
+                                  leading: CircleAvatar(
+                                    backgroundColor: brand,
                                     child: Icon(
                                       Icons.notifications,
-                                      color: Colors.white,
+                                      color: AppTheme.onStatusOf(context),
                                     ),
                                   ),
                                   title: Text(
@@ -1297,7 +1391,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
               ),
             ),
           ),
-          // 👈 বটমে ফিক্সড ব্যানার অ্যাড উইজেট[cite: 2]
+          // 👈 বটমে ফিক্সড ব্যানার অ্যাড উইজেট
           if (_isBannerAdLoaded && _bannerAd != null)
             Container(
               alignment: Alignment.center,
@@ -1324,7 +1418,7 @@ class _TeacherHomeViewState extends State<TeacherHomeView> {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: iconColor.withOpacity(0.2)),
+          border: Border.all(color: iconColor.withValues(alpha: 0.2)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(8.0),

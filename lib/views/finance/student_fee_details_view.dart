@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -152,7 +153,7 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'বেতন ও ফি বিবরণী',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
@@ -161,21 +162,21 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
         elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ১. মূল একক কার্ড (সকল হিসাব এখানে একসাথে দেখানো হয়েছে)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.surfaceOf(context),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.teal.shade200, width: 1),
+                border: Border.all(color: AppTheme.tileOf(context, Colors.teal), width: 1),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.06),
+                    color: Colors.grey.withValues(alpha: 0.06),
                     blurRadius: 8,
                     offset: const Offset(0, 3),
                   ),
@@ -185,7 +186,7 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    children: const [
+                    children: [
                       Icon(
                         Icons.account_balance_wallet_rounded,
                         color: Colors.teal,
@@ -197,16 +198,16 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          color: AppTheme.inkOf(context),
                         ),
                       ),
                     ],
                   ),
-                  const Divider(height: 20, thickness: 1),
+                  Divider(height: 20, thickness: 1),
                   _buildSummaryRow(
                     'নির্ধারিত মাসিক বেতন:',
                     '৳ ${widget.monthlyFee}',
-                    Colors.black87,
+                    AppTheme.inkOf(context),
                   ),
                   const SizedBox(height: 8),
                   _buildSummaryRow(
@@ -220,7 +221,7 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
                     '৳ $totalDueAmount',
                     Colors.redAccent,
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   _buildSummaryRow(
                     'অন্যান্য খাতে জমা (সুপাবেস):',
                     '৳ $_totalOtherCollected',
@@ -229,36 +230,36 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
 
             // ২. অন্যান্য ফি ও জমা হিস্ট্রি (যদি থাকে)
             if (_otherCollectionsList.isNotEmpty) ...[
-              const Text(
+              Text(
                 'অন্যান্য ফি ও জমা হিস্ট্রি',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: AppTheme.inkOf(context),
                 ),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               ListView.builder(
                 shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
+                physics: NeverScrollableScrollPhysics(),
                 itemCount: _otherCollectionsList.length,
                 itemBuilder: (context, index) {
                   var item = _otherCollectionsList[index];
                   return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
+                    margin: EdgeInsets.only(bottom: 8),
+                    padding: EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppTheme.surfaceOf(context),
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.grey.withOpacity(0.04),
+                          color: Colors.grey.withValues(alpha: 0.04),
                           blurRadius: 6,
-                          offset: const Offset(0, 2),
+                          offset: Offset(0, 2),
                         ),
                       ],
                     ),
@@ -268,9 +269,9 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(8),
+                              padding: EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.teal.shade50,
+                                color: AppTheme.tileOf(context, Colors.teal),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(
@@ -279,24 +280,24 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
                                 size: 18,
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            SizedBox(width: 12),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   item['category'] ?? 'অন্যান্য ফি',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
+                                    color: AppTheme.inkOf(context),
                                   ),
                                 ),
-                                const SizedBox(height: 2),
+                                SizedBox(height: 2),
                                 Text(
                                   item['payment_date'] ?? '',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.grey,
+                                    color: AppTheme.mutedOf(context),
                                   ),
                                 ),
                               ],
@@ -305,7 +306,7 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
                         ),
                         Text(
                           '৳ ${item['amount']}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
                             color: Colors.teal,
@@ -316,16 +317,16 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
                   );
                 },
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: 20),
             ],
 
             // ৩. চলতি বছরের মাসিক ফি স্ট্যাটাস (এক লাইনে ৩টি করে মাস এবং টিক/ক্রস)
-            const Text(
+            Text(
               'চলতি বছরের মাসিক ফি স্ট্যাটাস',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: AppTheme.inkOf(context),
               ),
             ),
             const SizedBox(height: 10),
@@ -334,7 +335,7 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: monthlyStatusList.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3, // এক লাইনে ৩টি কলাম
                 crossAxisSpacing: 8,
                 mainAxisSpacing: 8,
@@ -345,24 +346,24 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
                 bool isPaid = item['isPaid'];
 
                 return Container(
-                  padding: const EdgeInsets.symmetric(
+                  padding: EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.surfaceOf(context),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isPaid
-                          ? Colors.green.shade300
-                          : Colors.red.shade300,
+                          ? AppTheme.tileOf(context, Colors.green)
+                          : AppTheme.tileOf(context, Colors.red),
                       width: 1,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.04),
+                        color: Colors.grey.withValues(alpha: 0.04),
                         blurRadius: 4,
-                        offset: const Offset(0, 2),
+                        offset: Offset(0, 2),
                       ),
                     ],
                   ),
@@ -372,10 +373,10 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
                       Flexible(
                         child: Text(
                           item['month'],
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                            color: AppTheme.inkOf(context),
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -405,7 +406,7 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
               height: _bannerAd!.size.height.toDouble(),
               child: AdWidget(ad: _bannerAd!),
             )
-          : const SizedBox.shrink(),
+          : SizedBox.shrink(),
     );
   }
 
@@ -415,9 +416,9 @@ class _StudentFeeDetailsViewState extends State<StudentFeeDetailsView> {
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
-            color: Colors.grey,
+            color: AppTheme.mutedOf(context),
             fontWeight: FontWeight.w500,
           ),
         ),

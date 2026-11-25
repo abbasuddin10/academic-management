@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
@@ -49,7 +50,7 @@ class _StudentExamRoutineViewState extends State<StudentExamRoutineView> {
           isInitialLoading = false;
         });
       }
-      print("Error fetching exam routine: $e");
+      debugPrint("Error fetching exam routine: $e");
     }
   }
 
@@ -128,22 +129,22 @@ class _StudentExamRoutineViewState extends State<StudentExamRoutineView> {
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.all(16.0),
+              padding: EdgeInsets.all(16.0),
               itemCount: groupedByExam.keys.length,
               itemBuilder: (context, index) {
                 String examTitle = groupedByExam.keys.elementAt(index);
                 List<Map<String, dynamic>> routines = groupedByExam[examTitle]!;
 
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
+                  margin: EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.surfaceOf(context),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.grey.withOpacity(0.08),
+                        color: Colors.grey.withValues(alpha: 0.08),
                         blurRadius: 10,
-                        offset: const Offset(0, 4),
+                        offset: Offset(0, 4),
                       ),
                     ],
                   ),
@@ -155,7 +156,7 @@ class _StudentExamRoutineViewState extends State<StudentExamRoutineView> {
                       ).copyWith(dividerColor: Colors.transparent),
                       child: ExpansionTile(
                         initiallyExpanded: index == 0,
-                        backgroundColor: Colors.white,
+                        backgroundColor: AppTheme.surfaceOf(context),
                         collapsedBackgroundColor: Colors.white,
                         tilePadding: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -164,7 +165,7 @@ class _StudentExamRoutineViewState extends State<StudentExamRoutineView> {
                         // পরীক্ষার নাম বড় আকারে (ব্যাকগ্রাউন্ড ছাড়া)
                         title: Text(
                           examTitle,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: Colors.indigo,
@@ -173,11 +174,11 @@ class _StudentExamRoutineViewState extends State<StudentExamRoutineView> {
                         children: [
                           // টেবিল হেডার
                           Container(
-                            padding: const EdgeInsets.symmetric(
+                            padding: EdgeInsets.symmetric(
                               vertical: 8,
                               horizontal: 16,
                             ),
-                            color: Colors.indigo.shade50.withOpacity(0.5),
+                            color: AppTheme.tileOf(context, Colors.indigo).withValues(alpha: 0.5),
                             child: const Row(
                               children: [
                                 Expanded(
@@ -259,10 +260,10 @@ class _StudentExamRoutineViewState extends State<StudentExamRoutineView> {
                                       flex: 25,
                                       child: Text(
                                         formattedDate,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w600,
-                                          color: Colors.black87,
+                                          color: AppTheme.inkOf(context),
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -285,10 +286,10 @@ class _StudentExamRoutineViewState extends State<StudentExamRoutineView> {
                                       flex: 33,
                                       child: Text(
                                         subject,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.black87,
+                                          color: AppTheme.inkOf(context),
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                         maxLines: 1,

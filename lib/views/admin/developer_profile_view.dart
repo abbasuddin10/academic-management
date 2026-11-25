@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -38,25 +39,25 @@ class DeveloperProfileView extends StatelessWidget {
                   bottomRight: Radius.circular(30),
                 ),
               ),
-              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 16),
+              padding: EdgeInsets.symmetric(vertical: 30, horizontal: 16),
               child: Column(
                 children: [
                   // প্রোফাইল ছবি উইথ বর্ডার ও শ্যাডো
                   Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 3),
+                      border: Border.all(color: AppTheme.surfaceOf(context), width: 3),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withValues(alpha: 0.2),
                           blurRadius: 10,
-                          offset: const Offset(0, 5),
+                          offset: Offset(0, 5),
                         ),
                       ],
                     ),
-                    child: const CircleAvatar(
+                    child: CircleAvatar(
                       radius: 55,
-                      backgroundColor: Colors.white,
+                      backgroundColor: AppTheme.surfaceOf(context),
                       backgroundImage: AssetImage('assets/images/abbas.jpg'),
                     ),
                   ),
@@ -76,7 +77,7 @@ class DeveloperProfileView extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
@@ -93,20 +94,20 @@ class DeveloperProfileView extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
 
             // ২. ইনফরমেশন ও কন্টাক্ট সেকশন
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'প্রোফাইল বিবরণী',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey,
+                      color: AppTheme.mutedOf(context),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -118,28 +119,28 @@ class DeveloperProfileView extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: EdgeInsets.all(16.0),
                       child: Column(
                         children: [
                           // ইমেইল সেকশন
                           ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: Container(
-                              padding: const EdgeInsets.all(10),
+                              padding: EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.teal.shade50,
+                                color: AppTheme.tileOf(context, Colors.teal),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.email,
                                 color: Colors.teal,
                               ),
                             ),
-                            title: const Text(
+                            title: Text(
                               'ইমেইল অ্যাড্রেস',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey,
+                                color: AppTheme.mutedOf(context),
                               ),
                             ),
                             subtitle: InkWell(
@@ -163,31 +164,31 @@ class DeveloperProfileView extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const Divider(height: 20),
+                          Divider(height: 20),
 
                           // দক্ষতা সেকশন
                           ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: Container(
-                              padding: const EdgeInsets.all(10),
+                              padding: EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.teal.shade50,
+                                color: AppTheme.tileOf(context, Colors.teal),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.code, color: Colors.teal),
+                              child: Icon(Icons.code, color: Colors.teal),
                             ),
-                            title: const Text(
+                            title: Text(
                               'মূল দক্ষতা',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey,
+                                color: AppTheme.mutedOf(context),
                               ),
                             ),
-                            subtitle: const Text(
+                            subtitle: Text(
                               'Flutter, Supabase, Firebase, Web & Mobile App Development',
                               style: TextStyle(
                                 fontSize: 13,
-                                color: Colors.black87,
+                                color: AppTheme.inkOf(context),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),

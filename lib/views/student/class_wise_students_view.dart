@@ -1,3 +1,5 @@
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/views/finance/all_students_pdf_report_view.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -107,13 +109,22 @@ class _ClassWiseStudentsViewState extends State<ClassWiseStudentsView> {
     });
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppTheme.altSurfaceOf(context),
       appBar: AppBar(
         title: const Text('ক্লাস ভিত্তিক শিক্ষার্থী ব্যবস্থাপনা'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            tooltip: 'সম্পূর্ণ শিক্ষার্থী রিপোর্ট',
+            onPressed: () {
+              Get.to(
+                () => AllStudentsPdfReportView(academyId: widget.academyId),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'রিফ্রেশ',
@@ -193,17 +204,19 @@ class _ClassWiseStudentsViewState extends State<ClassWiseStudentsView> {
                       final className = _classList[index];
                       final isSelected = _selectedClassFilter == className;
                       return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        padding: EdgeInsets.symmetric(horizontal: 4),
                         child: ChoiceChip(
                           label: Text(className),
                           selected: isSelected,
                           selectedColor: Colors.teal,
                           labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : Colors.black87,
+                            color: isSelected
+                                ? Colors.white
+                                : AppTheme.inkOf(context),
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
                           ),
-                          backgroundColor: Colors.grey.shade200,
+                          backgroundColor: AppTheme.borderOf(context),
                           onSelected: (bool selected) {
                             setState(() {
                               _selectedClassFilter = className;
@@ -224,10 +237,10 @@ class _ClassWiseStudentsViewState extends State<ClassWiseStudentsView> {
                     controller: _searchController,
                     decoration: InputDecoration(
                       hintText: 'নাম, রোল বা পিতার নাম দিয়ে খুঁজুন...',
-                      prefixIcon: const Icon(Icons.search, color: Colors.teal),
+                      prefixIcon: Icon(Icons.search, color: Colors.teal),
                       suffixIcon: _searchController.text.isNotEmpty
                           ? IconButton(
-                              icon: const Icon(Icons.clear),
+                              icon: Icon(Icons.clear),
                               onPressed: () {
                                 _searchController.clear();
                                 _filterStudents();
@@ -236,7 +249,9 @@ class _ClassWiseStudentsViewState extends State<ClassWiseStudentsView> {
                           : null,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(
+                          color: AppTheme.borderOf(context),
+                        ),
                       ),
                       filled: true,
                       fillColor: Colors.white,
@@ -259,11 +274,11 @@ class _ClassWiseStudentsViewState extends State<ClassWiseStudentsView> {
                                 size: 60,
                                 color: Colors.grey.shade400,
                               ),
-                              const SizedBox(height: 10),
-                              const Text(
+                              SizedBox(height: 10),
+                              Text(
                                 'কোনো শিক্ষার্থী পাওয়া যায়নি!',
                                 style: TextStyle(
-                                  color: Colors.grey,
+                                  color: AppTheme.mutedOf(context),
                                   fontSize: 15,
                                 ),
                               ),
@@ -285,18 +300,21 @@ class _ClassWiseStudentsViewState extends State<ClassWiseStudentsView> {
 
                             return Card(
                               elevation: 2,
-                              margin: const EdgeInsets.symmetric(vertical: 6),
+                              margin: EdgeInsets.symmetric(vertical: 6),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
+                                contentPadding: EdgeInsets.symmetric(
                                   horizontal: 14,
                                   vertical: 8,
                                 ),
                                 leading: CircleAvatar(
                                   radius: 28,
-                                  backgroundColor: Colors.teal.shade100,
+                                  backgroundColor: AppTheme.tileOf(
+                                    context,
+                                    Colors.teal,
+                                  ),
                                   backgroundImage:
                                       imageUrl != null &&
                                           imageUrl.toString().isNotEmpty
@@ -314,7 +332,7 @@ class _ClassWiseStudentsViewState extends State<ClassWiseStudentsView> {
                                 ),
                                 title: Text(
                                   name,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
                                   ),
@@ -322,17 +340,17 @@ class _ClassWiseStudentsViewState extends State<ClassWiseStudentsView> {
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const SizedBox(height: 4),
+                                    SizedBox(height: 4),
                                     Text(
                                       'শ্রেণি: $className | রোল: $roll',
-                                      style: const TextStyle(
-                                        color: Colors.black87,
+                                      style: TextStyle(
+                                        color: AppTheme.inkOf(context),
                                       ),
                                     ),
                                     Text(
                                       'পিতার নাম: $fatherName',
                                       style: TextStyle(
-                                        color: Colors.grey.shade600,
+                                        color: AppTheme.mutedOf(context),
                                         fontSize: 12,
                                       ),
                                     ),

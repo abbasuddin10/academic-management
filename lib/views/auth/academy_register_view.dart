@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -94,51 +95,69 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
       isLoading = true;
     });
 
+    final supabase = Supabase.instance.client;
+    String? createdAcademyId;
+    bool authAccountCreated = false;
+
     try {
-      final supabase = Supabase.instance.client;
+      final email = emailController.text.trim();
+      final password = passwordController.text.trim();
 
       final AuthResponse authResponse = await supabase.auth.signUp(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
+        email: email,
+        password: password,
       );
 
-      if (authResponse.user != null) {
-        // academies টেবিলে নতুন ফিল্ডসহ ডেটা সেভ করা[cite: 3, 10]
-        final academyResponse = await supabase
-            .from('academies')
-            .insert({
-              'academy_name': academyNameController.text.trim(),
-              'address': addressController.text.trim(),
-              'phone': phoneController.text
-                  .trim(), // বাধ্যতামূলক অফিসিয়াল নম্বর
-              'eiin': eiinController.text.trim().isNotEmpty
-                  ? eiinController.text.trim()
-                  : null, // অপশনাল
-              'academy_code': academyCodeController.text.trim().isNotEmpty
-                  ? academyCodeController.text.trim()
-                  : null, // অপশনাল
-              'admin_email': emailController.text.trim(),
-            })
-            .select()
-            .single();
+      if (authResponse.user == null) {
+        throw Exception('অ্যাকাউন্ট তৈরি করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।');
+      }
+      authAccountCreated = true;
 
-        String academyId = academyResponse['id'];
+      // When email confirmation is required Supabase returns a user but no
+      // session. The UI must report that accurately instead of false success.
+      final bool needsEmailConfirmation = authResponse.session == null;
 
-        await supabase.from('users').insert({
-          'academy_id': academyId,
-          'email': emailController.text.trim(),
-          'full_name': adminNameController.text.trim(),
-          'role': 'super_admin',
+      try {
+        // Atomic server-side path (see supabase/migrations/0001_...).
+        await supabase.rpc('register_academy', params: {
+          'p_academy_name': academyNameController.text.trim(),
+          'p_address': addressController.text.trim(),
+          'p_phone': phoneController.text.trim(),
+          'p_eiin': eiinController.text.trim().isEmpty
+              ? null
+              : eiinController.text.trim(),
+          'p_academy_code': academyCodeController.text.trim().isEmpty
+              ? null
+              : academyCodeController.text.trim(),
+          'p_admin_email': email,
+          'p_admin_name': adminNameController.text.trim(),
+          'p_class_names': validClasses,
         });
-
-        for (int i = 0; i < validClasses.length; i++) {
-          await supabase.from('classes').insert({
-            'academy_id': academyId,
-            'class_name': validClasses[i],
-            'class_order': i + 1,
-          });
+      } catch (rpcError) {
+        final message = rpcError.toString();
+        // Fall back only when the migration has not been applied yet.
+        if (!message.contains('register_academy') &&
+            !message.contains('PGRST202')) {
+          rethrow;
         }
+        createdAcademyId = await _insertAcademyRowsManually(
+          supabase,
+          email,
+          validClasses,
+        );
+      }
 
+      if (!mounted) return;
+
+      if (needsEmailConfirmation) {
+        Get.snackbar(
+          "ইমেইল যাচাই প্রয়োজন",
+          "আপনার ইমেইলে একটি কনফার্মেশন লিংক পাঠানো হয়েছে। কনফার্ম করার পর লগইন করুন।",
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 6),
+        );
+      } else {
         Get.snackbar(
           "সফল হয়েছে!",
           "একাডেমি এবং ক্লাসের তালিকা সফলভাবে রেজিস্টার্ড হয়েছে। এখন লগইন করুন।",
@@ -146,17 +165,92 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
           colorText: Colors.white,
         );
       }
+      Get.back();
     } catch (e) {
+      // Compensating cleanup: never leave a half-registered academy behind.
+      if (createdAcademyId != null) {
+        await _cleanupAcademyRows(supabase, createdAcademyId);
+      }
+      if (authAccountCreated) {
+        try {
+          await supabase.auth.signOut();
+        } catch (_) {}
+      }
+      if (!mounted) return;
       Get.snackbar(
         "ত্রুটি!",
-        e.toString(),
+        "রেজিস্ট্রেশন সম্পন্ন হয়নি: ${e.toString()}",
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
     } finally {
-      setState(() {
-        isLoading = false;
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// Fallback for deployments where the `register_academy` RPC has not been
+  /// installed. Performs explicit inserts and rolls them back on any failure.
+  Future<String> _insertAcademyRowsManually(
+    SupabaseClient supabase,
+    String email,
+    List<String> classes,
+  ) async {
+    final academy = await supabase
+        .from('academies')
+        .insert({
+          'academy_name': academyNameController.text.trim(),
+          'address': addressController.text.trim(),
+          'phone': phoneController.text.trim(),
+          'eiin': eiinController.text.trim().isEmpty
+              ? null
+              : eiinController.text.trim(),
+          'academy_code': academyCodeController.text.trim().isEmpty
+              ? null
+              : academyCodeController.text.trim(),
+          'admin_email': email,
+        })
+        .select()
+        .single();
+
+    final academyId = academy['id'].toString();
+
+    try {
+      await supabase.from('users').insert({
+        'academy_id': academyId,
+        'email': email,
+        'full_name': adminNameController.text.trim(),
+        'role': 'super_admin',
       });
+
+      for (var i = 0; i < classes.length; i++) {
+        await supabase.from('classes').insert({
+          'academy_id': academyId,
+          'class_name': classes[i],
+          'class_order': i + 1,
+        });
+      }
+    } catch (e) {
+      await _cleanupAcademyRows(supabase, academyId);
+      rethrow;
+    }
+
+    return academyId;
+  }
+
+  Future<void> _cleanupAcademyRows(
+    SupabaseClient supabase,
+    String academyId,
+  ) async {
+    try {
+      await supabase.from('classes').delete().eq('academy_id', academyId);
+      await supabase.from('users').delete().eq('academy_id', academyId);
+      await supabase.from('academies').delete().eq('id', academyId);
+    } catch (_) {
+      // Best effort — the original registration error is surfaced to the user.
     }
   }
 
@@ -217,7 +311,7 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
                   ),
                   const SizedBox(height: 15),
 
-                  // অফিসিয়াল ফোন নম্বর (বাধ্যতামূলক)[cite: 10]
+                  // অফিসিয়াল ফোন নম্বর (বাধ্যতামূলক)
                   TextFormField(
                     controller: phoneController,
                     keyboardType: TextInputType.phone,
@@ -233,7 +327,7 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
                   ),
                   const SizedBox(height: 15),
 
-                  // EIIN নম্বর (ঐচ্ছিক/অপশনাল)[cite: 10]
+                  // EIIN নম্বর (ঐচ্ছিক/অপশনাল)
                   TextFormField(
                     controller: eiinController,
                     keyboardType: TextInputType.number,
@@ -247,7 +341,7 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
                   ),
                   const SizedBox(height: 15),
 
-                  // প্রতিষ্ঠানের কোড (ঐচ্ছিক/অপশনাল)[cite: 10]
+                  // প্রতিষ্ঠানের কোড (ঐচ্ছিক/অপশনাল)
                   TextFormField(
                     controller: academyCodeController,
                     decoration: InputDecoration(
@@ -331,19 +425,19 @@ class _AcademyRegisterViewState extends State<AcademyRegisterView> {
                       color: Colors.teal,
                     ),
                   ),
-                  const SizedBox(height: 15),
+                  SizedBox(height: 15),
 
                   ListView.builder(
                     shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
+                    physics: NeverScrollableScrollPhysics(),
                     itemCount: classControllers.length,
                     itemBuilder: (context, index) {
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 10.0),
+                        padding: EdgeInsets.only(bottom: 10.0),
                         child: Row(
                           children: [
                             CircleAvatar(
-                              backgroundColor: Colors.teal.shade100,
+                              backgroundColor: AppTheme.tileOf(context, Colors.teal),
                               child: Text(
                                 '${index + 1}',
                                 style: const TextStyle(

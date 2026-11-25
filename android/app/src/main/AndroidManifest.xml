@@ -2,6 +2,12 @@
 
     <!-- প্রয়োজনীয় পারমিশনসমূহ -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+ (targetSdk 36): required for notifications to appear at all. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Exact alarms power the smart model-test reminders (Android 12+).
+         When the user denies it the app falls back to inexact alarms and an
+         in-app reminder, so the feature never breaks silently. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
@@ -51,6 +57,19 @@
                     android:host="login-callback" />
             </intent-filter>
         </activity>
+
+        <!-- Fallback styling for any notification rendered directly by the FCM
+             SDK. Our own pushes are data-only and are drawn in Dart with the
+             same white silhouette + institute logo (see notification_style.dart). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="high_importance_channel" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_academy" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_brand" />
 
         <meta-data
             android:name="flutterEmbedding"

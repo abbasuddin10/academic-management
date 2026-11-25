@@ -1,4 +1,8 @@
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/repositories/academy_repository.dart';
+import 'package:academy_management/repositories/student_repository.dart';
 import 'package:academy_management/services/ad_service.dart';
+import 'package:academy_management/widgets/async_state_view.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,6 +23,7 @@ class _StudentsViewState extends State<StudentsView> {
   List<Map<String, dynamic>> _allStudents = [];
   List<Map<String, dynamic>> _filteredStudents = [];
   bool _isLoading = true;
+  String? _errorMessage;
 
   final TextEditingController _searchController = TextEditingController();
   String _selectedClassFilter = 'সকল শ্রেণি';
@@ -48,30 +53,16 @@ class _StudentsViewState extends State<StudentsView> {
         setState(() => _isLoading = true);
       }
 
-      final currentUser = supabase.auth.currentUser;
-      if (currentUser == null || currentUser.email == null) {
+      final academyId = await AcademyRepository().currentUserAcademyId();
+      if (academyId == null || academyId.isEmpty) {
         throw "ইউজার লগইন করা নেই অথবা ইমেল পাওয়া যায়নি!";
       }
-      final currentUserEmail = currentUser.email;
 
-      // ১. বর্তমান ইউজারের প্রতিষ্ঠান (academy_id) বের করা
-      final userData = await supabase
-          .from('users')
-          .select('academy_id')
-          .eq('email', currentUserEmail!)
-          .single();
-
-      final academyId = userData['academy_id'];
-
-      // ২. শুধুমাত্র নির্দিষ্ট প্রতিষ্ঠানের (academy_id) স্টুডেন্টদের ডাটা আনা
-      final response = await supabase
-          .from('students')
-          .select()
-          .eq('academy_id', academyId)
-          .order('created_at', ascending: false);
-
-      List<Map<String, dynamic>> fetchedStudents =
-          List<Map<String, dynamic>>.from(response);
+      final fetchedStudents = (await StudentRepository().fetchByAcademy(
+        academyId,
+      ))
+          .map((student) => student.toMap())
+          .toList();
 
       // ৩. ডাটা থেকে ইউনিক ক্লাসগুলো বের করে ডাইনামিক ক্লাস লিস্ট তৈরি করা
       Set<String> uniqueClasses = {'সকল শ্রেণি'};
@@ -93,11 +84,15 @@ class _StudentsViewState extends State<StudentsView> {
 
           _filterStudents();
           _isLoading = false;
+          _errorMessage = null;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
       }
       Get.snackbar(
         "ত্রুটি",
@@ -132,9 +127,10 @@ class _StudentsViewState extends State<StudentsView> {
   Future<void> _deleteStudentFromDatabase(
     String studentId,
     String studentName,
+    String academyId,
   ) async {
     try {
-      await supabase.from('students').delete().eq('id', studentId);
+      await StudentRepository().delete(studentId, academyId);
 
       Get.snackbar(
         "সফল",
@@ -260,7 +256,7 @@ class _StudentsViewState extends State<StudentsView> {
     final BannerAd bannerAd = AdService.createBannerAd()..load();
     return Container(
       alignment: Alignment.center,
-      margin: const EdgeInsets.symmetric(vertical: 6),
+      margin: EdgeInsets.symmetric(vertical: 6),
       width: bannerAd.size.width.toDouble(),
       height: bannerAd.size.height.toDouble(),
       child: AdWidget(ad: bannerAd),
@@ -270,7 +266,7 @@ class _StudentsViewState extends State<StudentsView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppTheme.altSurfaceOf(context),
       appBar: AppBar(
         title: const Text('ছাত্র-ছাত্রী তালিকা'),
         backgroundColor: Colors.teal,
@@ -298,7 +294,7 @@ class _StudentsViewState extends State<StudentsView> {
                           : FontWeight.normal,
                       color: _selectedClassFilter == className
                           ? Colors.teal
-                          : Colors.black87,
+                          : AppTheme.inkOf(context),
                     ),
                   ),
                 );
@@ -320,23 +316,23 @@ class _StudentsViewState extends State<StudentsView> {
             color: Colors.white,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               itemCount: _classList.length,
               itemBuilder: (context, index) {
                 final className = _classList[index];
                 final isSelected = _selectedClassFilter == className;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: EdgeInsets.symmetric(horizontal: 4),
                   child: ChoiceChip(
                     label: Text(className),
                     selected: isSelected,
                     selectedColor: Colors.teal,
                     labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black87,
+                      color: isSelected ? Colors.white : AppTheme.inkOf(context),
                       fontWeight: FontWeight.bold,
                       fontSize: 13,
                     ),
-                    backgroundColor: Colors.grey.shade200,
+                    backgroundColor: AppTheme.borderOf(context),
                     onSelected: (bool selected) {
                       setState(() {
                         _selectedClassFilter = className;
@@ -357,10 +353,10 @@ class _StudentsViewState extends State<StudentsView> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'শিক্ষার্থীর নাম বা রোল দিয়ে খুঁজুন...',
-                prefixIcon: const Icon(Icons.search, color: Colors.teal),
+                prefixIcon: Icon(Icons.search, color: Colors.teal),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear),
+                        icon: Icon(Icons.clear),
                         onPressed: () {
                           _searchController.clear();
                           _filterStudents();
@@ -369,7 +365,7 @@ class _StudentsViewState extends State<StudentsView> {
                     : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
+                  borderSide: BorderSide(color: AppTheme.borderOf(context)),
                 ),
                 filled: true,
                 fillColor: Colors.white,
@@ -381,26 +377,16 @@ class _StudentsViewState extends State<StudentsView> {
           // স্টুডেন্ট লিস্ট
           Expanded(
             child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: Colors.teal),
+                ? const AppLoadingState(message: 'শিক্ষার্থী লোড হচ্ছে...')
+                : _errorMessage != null
+                ? AppErrorState(
+                    message: 'ডাটা লোড করতে সমস্যা হয়েছে।',
+                    onRetry: _fetchAcademyStudents,
                   )
                 : _filteredStudents.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off,
-                          size: 65,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 10),
-                        const Text(
-                          'কোনো শিক্ষার্থীর তথ্য পাওয়া যায়নি!',
-                          style: TextStyle(fontSize: 15, color: Colors.grey),
-                        ),
-                      ],
-                    ),
+                ? const AppEmptyState(
+                    icon: Icons.search_off,
+                    message: 'কোনো শিক্ষার্থীর তথ্য পাওয়া যায়নি!',
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -428,23 +414,21 @@ class _StudentsViewState extends State<StudentsView> {
                       final student = _filteredStudents[realIndex];
                       final studentId = student['id'].toString();
                       final studentName = student['name'] ?? 'নামহীন';
-                      final studentPassword =
-                          student['custom_password'] ?? 'নেই';
 
                       final studentCardWidget = Card(
                         elevation: 2,
-                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        margin: EdgeInsets.symmetric(vertical: 6),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
+                          contentPadding: EdgeInsets.symmetric(
                             horizontal: 14,
                             vertical: 6,
                           ),
                           leading: CircleAvatar(
                             radius: 26,
-                            backgroundColor: Colors.teal.shade100,
+                            backgroundColor: AppTheme.tileOf(context, Colors.teal),
                             backgroundImage:
                                 student['image_url'] != null &&
                                     student['image_url'].toString().isNotEmpty
@@ -470,21 +454,21 @@ class _StudentsViewState extends State<StudentsView> {
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const SizedBox(height: 4),
+                              SizedBox(height: 4),
                               Text(
                                 'শ্রেণি: ${student['class'] ?? ''} | রোল: ${student['roll'] ?? ''}',
                               ),
                               Text(
                                 'মোবাইল: ${student['phone'] ?? 'প্রযোজ্য নয়'}',
                                 style: TextStyle(
-                                  color: Colors.grey.shade600,
+                                  color: AppTheme.mutedOf(context),
                                   fontSize: 12,
                                 ),
                               ),
                               const SizedBox(height: 2),
-                              Text(
-                                'পাসওয়ার্ড: $studentPassword',
-                                style: const TextStyle(
+                              const Text(
+                                'পাসওয়ার্ড: সংরক্ষিত (দেখা যাবে না)',
+                                style: TextStyle(
                                   color: Colors.teal,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
@@ -575,6 +559,7 @@ class _StudentsViewState extends State<StudentsView> {
                               await _deleteStudentFromDatabase(
                                 studentId,
                                 studentName,
+                                student['academy_id']?.toString() ?? '',
                               );
                               return true;
                             }

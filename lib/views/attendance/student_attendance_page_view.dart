@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -47,7 +48,7 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
   @override
   void initState() {
     super.initState();
-    AdService.loadInterstitialAd(); // 👈 অ্যাড লোড করা হলো[cite: 2]
+    AdService.loadInterstitialAd(); // 👈 অ্যাড লোড করা হলো
     _initConnectivityAndCheck();
   }
 
@@ -292,6 +293,7 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
             .from('student_attendance')
             .upsert(recordsToUpsert, onConflict: 'academy_id,student_id,date');
 
+        if (!mounted) return;
         setState(() {
           _lastUpdatedByTeacher = widget.teacherName;
         });
@@ -313,6 +315,7 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
         );
       }
     } catch (e) {
+      if (!mounted) return;
       Navigator.pop(context);
       Get.snackbar(
         "ত্রুটি",
@@ -348,7 +351,7 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
         : 0.0;
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppTheme.altSurfaceOf(context),
       body: SafeArea(
         child: Column(
           children: [
@@ -364,28 +367,28 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
                       Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.arrow_back),
+                            icon: Icon(Icons.arrow_back),
                             onPressed: () => Get.back(),
                           ),
-                          const Text(
+                          Text(
                             'হাজিরা ব্যবস্থাপনা',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.black87,
+                              color: AppTheme.inkOf(context),
                             ),
                           ),
                         ],
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(
+                        padding: EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.green.shade50,
+                          color: AppTheme.tileOf(context, Colors.green),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.green.shade300),
+                          border: Border.all(color: AppTheme.tileOf(context, Colors.green)),
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
@@ -423,15 +426,15 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: 10),
 
                   // সামারি বক্স
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade50,
+                      color: AppTheme.tileOf(context, Colors.green),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green.shade200),
+                      border: Border.all(color: AppTheme.tileOf(context, Colors.green)),
                     ),
                     child: Column(
                       children: [
@@ -441,43 +444,43 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
                             _buildSummaryItem(
                               'মোট',
                               '$totalStudents',
-                              Colors.blue.shade800,
+                              AppTheme.tileInkOf(context, Colors.blue),
                             ),
                             _buildSummaryItem(
                               'উপস্থিত',
                               '$presentCount',
-                              Colors.green.shade800,
+                              AppTheme.tileInkOf(context, Colors.green),
                             ),
                             _buildSummaryItem(
                               'অনুপস্থিত',
                               '$absentCount',
-                              Colors.red.shade800,
+                              AppTheme.tileInkOf(context, Colors.red),
                             ),
                             _buildSummaryItem(
                               'হার (%)',
                               '${todayPercentage.toStringAsFixed(1)}%',
-                              Colors.purple.shade800,
+                              AppTheme.tileInkOf(context, Colors.purple),
                             ),
                           ],
                         ),
-                        const Divider(height: 14, thickness: 1),
+                        Divider(height: 14, thickness: 1),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               '$_lastDay1DateStr: উপ:$_lastDay1Present, অনু:$_lastDay1Absent (${_lastDay1Percentage.toStringAsFixed(0)}%)',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.black87,
+                                color: AppTheme.inkOf(context),
                               ),
                             ),
                             Text(
                               '$_lastDay2DateStr: উপ:$_lastDay2Present, অনু:$_lastDay2Absent (${_lastDay2Percentage.toStringAsFixed(0)}%)',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.black87,
+                                color: AppTheme.inkOf(context),
                               ),
                             ),
                           ],
@@ -485,19 +488,19 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
                         const SizedBox(height: 6),
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.person_outline,
                               size: 14,
                               color: Colors.teal,
                             ),
-                            const SizedBox(width: 4),
+                            SizedBox(width: 4),
                             Expanded(
                               child: Text(
                                 'সর্বশেষ আপডেট করেছেন: $_lastUpdatedByTeacher',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.teal.shade800,
+                                  color: AppTheme.tileInkOf(context, Colors.teal),
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -534,14 +537,14 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
 
                         return Card(
                           elevation: 1,
-                          margin: const EdgeInsets.symmetric(vertical: 6),
+                          margin: EdgeInsets.symmetric(vertical: 6),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: ListTile(
                             leading: CircleAvatar(
                               radius: 20,
-                              backgroundColor: Colors.grey.shade200,
+                              backgroundColor: AppTheme.borderOf(context),
                               child: ClipOval(
                                 child:
                                     (student['image_url'] != null &&
@@ -555,15 +558,15 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
                                         fit: BoxFit.cover,
                                         errorBuilder:
                                             (context, error, stackTrace) {
-                                              return const Icon(
+                                              return Icon(
                                                 Icons.person,
-                                                color: Colors.grey,
+                                                color: AppTheme.mutedOf(context),
                                               );
                                             },
                                       )
-                                    : const Icon(
+                                    : Icon(
                                         Icons.person,
-                                        color: Colors.grey,
+                                        color: AppTheme.mutedOf(context),
                                       ),
                               ),
                             ),
@@ -617,16 +620,16 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
         color: Colors.white,
         child: ElevatedButton(
           onPressed:
-              _onSaveButtonPressed, // 👈 এখানে এড দেখানোর মেথড যুক্ত করা হয়েছে[cite: 2, 5]
+              _onSaveButtonPressed, // 👈 এখানে এড দেখানোর মেথড যুক্ত করা হয়েছে
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.green,
             foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 50),
+            minimumSize: Size(double.infinity, 50),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Text(
+          child: Text(
             'হাজিরা সংরক্ষণ ও পার্সেন্টেজ আপডেট করুন',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
@@ -642,7 +645,7 @@ class _StudentAttendancePageViewState extends State<StudentAttendancePageView> {
           title,
           style: TextStyle(
             fontSize: 11,
-            color: Colors.grey.shade700,
+            color: AppTheme.mutedOf(context),
             fontWeight: FontWeight.bold,
           ),
         ),

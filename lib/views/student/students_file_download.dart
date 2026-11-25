@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -98,7 +99,7 @@ class _StudentsFileDownloadViewState extends State<StudentsFileDownloadView> {
       case 'image_url':
         return 'ছবির লিংক';
       default:
-        return key.replaceAll('_', ' ').capitalizeFirst ?? key;
+        return key.replaceAll('_', ' ').capitalizeFirst;
     }
   }
 
@@ -288,14 +289,14 @@ class _StudentsFileDownloadViewState extends State<StudentsFileDownloadView> {
                             }).length;
 
                       return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
+                        padding: EdgeInsets.only(right: 8.0),
                         child: ChoiceChip(
                           label: Text('$className ($count)'),
                           selected: isSelected,
                           selectedColor: Colors.teal,
-                          backgroundColor: Colors.grey.shade200,
+                          backgroundColor: AppTheme.borderOf(context),
                           labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : Colors.black87,
+                            color: isSelected ? Colors.white : AppTheme.inkOf(context),
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
                           ),
@@ -309,13 +310,13 @@ class _StudentsFileDownloadViewState extends State<StudentsFileDownloadView> {
                     },
                   ),
                 ),
-                const Divider(height: 1),
+                Divider(height: 1),
                 Expanded(
                   child: filteredList.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             'কোনো শিক্ষার্থী পাওয়া যায়নি।',
-                            style: TextStyle(color: Colors.grey, fontSize: 15),
+                            style: TextStyle(color: AppTheme.mutedOf(context), fontSize: 15),
                           ),
                         )
                       : ListView.builder(
@@ -346,17 +347,17 @@ class _StudentsFileDownloadViewState extends State<StudentsFileDownloadView> {
 
                             return Card(
                               elevation: 2,
-                              margin: const EdgeInsets.symmetric(vertical: 6),
+                              margin: EdgeInsets.symmetric(vertical: 6),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Padding(
-                                padding: const EdgeInsets.all(12.0),
+                                padding: EdgeInsets.all(12.0),
                                 child: Row(
                                   children: [
                                     CircleAvatar(
                                       radius: 26,
-                                      backgroundColor: Colors.teal.shade100,
+                                      backgroundColor: AppTheme.tileOf(context, Colors.teal),
                                       backgroundImage:
                                           (imageUrl != null &&
                                               imageUrl.isNotEmpty)
@@ -371,7 +372,7 @@ class _StudentsFileDownloadViewState extends State<StudentsFileDownloadView> {
                                             )
                                           : null,
                                     ),
-                                    const SizedBox(width: 14),
+                                    SizedBox(width: 14),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
@@ -379,21 +380,21 @@ class _StudentsFileDownloadViewState extends State<StudentsFileDownloadView> {
                                         children: [
                                           Text(
                                             name,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontWeight: FontWeight.bold,
                                               fontSize: 16,
-                                              color: Colors.black87,
+                                              color: AppTheme.inkOf(context),
                                             ),
                                           ),
-                                          const SizedBox(height: 2),
+                                          SizedBox(height: 2),
                                           Text(
                                             'পিতা: $fatherName',
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: Colors.grey.shade700,
+                                              color: AppTheme.mutedOf(context),
                                             ),
                                           ),
-                                          const SizedBox(height: 6),
+                                          SizedBox(height: 6),
                                           Wrap(
                                             spacing: 10,
                                             runSpacing: 4,
@@ -402,13 +403,13 @@ class _StudentsFileDownloadViewState extends State<StudentsFileDownloadView> {
                                                 'ক্লাস: $className',
                                                 style: TextStyle(
                                                   fontSize: 12,
-                                                  color: Colors.teal.shade800,
+                                                  color: AppTheme.tileInkOf(context, Colors.teal),
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
                                               Text(
                                                 'রোল: $roll',
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -417,7 +418,7 @@ class _StudentsFileDownloadViewState extends State<StudentsFileDownloadView> {
                                                 'মোবাইল: $phone',
                                                 style: TextStyle(
                                                   fontSize: 12,
-                                                  color: Colors.grey.shade800,
+                                                  color: AppTheme.mutedOf(context),
                                                 ),
                                               ),
                                             ],
@@ -429,11 +430,11 @@ class _StudentsFileDownloadViewState extends State<StudentsFileDownloadView> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.end,
                                       children: [
-                                        const Text(
+                                        Text(
                                           'মাসিক ফি',
                                           style: TextStyle(
                                             fontSize: 10,
-                                            color: Colors.grey,
+                                            color: AppTheme.mutedOf(context),
                                           ),
                                         ),
                                         Text(

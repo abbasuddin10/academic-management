@@ -1,10 +1,18 @@
+import 'dart:convert';
+
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/models/model_test.dart';
+import 'package:academy_management/repositories/model_test_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'dart:convert';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-// ১. মূল পেজ: মডেল টেস্ট তৈরির ফরম
+/// Create or fully edit a model test.
+///
+/// Question immutability is enforced by the database snapshot trigger: once a
+/// student has started, the question set cannot be changed (even if this UI is
+/// bypassed). The UI additionally disables that section in edit mode.
 class CreateCustomModelTestView extends StatefulWidget {
   final String academyId;
   final String className;
@@ -12,6 +20,7 @@ class CreateCustomModelTestView extends StatefulWidget {
   final int totalSubjectQuestions;
   final String? currentUserId;
   final String? currentUserName;
+  final ModelTest? existingTest;
 
   const CreateCustomModelTestView({
     super.key,
@@ -21,6 +30,7 @@ class CreateCustomModelTestView extends StatefulWidget {
     required this.totalSubjectQuestions,
     this.currentUserId,
     this.currentUserName,
+    this.existingTest,
   });
 
   @override
@@ -29,17 +39,21 @@ class CreateCustomModelTestView extends StatefulWidget {
 }
 
 class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
-  final SupabaseClient supabase = Supabase.instance.client;
+  final SupabaseClient _supabase = Supabase.instance.client;
+  final _repository = ModelTestRepository();
 
   late final TextEditingController testTitleController;
-  final TextEditingController questionCountController = TextEditingController();
+  late final TextEditingController questionCountController;
+  late final TextEditingController marksPerQuestionController;
+  late final TextEditingController negativeMarksController;
+  late final TextEditingController passPercentController;
 
   List<Map<String, dynamic>> availableChaptersData = [];
   String? selectedChapter;
   int selectedChapterQuestionCount = 0;
   bool isLoadingChapters = true;
+  bool _hasAttempts = false;
 
-  // ম্যানুয়ালি সিলেক্ট করা প্রশ্নগুলোর আইডি সংরক্ষণের জন্য
   List<String> manuallySelectedQuestionIds = [];
 
   DateTime? startDate;
@@ -47,115 +61,166 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
   DateTime? endDate;
   TimeOfDay? endTime;
 
+  String _status = 'published';
   bool isSaving = false;
-  bool _isProcessRunning = false; // ডাবল ক্লিক বা রেস কন্ডিশন প্রতিরোধের জন্য
+  bool _isProcessRunning = false;
+
+  bool get _isEditing => widget.existingTest != null;
+  bool get _canEditQuestions => !_isEditing || !_hasAttempts;
 
   @override
   void initState() {
     super.initState();
+    final test = widget.existingTest;
     testTitleController = TextEditingController(
-      text: '${widget.subjectName} মডেল টেস্ট',
+      text: test?.examTitle ?? '${widget.subjectName} মডেল টেস্ট',
     );
+    questionCountController = TextEditingController(
+      text: '${test?.questionCount ?? 0}',
+    );
+    marksPerQuestionController = TextEditingController(
+      text: '${test?.marksPerQuestion ?? 1}',
+    );
+    negativeMarksController = TextEditingController(
+      text: '${test?.negativeMarks ?? 0}',
+    );
+    passPercentController = TextEditingController(
+      text: '${test?.passPercent ?? 33}',
+    );
+
+    if (test != null) {
+      selectedChapter = test.chapterName.isEmpty ? null : test.chapterName;
+      startDate = test.startAt;
+      startTime = test.startAt == null
+          ? null
+          : TimeOfDay.fromDateTime(test.startAt!);
+      endDate = test.endAt;
+      endTime = test.endAt == null ? null : TimeOfDay.fromDateTime(test.endAt!);
+      _status = test.isDraft ? 'draft' : test.status;
+      _decodeSelectedIds(test.selectedQuestionIds);
+    }
     _loadChapters();
+    if (_isEditing) _checkAttempts();
+  }
+
+  void _decodeSelectedIds(String raw) {
+    if (raw.trim().isEmpty) {
+      manuallySelectedQuestionIds = <String>[];
+      return;
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        manuallySelectedQuestionIds = decoded
+            .map((item) => item.toString())
+            .toList();
+      }
+    } catch (_) {
+      manuallySelectedQuestionIds = <String>[];
+    }
+  }
+
+  Future<void> _checkAttempts() async {
+    try {
+      final attempts = await _repository.fetchAttempts(
+        academyId: widget.academyId,
+        testId: widget.existingTest!.id,
+      );
+      if (!mounted) return;
+      setState(() => _hasAttempts = attempts.isNotEmpty);
+    } catch (_) {
+      // Conservative default: question editing stays disabled on failure.
+      if (mounted) setState(() => _hasAttempts = true);
+    }
+  }
+
+  /// Test duration is always derived from the chosen start/end window.
+  int get _computedDurationMinutes {
+    final start = _combined(startDate, startTime);
+    final end = _combined(endDate, endTime);
+    if (start == null || end == null) return 0;
+    final minutes = end.difference(start).inMinutes;
+    return minutes > 0 ? minutes : 0;
   }
 
   @override
   void dispose() {
     testTitleController.dispose();
     questionCountController.dispose();
+    marksPerQuestionController.dispose();
+    negativeMarksController.dispose();
+    passPercentController.dispose();
     super.dispose();
   }
 
-  // নির্দিষ্ট একাডেমি, ক্লাস ও বিষয়ের অধ্যায় এবং প্রতি অধ্যায়ের প্রশ্ন সংখ্যা লোড করা
   Future<void> _loadChapters() async {
     try {
-      final response = await supabase
+      final response = await _supabase
           .from('academy_questions')
           .select('id, chapter_name, question_text, correct_option')
           .eq('academy_id', widget.academyId)
           .eq('class_name', widget.className)
           .eq('subject_name', widget.subjectName);
 
-      Map<String, int> chapterCounts = {};
-
-      for (var item in (response as List)) {
-        String? chapter = item['chapter_name']?.toString().trim();
+      final chapterCounts = <String, int>{};
+      for (final item in (response as List)) {
+        final chapter = item['chapter_name']?.toString().trim();
         if (chapter != null && chapter.isNotEmpty && chapter != 'EMPTY') {
           chapterCounts[chapter] = (chapterCounts[chapter] ?? 0) + 1;
         }
       }
-    
-      List<Map<String, dynamic>> chaptersList = [];
-      chapterCounts.forEach((chapter, count) {
-        chaptersList.add({'chapter_name': chapter, 'count': count});
-      });
-
+      final chaptersList = chapterCounts.entries
+          .map((entry) => {'chapter_name': entry.key, 'count': entry.value})
+          .toList();
       chaptersList.sort(
-        (a, b) => a['chapter_name'].compareTo(b['chapter_name']),
+        (a, b) => a['chapter_name'].toString().compareTo(
+          b['chapter_name'].toString(),
+        ),
       );
-
+      if (!mounted) return;
       setState(() {
         availableChaptersData = chaptersList;
         isLoadingChapters = false;
       });
     } catch (e) {
-      debugPrint("Error loading chapters: $e");
-      setState(() => isLoadingChapters = false);
+      debugPrint('Error loading chapters: $e');
+      if (mounted) setState(() => isLoadingChapters = false);
     }
   }
 
-  // অধ্যায় পরিবর্তনের সময়
   Future<void> _onChapterChanged(String? chapter) async {
+    if (!_canEditQuestions) return;
     setState(() {
       selectedChapter = chapter;
-      manuallySelectedQuestionIds.clear();
-      if (chapter == null) {
-        selectedChapterQuestionCount = 0;
-      }
+      manuallySelectedQuestionIds = <String>[];
+      if (chapter == null) selectedChapterQuestionCount = 0;
     });
-
-    if (chapter != null) {
-      try {
-        final response = await supabase
-            .from('academy_questions')
-            .select('id')
-            .eq('academy_id', widget.academyId)
-            .eq('class_name', widget.className)
-            .eq('subject_name', widget.subjectName)
-            .eq('chapter_name', chapter);
-
-        List fetchedList = response ?? [];
-        setState(() {
-          selectedChapterQuestionCount = fetchedList.length;
-          manuallySelectedQuestionIds = fetchedList
-              .map((q) => q['id'].toString())
-              .toList();
-          questionCountController.text = selectedChapterQuestionCount
-              .toString();
-        });
-      } catch (e) {
-        debugPrint("Error loading chapter count: $e");
-      }
-    }
-  }
-
-  // আলাদা পেজে প্রশ্ন সিলেক্ট করার জন্য নেভিগেট করা
-  void _goToQuestionSelectionPage() async {
-    if (selectedChapter == null) return;
-
-    final result = await aliasGetToSelectQuestions();
-
-    if (result != null && result is List<String>) {
+    if (chapter == null) return;
+    try {
+      final response = await _supabase
+          .from('academy_questions')
+          .select('id')
+          .eq('academy_id', widget.academyId)
+          .eq('class_name', widget.className)
+          .eq('subject_name', widget.subjectName)
+          .eq('chapter_name', chapter);
+      final fetched = response as List;
+      if (!mounted) return;
       setState(() {
-        manuallySelectedQuestionIds = result;
-        questionCountController.text = manuallySelectedQuestionIds.length
-            .toString();
+        selectedChapterQuestionCount = fetched.length;
+        manuallySelectedQuestionIds = fetched
+            .map((q) => q['id'].toString())
+            .toList();
+        questionCountController.text = '$selectedChapterQuestionCount';
       });
+    } catch (e) {
+      debugPrint('Error loading chapter count: $e');
     }
   }
 
-  Future<dynamic> aliasGetToSelectQuestions() async {
-    return await Get.to(
+  Future<void> _goToQuestionSelectionPage() async {
+    if (selectedChapter == null || !_canEditQuestions) return;
+    final result = await Get.to(
       () => SelectQuestionsView(
         academyId: widget.academyId,
         className: widget.className,
@@ -164,105 +229,180 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
         initiallySelectedIds: manuallySelectedQuestionIds,
       ),
     );
+    if (result is List<String> && mounted) {
+      setState(() {
+        manuallySelectedQuestionIds = result;
+        questionCountController.text = '${result.length}';
+      });
+    }
   }
 
-  // নির্দিষ্ট ক্লাসের জন্য সিলেক্ট করা সময় ও তারিখে ইতিমধ্যে কোনো পরীক্ষা আছে কি না তা UTC টাইমজোনে নিখুঁতভাবে চেক করার ফাংশন
+  DateTime? _combined(DateTime? date, TimeOfDay? time) {
+    if (date == null || time == null) return null;
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
   Future<void> _checkScheduleAndSave() async {
     if (_isProcessRunning || isSaving) return;
-
     setState(() {
       _isProcessRunning = true;
       isSaving = true;
     });
-
     try {
-      String title = testTitleController.text.trim();
-      int? qCount = int.tryParse(questionCountController.text.trim());
+      final title = testTitleController.text.trim();
+      final qCount = int.tryParse(questionCountController.text.trim());
+      final marks = double.tryParse(marksPerQuestionController.text.trim());
+      final negative = double.tryParse(negativeMarksController.text.trim());
+      final pass = double.tryParse(passPercentController.text.trim());
 
-      if (title.isEmpty || qCount == null || qCount <= 0) {
-        Get.snackbar(
-          "সতর্কতা",
-          "দয়া করে সঠিক নাম এবং প্রশ্ন সংখ্যা দিন।",
-          backgroundColor: Colors.orange,
-          colorText: Colors.white,
-        );
+      if (title.isEmpty ||
+          widget.className.trim().isEmpty ||
+          widget.subjectName.trim().isEmpty) {
+        _warn('দয়া করে পরীক্ষার নাম, ক্লাস ও বিষয় সঠিকভাবে দিন।');
+        return;
+      }
+      if (qCount == null || qCount <= 0) {
+        _warn('প্রশ্ন সংখ্যা ০ এর বেশি হতে হবে।');
+        return;
+      }
+      if (marks == null || marks <= 0) {
+        _warn('প্রতি প্রশ্নের নম্বর ০ এর বেশি হতে হবে।');
+        return;
+      }
+      if (negative == null || negative < 0) {
+        _warn('নেগেটিভ নম্বর ০ বা তার বেশি হতে হবে।');
+        return;
+      }
+      if (pass == null || pass < 0 || pass > 100) {
+        _warn('পাস মার্কের শতাংশ ০ থেকে ১০০ এর মধ্যে দিন।');
         return;
       }
 
-      if (startDate == null ||
-          startTime == null ||
-          endDate == null ||
-          endTime == null) {
-        Get.snackbar(
-          "সতর্কতা",
-          "দয়া করে শুরু এবং শেষের তারিখ ও সময় সিলেক্ট করুন।",
-          backgroundColor: Colors.orange,
-          colorText: Colors.white,
-        );
+      final startLocal = _combined(startDate, startTime);
+      final endLocal = _combined(endDate, endTime);
+      if (startLocal == null || endLocal == null) {
+        _warn('শুরু এবং শেষের তারিখ ও সময় সিলেক্ট করুন।');
         return;
       }
-
-      // ইউজার যে লোকাল টাইম সিলেক্ট করেছে তাকে UTC-তে রূপান্তর করা[cite: 20]
-      DateTime startDateTime = DateTime(
-        startDate!.year,
-        startDate!.month,
-        startDate!.day,
-        startTime!.hour,
-        startTime!.minute,
-      ).toUtc();
-
-      DateTime endDateTime = DateTime(
-        endDate!.year,
-        endDate!.month,
-        endDate!.day,
-        endTime!.hour,
-        endTime!.minute,
-      ).toUtc();
-
-      if (endDateTime.isBefore(startDateTime)) {
-        Get.snackbar(
-          "ত্রুটি",
-          "শেষের সময় শুরুর সময়ের আগে হতে পারে না।",
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
+      // Duration is derived from the selected window — never typed manually.
+      final int duration = endLocal.difference(startLocal).inMinutes;
+      if (duration <= 0) {
+        _warn('শেষের সময় শুরুর সময়ের কমপক্ষে ১ মিনিট পরে হতে হবে।');
         return;
       }
-
-      // সুপাবেস থেকে বর্তমান একাডেমি ও ক্লাসের শুধুমাত্র সক্রিয় (is_active = true) পরীক্ষাগুলো আনা[cite: 20]
-      final response = await supabase
-          .from('exam_schedules')
-          .select()
-          .eq('academy_id', widget.academyId)
-          .eq('class_name', widget.className)
-          .eq('is_active', true);
-
-      List existingExams = response ?? [];
-      List<Map<String, dynamic>> conflictingExams = [];
-
-      for (var exam in existingExams) {
-        // ডাটাবেজের সময়কে পার্স করে UTC-তে রূপান্তর করা[cite: 20]
-        DateTime dbStart = DateTime.parse(exam['start_time']).toUtc();
-        DateTime dbEnd = DateTime.parse(exam['end_time']).toUtc();
-
-        // ওভারল্যাপ বা কনফ্লিক্ট চেক[cite: 20]
-        if (startDateTime.isBefore(dbEnd) && endDateTime.isAfter(dbStart)) {
-          conflictingExams.add(exam);
+      if (endLocal.isBefore(DateTime.now())) {
+        _warn('অতীতের সময়ে পরীক্ষা তৈরি করা যাবে না।');
+        return;
+      }
+      // A running test keeps its original start time when it is edited; only
+      // *new* past scheduling is rejected.
+      final originalStart = widget.existingTest?.startAt;
+      final keepsOriginalStart =
+          originalStart != null &&
+          startLocal.difference(originalStart).inMinutes.abs() <= 1;
+      if (!keepsOriginalStart &&
+          startLocal.isBefore(
+            DateTime.now().subtract(const Duration(minutes: 1)),
+          )) {
+        _warn('শুরুর সময় অতীত হতে পারে না।');
+        return;
+      }
+      List<String> questionIds;
+      if (selectedChapter != null) {
+        if (!_canEditQuestions) {
+          questionIds = manuallySelectedQuestionIds;
+        } else {
+          if (manuallySelectedQuestionIds.isEmpty) {
+            _warn('এই অধ্যায় থেকে কমপক্ষে একটি প্রশ্ন সিলেক্ট করুন।');
+            return;
+          }
+          if (manuallySelectedQuestionIds.length != qCount) {
+            _warn(
+              'সিলেক্ট করা প্রশ্ন (${manuallySelectedQuestionIds.length}) ও মোট প্রশ্ন ($qCount) সংখ্যা মিলতে হবে।',
+            );
+            return;
+          }
+          questionIds = List<String>.from(manuallySelectedQuestionIds);
         }
+      } else {
+        final rows = await _supabase
+            .from('academy_questions')
+            .select('id')
+            .eq('academy_id', widget.academyId)
+            .eq('class_name', widget.className)
+            .eq('subject_name', widget.subjectName);
+        final all = List.from(rows as List);
+        if (qCount > all.length) {
+          _warn('পর্যাপ্ত প্রশ্ন নেই। উপলব্ধ প্রশ্ন: ${all.length} টি');
+          return;
+        }
+        all.shuffle();
+        questionIds = all.take(qCount).map((q) => q['id'].toString()).toList();
       }
 
-      if (conflictingExams.isNotEmpty) {
-        _showConflictDialog(conflictingExams);
+      if (questionIds.isEmpty) {
+        _warn('পরীক্ষার জন্য কোনো প্রশ্ন নির্বাচন করা হয়নি।');
         return;
       }
 
-      // কোনো কনফ্লিক্ট না থাকলে সেভ হবে[cite: 20]
-      await _saveModelTest(startDateTime, endDateTime, qCount, title);
-    } catch (e) {
-      debugPrint("Error checking schedule: $e");
+      final conflict = await _findConflict(startLocal, endLocal);
+      if (conflict != null) {
+        _showConflictDialog(conflict);
+        return;
+      }
+
+      if (_isEditing) {
+        await _repository.updateTest(
+          testId: widget.existingTest!.id,
+          examTitle: title,
+          chapterName: selectedChapter,
+          selectedQuestionIds: _canEditQuestions
+              ? jsonEncode(questionIds)
+              : null,
+          startAt: startLocal,
+          endAt: endLocal,
+          status: _status,
+          durationMinutes: duration,
+          marksPerQuestion: marks,
+          totalMarks: marks * questionIds.length,
+          negativeMarks: negative,
+          passPercent: pass,
+        );
+      } else {
+        await _repository.createTest(
+          academyId: widget.academyId,
+          className: widget.className,
+          subjectName: widget.subjectName,
+          examTitle: title,
+          chapterName: selectedChapter,
+          selectedQuestionIds: jsonEncode(questionIds),
+          startAt: startLocal,
+          endAt: endLocal,
+          status: _status,
+          creatorId: widget.currentUserId ?? '',
+          creatorName: widget.currentUserName ?? 'Teacher',
+          durationMinutes: duration,
+          marksPerQuestion: marks,
+          totalMarks: marks * questionIds.length,
+          negativeMarks: negative,
+          passPercent: pass,
+        );
+      }
+      if (!mounted) return;
+      Get.back(result: true);
       Get.snackbar(
-        "ত্রুটি",
-        "পরীক্ষার সময় যাচাই করতে সমস্যা হয়েছে: $e",
+        'সফল',
+        _isEditing
+            ? 'মডেল টেস্ট সফলভাবে আপডেট করা হয়েছে!'
+            : 'মডেল টেস্ট সফলভাবে তৈরি করা হয়েছে!',
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      debugPrint('Error saving model test: $e');
+      Get.snackbar(
+        'ত্রুটি',
+        ModelTestRepository.friendlyError(e),
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
@@ -276,14 +416,52 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
     }
   }
 
-  // বিস্তারিত কারণসহ কনফ্লিক্ট পপআপ দেখানোর ফাংশন
-  void _showConflictDialog(List<Map<String, dynamic>> conflicts) {
+  void _warn(String message) {
+    Get.snackbar(
+      'সতর্কতা',
+      message,
+      backgroundColor: Colors.orange,
+      colorText: Colors.white,
+    );
+  }
+
+  Future<Map<String, dynamic>?> _findConflict(
+    DateTime startLocal,
+    DateTime endLocal,
+  ) async {
+    final rows = await _supabase
+        .from('exam_schedules')
+        .select()
+        .eq('academy_id', widget.academyId)
+        .ilike('class_name', widget.className.trim());
+    final startUtc = startLocal.toUtc();
+    final endUtc = endLocal.toUtc();
+    for (final row in (rows as List)) {
+      final map = Map<String, dynamic>.from(row as Map);
+      if (_isEditing && map['id']?.toString() == widget.existingTest!.id) {
+        continue;
+      }
+      final status = map['status']?.toString() ?? 'published';
+      if (status == 'cancelled' || status == 'expired') continue;
+      final dbStart = DateTime.tryParse(map['start_time']?.toString() ?? '');
+      final dbEnd = DateTime.tryParse(map['end_time']?.toString() ?? '');
+      if (dbStart == null || dbEnd == null) continue;
+      if (startUtc.isBefore(dbEnd.toUtc()) && endUtc.isAfter(dbStart.toUtc())) {
+        return map;
+      }
+    }
+    return null;
+  }
+
+  void _showConflictDialog(Map<String, dynamic> conflict) {
+    final start = DateTime.tryParse(conflict['start_time']?.toString() ?? '');
+    final end = DateTime.tryParse(conflict['end_time']?.toString() ?? '');
     Get.dialog(
       AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Row(
-          children: const [
-            Icon(Icons.error_outline, color: Colors.red, size: 28),
+        title: const Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red, size: 26),
             SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -293,413 +471,108 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
             ),
           ],
         ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Text(
-                  'কারণ: একই শ্রেণিতে (Class: ${widget.className}) এই নির্দিষ্ট সময়ে ইতিমধ্যে অন্য একটি পরীক্ষা বা মডেল টেস্ট নির্ধারিত রয়েছে। ছাত্রছাত্রীরা একই সময়ে দুটি পরীক্ষায় অংশগ্রহণ করতে পারে না।',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.red.shade900,
-                    height: 1.3,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'বিদ্যমান conflicting পরীক্ষা(গুলো):',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const SizedBox(height: 6),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: conflicts.length,
-                  itemBuilder: (context, index) {
-                    var exam = conflicts[index];
-                    String examTitle = exam['exam_title'] ?? 'মডেল টেস্ট';
-                    String subject = exam['subject_name'] ?? '';
-                    String creator = exam['question_creator_name'] ?? 'শিক্ষক';
-
-                    // লোকাল টাইম পার্স করা
-                    DateTime sTime = DateTime.parse(
-                      exam['start_time'],
-                    ).toLocal();
-                    DateTime eTime = DateTime.parse(exam['end_time']).toLocal();
-                    String formattedStart = DateFormat(
-                      'dd MMM, yyyy - hh:mm a',
-                    ).format(sTime);
-                    String formattedEnd = DateFormat('hh:mm a').format(eTime);
-
-                    return Card(
-                      color: Colors.grey.shade100,
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '• $examTitle ($subject)',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'প্রণেতা: $creator',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            Text(
-                              'সময়: $formattedStart হতে $formattedEnd',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.red,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+        content: Text(
+          '${widget.className} শ্রেণিতে এই সময়ে ইতিমধ্যে "${conflict['exam_title'] ?? 'অন্য এক পরীক্ষা'}" নির্ধারিত রয়েছে।\n'
+          '${start == null ? '' : DateFormat('dd MMM, hh:mm a').format(start.toLocal())}'
+          '${end == null ? '' : ' — ${DateFormat('hh:mm a').format(end.toLocal())}'}',
+          style: const TextStyle(fontSize: 13),
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.indigo.shade800,
-            ),
             onPressed: () => Get.back(),
-            child: const Text('ঠিক আছে', style: TextStyle(color: Colors.white)),
+            child: const Text('ঠিক আছে'),
           ),
         ],
       ),
     );
   }
 
-  // মডেল টেস্ট ডাটাবেসে সেভ করার মূল ফাংশন
-  Future<void> _saveModelTest(
-    DateTime startDateTime,
-    DateTime endDateTime,
-    int qCount,
-    String title,
-  ) async {
-    try {
-      List<String> questionIds = [];
-
-      if (selectedChapter != null && manuallySelectedQuestionIds.isNotEmpty) {
-        questionIds = manuallySelectedQuestionIds;
-        if (questionIds.length > qCount) {
-          questionIds = questionIds.take(qCount).toList();
-        }
-      } else {
-        var query = supabase
-            .from('academy_questions')
-            .select('id')
-            .eq('academy_id', widget.academyId)
-            .eq('class_name', widget.className)
-            .eq('subject_name', widget.subjectName);
-
-        final questionsRes = await query;
-        List allQList = List.from(questionsRes ?? []);
-
-        if (qCount > allQList.length) {
-          Get.snackbar(
-            "ত্রুটি",
-            "পর্যাপ্ত প্রশ্ন নেই। উপলব্ধ প্রশ্ন: ${allQList.length} টি",
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-          );
-          return;
-        }
-
-        allQList.shuffle();
-        List selectedQuestions = allQList.take(qCount).toList();
-        questionIds = selectedQuestions.map((q) => q['id'].toString()).toList();
-      }
-
-      String creatorId = widget.currentUserId ?? '';
-      String creatorName = widget.currentUserName ?? 'Teacher';
-
-      // Supabase-এর exam_schedules টেবিলে সঠিক ISO ফরম্যাটে ডাটা ইনসার্ট করা হলো[cite: 20]
-      await supabase.from('exam_schedules').insert({
-        'academy_id': widget.academyId,
-        'class_name': widget.className,
-        'subject_name': widget.subjectName,
-        'exam_title': title,
-        'chapter_name': selectedChapter,
-        'question_count': questionIds.length,
-        'selected_question_ids': jsonEncode(questionIds),
-        'start_time': startDateTime.toIso8601String(),
-        'end_time': endDateTime.toIso8601String(),
-        'is_active': true,
-        'question_creator_id': creatorId.isEmpty ? null : creatorId,
-        'question_creator_name': creatorName,
-      });
-
-      Get.back();
-      Get.snackbar(
-        "সফল",
-        "মডেল টেস্ট সফলভাবে তৈরি করা হয়েছে!",
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
-    } catch (e) {
-      debugPrint("Error creating model test: $e");
-      Get.snackbar(
-        "ত্রুটি",
-        "মডেল টেস্ট তৈরি করতে সমস্যা হয়েছে: $e",
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.altSurfaceOf(context),
       appBar: AppBar(
-        title: const Text(
-          'নতুন মডেল টেস্ট তৈরি করুন',
-          style: TextStyle(fontSize: 16),
+        title: Text(
+          _isEditing ? 'মডেল টেস্ট সম্পাদনা' : 'নতুন মডেল টেস্ট তৈরি করুন',
+          style: const TextStyle(fontSize: 16),
         ),
-        backgroundColor: Colors.indigo.shade800,
+        backgroundColor: AppTheme.tileInkOf(context, Colors.indigo),
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.indigo.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.indigo.shade200),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.info_outline, color: Colors.indigo),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'ক্লাস: ${widget.className}\nবিষয়: ${widget.subjectName}\nমোট মজুদ প্রশ্ন: ${widget.totalSubjectQuestions} টি',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.indigo.shade900,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildInfoCard(),
             const SizedBox(height: 16),
-            TextField(
-              controller: testTitleController,
-              decoration: const InputDecoration(
-                labelText: 'মডেল টেস্টের নাম (যেমন: ১ম মডেল টেস্ট)',
-                border: OutlineInputBorder(),
-              ),
+            _buildField(testTitleController, 'মডেল টেস্টের নাম'),
+            const SizedBox(height: 12),
+            _buildChapterSection(),
+            const SizedBox(height: 12),
+            _buildField(
+              questionCountController,
+              'পরীক্ষায় মোট কতটি প্রশ্ন থাকবে?',
+              keyboard: TextInputType.number,
             ),
-            const SizedBox(height: 16),
-            isLoadingChapters
-                ? const Center(child: LinearProgressIndicator())
-                : Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade400),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: selectedChapter,
-                        isExpanded: true,
-                        hint: const Text(
-                          "নির্দিষ্ট অধ্যায় সিলেক্ট করুন (ঐচ্ছিক)",
-                          style: TextStyle(fontSize: 13),
-                        ),
-                        items: [
-                          const DropdownMenuItem<String>(
-                            value: null,
-                            child: Text(
-                              "সকল অধ্যায় (পুরো বিষয় থেকে র্যান্ডম)",
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ),
-                          ...availableChaptersData.map((map) {
-                            String chName = map['chapter_name'];
-                            int chCount = map['count'];
-                            return DropdownMenuItem<String>(
-                              value: chName,
-                              child: Text('$chName (প্রশ্ন আছে: $chCount টি)'),
-                            );
-                          }),
-                        ],
-                        onChanged: _onChapterChanged,
-                      ),
-                    ),
-                  ),
-
-            if (selectedChapter != null) ...[
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'এই অধ্যায়ে মোট প্রশ্ন: $selectedChapterQuestionCount টি',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.indigo,
-                      fontSize: 13,
-                    ),
-                  ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                    ),
-                    onPressed: _goToQuestionSelectionPage,
-                    icon: const Icon(Icons.list_alt, size: 16),
-                    label: Text(
-                      'প্রশ্ন দেখুন (${manuallySelectedQuestionIds.length}টি সিলেক্টেড)',
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-
-            const SizedBox(height: 16),
-            TextField(
-              controller: questionCountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'পরীক্ষায় মোট কতটি প্রশ্ন থাকবে?',
-                border: OutlineInputBorder(),
-              ),
+            const SizedBox(height: 12),
+            _buildField(
+              marksPerQuestionController,
+              'প্রতি প্রশ্নের নম্বর',
+              keyboard: const TextInputType.numberWithOptions(decimal: true),
             ),
-            const SizedBox(height: 24),
-            const Text(
-              'পরীক্ষার শুরুর সময়:',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
+            _buildDurationPreview(),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      DateTime? pickedDate = await showDatePicker(
-                        context: context,
-                        initialDate: DateTime.now(),
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime(2030),
-                      );
-                      if (pickedDate != null) {
-                        setState(() => startDate = pickedDate);
-                      }
-                    },
-                    icon: const Icon(Icons.calendar_today, size: 16),
-                    label: Text(
-                      startDate == null
-                          ? 'তারিখ বাছুন'
-                          : DateFormat('yyyy-MM-dd').format(startDate!),
+                  child: _buildField(
+                    negativeMarksController,
+                    'নেগেটিভ নম্বর (ঐচ্ছিক)',
+                    keyboard: const TextInputType.numberWithOptions(
+                      decimal: true,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      TimeOfDay? pickedTime = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (pickedTime != null) {
-                        setState(() => startTime = pickedTime);
-                      }
-                    },
-                    icon: const Icon(Icons.access_time, size: 16),
-                    label: Text(
-                      startTime == null
-                          ? 'সময় বাছুন'
-                          : startTime!.format(context),
+                  child: _buildField(
+                    passPercentController,
+                    'পাস মার্ক (%)',
+                    keyboard: const TextInputType.numberWithOptions(
+                      decimal: true,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             const Text(
-              'পরীক্ষার শেষ সময়:',
+              'প্রকাশের অবস্থা:',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
-            const SizedBox(height: 8),
-            Row(
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      DateTime? pickedDate = await showDatePicker(
-                        context: context,
-                        initialDate: startDate ?? DateTime.now(),
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime(2030),
-                      );
-                      if (pickedDate != null) {
-                        setState(() => endDate = pickedDate);
-                      }
-                    },
-                    icon: const Icon(Icons.calendar_today, size: 16),
-                    label: Text(
-                      endDate == null
-                          ? 'তারিখ বাছুন'
-                          : DateFormat('yyyy-MM-dd').format(endDate!),
-                    ),
-                  ),
+                ChoiceChip(
+                  label: const Text('প্রকাশিত'),
+                  selected: _status == 'published',
+                  onSelected: (_) => setState(() => _status = 'published'),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () async {
-                      TimeOfDay? pickedTime = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (pickedTime != null) {
-                        setState(() => endTime = pickedTime);
-                      }
-                    },
-                    icon: const Icon(Icons.access_time, size: 16),
-                    label: Text(
-                      endTime == null ? 'সময় বাছুন' : endTime!.format(context),
-                    ),
-                  ),
+                ChoiceChip(
+                  label: const Text('খসরা'),
+                  selected: _status == 'draft',
+                  onSelected: (_) => setState(() => _status = 'draft'),
                 ),
               ],
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 20),
+            _buildDateTime('পরীক্ষার শুরুর সময়:', true),
+            const SizedBox(height: 16),
+            _buildDateTime('পরীক্ষার শেষ সময়:', false),
+            const SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
               height: 48,
@@ -723,9 +596,9 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
                           strokeWidth: 2,
                         ),
                       )
-                    : const Text(
-                        'মডেল টেস্ট তৈরি করুন',
-                        style: TextStyle(
+                    : Text(
+                        _isEditing ? 'সংরক্ষণ করুন' : 'মডেল টেস্ট তৈরি করুন',
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
@@ -737,9 +610,273 @@ class _CreateCustomModelTestViewState extends State<CreateCustomModelTestView> {
       ),
     );
   }
+
+  Widget _buildInfoCard() => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: AppTheme.tileOf(context, Colors.indigo),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: AppTheme.tileOf(context, Colors.indigo)),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.info_outline, color: Colors.indigo),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'ক্লাস: ${widget.className}\nবিষয়: ${widget.subjectName}\nমোট মজুদ প্রশ্ন: ${widget.totalSubjectQuestions} টি',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppTheme.tileInkOf(context, Colors.indigo),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  /// Read-only preview of the duration derived from the chosen time window.
+  Widget _buildDurationPreview() {
+    final minutes = _computedDurationMinutes;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.tileOf(
+          context,
+          minutes > 0 ? Colors.teal : Colors.grey,
+        ),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppTheme.tileOf(
+            context,
+            minutes > 0 ? Colors.teal : Colors.grey,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.timer_outlined,
+            size: 18,
+            color: AppTheme.tileInkOf(
+              context,
+              minutes > 0 ? Colors.teal : Colors.grey,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'পরীক্ষার সময়কাল (শুরু ও শেষ সময় থেকে স্বয়ংক্রিয়)',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.tileInkOf(
+                      context,
+                      minutes > 0 ? Colors.teal : Colors.grey,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  minutes > 0
+                      ? '$minutes মিনিট'
+                      : 'শুরু ও শেষের তারিখ/সময় বাছুন',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.tileInkOf(
+                      context,
+                      minutes > 0 ? Colors.teal : Colors.grey,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildField(
+    TextEditingController controller,
+    String label, {
+    TextInputType? keyboard,
+  }) => TextField(
+    controller: controller,
+    keyboardType: keyboard,
+    decoration: InputDecoration(
+      labelText: label,
+      border: const OutlineInputBorder(),
+      filled: true,
+      fillColor: AppTheme.surfaceOf(context),
+    ),
+  );
+
+  Widget _buildChapterSection() {
+    if (!_canEditQuestions) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppTheme.tileOf(context, Colors.orange),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          'শিক্ষার্থীরা এই পরীক্ষা শুরু করায় প্রশ্ন পরিবর্তন করা যাবে না। '
+          'অন্যান্য তথ্য সম্পাদনা করা যাবে।',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppTheme.tileInkOf(context, Colors.orange),
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        isLoadingChapters
+            ? const Center(child: LinearProgressIndicator())
+            : Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppTheme.borderOf(context)),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: selectedChapter,
+                    isExpanded: true,
+                    hint: const Text(
+                      'নির্দিষ্ট অধ্যায় সিলেক্ট করুন (ঐচ্ছিক)',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: null,
+                        child: Text(
+                          'সকল অধ্যায় (পুরো বিষয় থেকে র্যান্ডম)',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                      ...availableChaptersData.map((map) {
+                        final name = map['chapter_name'].toString();
+                        final count = map['count'];
+                        return DropdownMenuItem<String>(
+                          value: name,
+                          child: Text('$name (প্রশ্ন আছে: $count টি)'),
+                        );
+                      }),
+                    ],
+                    onChanged: _onChapterChanged,
+                  ),
+                ),
+              ),
+        if (selectedChapter != null) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'সিলেক্টেড: ${manuallySelectedQuestionIds.length} / $selectedChapterQuestionCount',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: Colors.indigo,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal.shade700,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _goToQuestionSelectionPage,
+                icon: const Icon(Icons.list_alt, size: 16),
+                label: const Text(
+                  'প্রশ্ন দেখুন',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildDateTime(String label, bool isStart) {
+    final date = isStart ? startDate : endDate;
+    final time = isStart ? startTime : endTime;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: date ?? DateTime.now(),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2035),
+                  );
+                  if (picked != null && mounted) {
+                    setState(() {
+                      if (isStart) {
+                        startDate = picked;
+                      } else {
+                        endDate = picked;
+                      }
+                    });
+                  }
+                },
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(
+                  date == null
+                      ? 'তারিখ বাছুন'
+                      : DateFormat('yyyy-MM-dd').format(date),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: time ?? TimeOfDay.now(),
+                  );
+                  if (picked != null && mounted) {
+                    setState(() {
+                      if (isStart) {
+                        startTime = picked;
+                      } else {
+                        endTime = picked;
+                      }
+                    });
+                  }
+                },
+                icon: const Icon(Icons.access_time, size: 16),
+                label: Text(time == null ? 'সময় বাছুন' : time.format(context)),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
-// ২. আলাদা পেজ: প্রশ্ন সিলেক্ট করার পেজ
+/// Chapter question picker (kept as a separate route).
 class SelectQuestionsView extends StatefulWidget {
   final String academyId;
   final String className;
@@ -761,7 +898,7 @@ class SelectQuestionsView extends StatefulWidget {
 }
 
 class _SelectQuestionsViewState extends State<SelectQuestionsView> {
-  final SupabaseClient supabase = Supabase.instance.client;
+  final SupabaseClient _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> questions = [];
   late Set<String> selectedIds;
   bool isLoading = true;
@@ -769,46 +906,45 @@ class _SelectQuestionsViewState extends State<SelectQuestionsView> {
   @override
   void initState() {
     super.initState();
-    selectedIds = Set.from(widget.initiallySelectedIds);
+    selectedIds = Set<String>.from(widget.initiallySelectedIds);
     _fetchQuestions();
   }
 
   Future<void> _fetchQuestions() async {
     try {
-      final response = await supabase
+      final response = await _supabase
           .from('academy_questions')
           .select('id, question_text, correct_option')
           .eq('academy_id', widget.academyId)
           .eq('class_name', widget.className)
           .eq('subject_name', widget.subjectName)
           .eq('chapter_name', widget.chapterName);
-
+      if (!mounted) return;
       setState(() {
-        questions = List<Map<String, dynamic>>.from(response ?? []);
+        questions = List<Map<String, dynamic>>.from(response as List);
         isLoading = false;
       });
     } catch (e) {
-      debugPrint("Error fetching chapter questions: $e");
-      setState(() => isLoading = false);
+      debugPrint('Error fetching chapter questions: $e');
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.altSurfaceOf(context),
       appBar: AppBar(
         title: Text(
           '${widget.chapterName} - প্রশ্ন নির্বাচন',
           style: const TextStyle(fontSize: 15),
         ),
-        backgroundColor: Colors.indigo.shade800,
+        backgroundColor: AppTheme.tileInkOf(context, Colors.indigo),
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.check),
-            onPressed: () {
-              Get.back(result: selectedIds.toList());
-            },
+            onPressed: () => Get.back(result: selectedIds.toList()),
           ),
         ],
       ),
@@ -820,66 +956,55 @@ class _SelectQuestionsViewState extends State<SelectQuestionsView> {
               padding: const EdgeInsets.all(12),
               itemCount: questions.length,
               itemBuilder: (context, index) {
-                var q = questions[index];
-                String qId = q['id'].toString();
-                String qText = q['question_text'] ?? 'প্রশ্ন নেই';
-                String correctOpt = q['correct_option'] ?? 'N/A';
-                bool isSelected = selectedIds.contains(qId);
-
+                final q = questions[index];
+                final id = q['id'].toString();
                 return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  elevation: 2,
                   child: CheckboxListTile(
                     title: Text(
-                      qText,
+                      q['question_text']?.toString() ?? 'প্রশ্ন নেই',
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 6.0),
-                      child: Text(
-                        'সঠিক উত্তর: $correctOpt',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.green.shade700,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    subtitle: Text(
+                      'সঠিক উত্তর: ${q['correct_option'] ?? 'N/A'}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.green.shade700,
                       ),
                     ),
-                    value: isSelected,
-                    onChanged: (bool? value) {
-                      setState(() {
-                        if (value == true) {
-                          selectedIds.add(qId);
-                        } else {
-                          selectedIds.remove(qId);
-                        }
-                      });
-                    },
+                    value: selectedIds.contains(id),
+                    onChanged: (value) => setState(() {
+                      if (value == true) {
+                        selectedIds.add(id);
+                      } else {
+                        selectedIds.remove(id);
+                      }
+                    }),
                   ),
                 );
               },
             ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(12),
-        color: Colors.indigo.shade50,
+        color: AppTheme.tileOf(context, Colors.indigo),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
               'মোট সিলেক্টেড: ${selectedIds.length} টি',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.tileInkOf(context, Colors.indigo),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.teal.shade700,
                 foregroundColor: Colors.white,
               ),
-              onPressed: () {
-                Get.back(result: selectedIds.toList());
-              },
+              onPressed: () => Get.back(result: selectedIds.toList()),
               child: const Text('নিশ্চিত করুন'),
             ),
           ],

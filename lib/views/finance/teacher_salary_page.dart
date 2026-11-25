@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -36,12 +37,12 @@ class _TeacherSalaryPageViewState extends State<TeacherSalaryPageView> {
   @override
   void initState() {
     super.initState();
-    AdService.loadInterstitialAd(); // 👈 ইন্টারস্টিশিয়াল অ্যাড লোড[cite: 2]
+    AdService.loadInterstitialAd(); // 👈 ইন্টারস্টিশিয়াল অ্যাড লোড
     _initBannerAd(); // 👈 ব্যানার অ্যাড ইনিশিয়ালাইজ
     _fetchTeacherSalaryAndHistory();
   }
 
-  // 👈 ব্যানার অ্যাড সেটআপ ফাংশন[cite: 2]
+  // 👈 ব্যানার অ্যাড সেটআপ ফাংশন
   void _initBannerAd() {
     _bannerAd = AdService.createBannerAd()
       ..load().then((_) {
@@ -132,11 +133,11 @@ class _TeacherSalaryPageViewState extends State<TeacherSalaryPageView> {
           isLoading = false;
         });
       }
-      print("Error fetching salary history: $e");
+      debugPrint("Error fetching salary history: $e");
     }
   }
 
-  // 👈 সব ইতিহাস দেখানোর আগে অ্যাড দেখানোর ফাংশন[cite: 2]
+  // 👈 সব ইতিহাস দেখানোর আগে অ্যাড দেখানোর ফাংশন
   void _onShowAllHistoryClicked() {
     AdService.showForcedAd(
       onComplete: () {
@@ -289,25 +290,25 @@ class _TeacherSalaryPageViewState extends State<TeacherSalaryPageView> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: 16),
 
                   // হিস্ট্রি সেকশনের শিরোনাম এবং সব ইতিহাস দেখার বাটন
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           'সর্বশেষ পেমেন্ট ইতিহাস',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                            color: AppTheme.inkOf(context),
                           ),
                         ),
                         TextButton(
                           onPressed:
-                              _onShowAllHistoryClicked, // 👈 এখানে আপডেট করা হয়েছে[cite: 2]
+                              _onShowAllHistoryClicked, // 👈 এখানে আপডেট করা হয়েছে
                           child: const Text(
                             'সব ইতিহাস →',
                             style: TextStyle(
@@ -320,22 +321,22 @@ class _TeacherSalaryPageViewState extends State<TeacherSalaryPageView> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
 
                   // পেমেন্ট হিস্ট্রি লিস্ট
                   Expanded(
                     child: isLoading
-                        ? const Center(
+                        ? Center(
                             child: CircularProgressIndicator(
                               color: Colors.teal,
                             ),
                           )
                         : salaryHistoryList.isEmpty
-                        ? const Center(
+                        ? Center(
                             child: Text(
                               'কোনো পেমেন্ট হিস্ট্রি পাওয়া যায়নি।',
                               style: TextStyle(
-                                color: Colors.grey,
+                                color: AppTheme.mutedOf(context),
                                 fontSize: 14,
                               ),
                             ),
@@ -356,13 +357,13 @@ class _TeacherSalaryPageViewState extends State<TeacherSalaryPageView> {
 
                               return Card(
                                 elevation: 1,
-                                margin: const EdgeInsets.symmetric(vertical: 6),
+                                margin: EdgeInsets.symmetric(vertical: 6),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: ListTile(
                                   leading: CircleAvatar(
-                                    backgroundColor: Colors.teal.shade50,
+                                    backgroundColor: AppTheme.tileOf(context, Colors.teal),
                                     child: const Icon(
                                       Icons.payments,
                                       color: Colors.teal,
@@ -370,7 +371,7 @@ class _TeacherSalaryPageViewState extends State<TeacherSalaryPageView> {
                                   ),
                                   title: Text(
                                     'মাস: $monthStr',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14,
                                     ),
@@ -379,9 +380,9 @@ class _TeacherSalaryPageViewState extends State<TeacherSalaryPageView> {
                                     paymentDate.isNotEmpty
                                         ? 'প্রদানের তারিখ: $paymentDate'
                                         : '',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey,
+                                      color: AppTheme.mutedOf(context),
                                     ),
                                   ),
                                   trailing: Text(
@@ -401,7 +402,7 @@ class _TeacherSalaryPageViewState extends State<TeacherSalaryPageView> {
               ),
             ),
           ),
-          // 👈 স্ক্রিনের নিচে ফিক্সড ব্যানার অ্যাড উইজেট[cite: 2]
+          // 👈 স্ক্রিনের নিচে ফিক্সড ব্যানার অ্যাড উইজেট
           if (_isBannerAdLoaded && _bannerAd != null)
             Container(
               alignment: Alignment.center,

@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:academy_management/services/ad_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -42,10 +43,10 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
   void initState() {
     super.initState();
 
-    // পেজ ওপেন হওয়ার সাথে সাথে ইন্টারস্টিশিয়াল অ্যাড লোড করা শুরু করা[cite: 17]
+    // পেজ ওপেন হওয়ার সাথে সাথে ইন্টারস্টিশিয়াল অ্যাড লোড করা শুরু করা
     AdService.loadInterstitialAd();
 
-    // বটমে ফিক্সড ব্যানার অ্যাড লোড করা[cite: 17]
+    // বটমে ফিক্সড ব্যানার অ্যাড লোড করা
     _bannerAd = AdService.createBannerAd()
       ..load().then((_) {
         if (mounted) {
@@ -59,19 +60,23 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
   @override
   void dispose() {
     _bannerAd
-        ?.dispose(); // মেমোরি লিক রোধ করতে ব্যানার অ্যাড ডিসপোজ করা[cite: 17]
+        ?.dispose(); // মেমোরি লিক রোধ করতে ব্যানার অ্যাড ডিসপোজ করা
     _titleController.dispose();
     _detailsController.dispose();
     super.dispose();
   }
 
   Future<void> _submitComplaint() async {
+    final successBg = AppTheme.tileOf(context, Colors.green);
+    final successInk = AppTheme.tileInkOf(context, Colors.green);
+    final errorBg = AppTheme.tileOf(context, Colors.red);
+    final errorInk = AppTheme.tileInkOf(context, Colors.red);
     if (widget.studentId.isEmpty || widget.academyId.isEmpty) {
       Get.snackbar(
         'ত্রুটি',
         'শিক্ষার্থী বা প্রতিষ্ঠানের আইডি পাওয়া যায়নি।',
-        backgroundColor: Colors.red.shade50,
-        colorText: Colors.red.shade900,
+        backgroundColor: AppTheme.tileOf(context, Colors.red),
+        colorText: AppTheme.tileInkOf(context, Colors.red),
         snackPosition: SnackPosition.BOTTOM,
       );
       return;
@@ -108,19 +113,19 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
         _isAnonymous
             ? 'আপনার অভিযোগটি সম্পূর্ণ গোপনীয়তার সাথে জমা দেওয়া হয়েছে।'
             : 'আপনার অভিযোগটি সফলভাবে জমা দেওয়া হয়েছে।',
-        backgroundColor: Colors.green.shade50,
-        colorText: Colors.green.shade900,
+        backgroundColor: successBg,
+        colorText: successInk,
         snackPosition: SnackPosition.BOTTOM,
-        margin: const EdgeInsets.all(16),
+        margin: EdgeInsets.all(16),
         borderRadius: 12,
-        icon: const Icon(Icons.check_circle, color: Colors.green),
+        icon: Icon(Icons.check_circle, color: Colors.green),
       );
     } catch (e) {
       Get.snackbar(
         'ত্রুটি',
         'অভিযোগ পাঠাতে সমস্যা হয়েছে: $e',
-        backgroundColor: Colors.red.shade50,
-        colorText: Colors.red.shade900,
+        backgroundColor: errorBg,
+        colorText: errorInk,
         snackPosition: SnackPosition.BOTTOM,
         margin: const EdgeInsets.all(16),
         borderRadius: 12,
@@ -138,28 +143,28 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
 
     Get.defaultDialog(
       title: "অভিযোগ জমা কনফার্মেশন",
-      titleStyle: const TextStyle(
+      titleStyle: TextStyle(
         fontWeight: FontWeight.bold,
         fontSize: 17,
         color: Colors.indigo,
       ),
       content: Padding(
-        padding: const EdgeInsets.only(top: 8.0),
+        padding: EdgeInsets.only(top: 8.0),
         child: Text(
           _isAnonymous
               ? "আপনি কি নিশ্চিত? আপনার পরিচয় সম্পূর্ণ গোপন (Anonymous) রেখে অভিযোগটি কর্তৃপক্ষের কাছে পাঠানো হবে।"
               : "আপনি কি নিশ্চিত? আপনার নাম (${widget.studentName}) এবং ক্লাসসহ অভিযোগটি পাঠানো হবে।",
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 13.5, color: Colors.black87),
+          style: TextStyle(fontSize: 13.5, color: AppTheme.inkOf(context)),
         ),
       ),
       textConfirm: "হ্যাঁ, জমা দিন",
       textCancel: "না",
       confirmTextColor: Colors.white,
       buttonColor: Colors.indigo,
-      cancelTextColor: Colors.black54,
+      cancelTextColor: AppTheme.mutedOf(context),
       onConfirm: () {
-        Get.back(); // ডায়ালগ বন্ধ করা[cite: 17]
+        Get.back(); // ডায়ালগ বন্ধ করা
 
         // পপআপে কনফার্ম করার পর শর্ত ছাড়া সরাসরি অ্যাড দেখাবে, দেখা শেষ হলে সুপাবেসে ডাটা সাবমিট হবে
         AdService.showForcedAd(
@@ -182,9 +187,9 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
         builder: (BuildContext context, StateSetter setStateSheet) {
           return Container(
             height: MediaQuery.of(context).size.height * 0.75,
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              color: Colors.white,
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceOf(context),
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(20),
                 topRight: Radius.circular(20),
@@ -287,10 +292,10 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                                       Expanded(
                                         child: Text(
                                           item['title'] ?? '',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 14,
-                                            color: Colors.black87,
+                                            color: AppTheme.inkOf(context),
                                           ),
                                         ),
                                       ),
@@ -302,7 +307,7 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                                               vertical: 4,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: statusColor.withOpacity(
+                                              color: statusColor.withValues(alpha: 
                                                 0.1,
                                               ),
                                               borderRadius:
@@ -317,7 +322,7 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                                               ),
                                             ),
                                           ),
-                                          // শুধু পেন্ডিং থাকলেই ডিলিট আইকন দেখাবে[cite: 17]
+                                          // শুধু পেন্ডিং থাকলেই ডিলিট আইকন দেখাবে
                                           if (status == 'Pending') ...[
                                             const SizedBox(width: 8),
                                             IconButton(
@@ -341,7 +346,24 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                                                       Colors.white,
                                                   buttonColor: Colors.red,
                                                   onConfirm: () async {
-                                                    Get.back(); // ডায়ালগ বন্ধ[cite: 17]
+                                                    // Resolve before the async gap.
+                                                    final okBg = AppTheme.tileOf(
+                                                      context,
+                                                      Colors.green,
+                                                    );
+                                                    final okInk = AppTheme.tileInkOf(
+                                                      context,
+                                                      Colors.green,
+                                                    );
+                                                    final errBg = AppTheme.tileOf(
+                                                      context,
+                                                      Colors.red,
+                                                    );
+                                                    final errInk = AppTheme.tileInkOf(
+                                                      context,
+                                                      Colors.red,
+                                                    );
+                                                    Get.back(); // ডায়ালগ বন্ধ
                                                     try {
                                                       await Supabase
                                                           .instance
@@ -355,25 +377,19 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
 
                                                       setStateSheet(
                                                         () {},
-                                                      ); // শিট রিফ্রেশ[cite: 17]
+                                                      ); // শিট রিফ্রেশ
                                                       Get.snackbar(
                                                         'সফল',
                                                         'অভিযোগটি সফলভাবে মুছে ফেলা হয়েছে।',
-                                                        backgroundColor: Colors
-                                                            .green
-                                                            .shade50,
-                                                        colorText: Colors
-                                                            .green
-                                                            .shade900,
+                                                        backgroundColor: okBg,
+                                                        colorText: okInk,
                                                       );
                                                     } catch (e) {
                                                       Get.snackbar(
                                                         'ত্রুটি',
                                                         'ডিলিট করতে সমস্যা হয়েছে: $e',
-                                                        backgroundColor:
-                                                            Colors.red.shade50,
-                                                        colorText:
-                                                            Colors.red.shade900,
+                                                        backgroundColor: errBg,
+                                                        colorText: errInk,
                                                       );
                                                     }
                                                   },
@@ -385,21 +401,21 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 6),
+                                  SizedBox(height: 6),
                                   Text(
                                     item['details'] ?? '',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 12.5,
-                                      color: Colors.black54,
+                                      color: AppTheme.mutedOf(context),
                                     ),
                                   ),
                                   if (dateStr.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
+                                    SizedBox(height: 8),
                                     Text(
                                       'তারিখ: $dateStr',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 11,
-                                        color: Colors.grey,
+                                        color: AppTheme.mutedOf(context),
                                       ),
                                     ),
                                   ],
@@ -447,45 +463,45 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                 ),
               ),
               style: TextButton.styleFrom(
-                backgroundColor: Colors.white.withOpacity(0.15),
+                backgroundColor: Colors.white.withValues(alpha: 0.15),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+                padding: EdgeInsets.symmetric(horizontal: 10),
               ),
             ),
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: const EdgeInsets.all(14),
+                padding: EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: AppTheme.tileOf(context, Colors.blue),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue.shade100),
+                  border: Border.all(color: AppTheme.tileOf(context, Colors.blue)),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.shield_outlined,
                       color: Colors.blue,
                       size: 24,
                     ),
-                    const SizedBox(width: 10),
+                    SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'আপনার যেকোনো সমস্যা বা মতামত সম্পূর্ণ নির্দ্বিধায় এখানে জানাতে পারেন। আপনি চাইলে আপনার পরিচয় গোপন রাখতে পারেন অথবা নাম প্রকাশ করেও পাঠাতে পারেন। ভয় পাওয়ার কিছু নেই, এটি আপনাদের কল্যাণের জন্যই!',
                         style: TextStyle(
                           fontSize: 12.5,
-                          color: Colors.blue.shade900,
+                          color: AppTheme.tileInkOf(context, Colors.blue),
                           height: 1.4,
                         ),
                       ),
@@ -493,15 +509,15 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: AppTheme.surfaceOf(context),
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.withOpacity(0.08),
+                      color: Colors.grey.withValues(alpha: 0.08),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -562,8 +578,8 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
-                    const Divider(height: 20),
+                    SizedBox(height: 16),
+                    Divider(height: 20),
                     CheckboxListTile(
                       value: _isAnonymous,
                       onChanged: (bool? value) {
@@ -571,12 +587,12 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                           _isAnonymous = value ?? true;
                         });
                       },
-                      title: const Text(
+                      title: Text(
                         'আমার পরিচয় (নাম ও রোল) গোপন রাখুন',
                         style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          color: AppTheme.inkOf(context),
                         ),
                       ),
                       subtitle: Text(
@@ -585,7 +601,7 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
                             : 'আপনার নাম ও ক্লাসসহ অভিযোগ জমা হবে।',
                         style: TextStyle(
                           fontSize: 11.5,
-                          color: Colors.grey.shade600,
+                          color: AppTheme.mutedOf(context),
                         ),
                       ),
                       activeColor: Colors.indigo,
@@ -634,7 +650,7 @@ class _StudentComplaintViewState extends State<StudentComplaintView> {
         ),
       ),
 
-      // পেজের বোটমে ফিক্সড ব্যানার অ্যাড দেখানোর অংশ[cite: 17]
+      // পেজের বোটমে ফিক্সড ব্যানার অ্যাড দেখানোর অংশ
       bottomNavigationBar: _isBannerAdLoaded && _bannerAd != null
           ? Container(
               alignment: Alignment.center,

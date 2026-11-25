@@ -1,12 +1,14 @@
-﻿import 'dart:io';
+import 'package:academy_management/config/app_theme.dart';
+import 'dart:io';
 import 'dart:typed_data';
+import 'package:academy_management/config/app_config.dart';
+import 'package:academy_management/services/gemini_service.dart';
 import 'package:academy_management/views/exams/question_paper_download_admin.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart'; // লোকাল ফাইল বা পিডিএফ সিলেক্ট করার জন্য
-import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:dio/dio.dart';
@@ -69,19 +71,19 @@ class _QuestionCreateViewState extends State<QuestionCreateView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppTheme.altSurfaceOf(context),
       appBar: AppBar(
-        title: const Text('প্রশ্নপত্র তৈরি - পরীক্ষা নির্বাচন'),
+        title: Text('প্রশ্নপত্র তৈরি - পরীক্ষা নির্বাচন'),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator())
           : _examTitlesList.isEmpty
-          ? const Center(
+          ? Center(
               child: Text(
                 'এই প্রতিষ্ঠানে কোনো পরীক্ষার নাম যুক্ত করা হয়নি!',
-                style: TextStyle(color: Colors.grey, fontSize: 16),
+                style: TextStyle(color: AppTheme.mutedOf(context), fontSize: 16),
               ),
             )
           : Padding(
@@ -92,36 +94,36 @@ class _QuestionCreateViewState extends State<QuestionCreateView> {
                   final exam = _examTitlesList[index];
                   return Card(
                     elevation: 3,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    margin: EdgeInsets.symmetric(vertical: 8),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
                       children: [
                         ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
+                          contentPadding: EdgeInsets.symmetric(
                             horizontal: 20,
                             vertical: 12,
                           ),
                           leading: CircleAvatar(
-                            backgroundColor: Colors.deepPurple.shade50,
-                            child: const Icon(
+                            backgroundColor: AppTheme.tileOf(context, Colors.deepPurple),
+                            child: Icon(
                               Icons.assignment_outlined,
                               color: Colors.deepPurple,
                             ),
                           ),
                           title: Text(
                             exam['exam_title'] ?? 'নামহীন পরীক্ষা',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.normal,
-                              color: Colors.black87,
+                              color: AppTheme.inkOf(context),
                             ),
                           ),
                           subtitle: Text(
                             'ক্লাস নির্বাচন করতে ক্লিক করুন',
                             style: TextStyle(
-                              color: Colors.grey.shade600,
+                              color: AppTheme.mutedOf(context),
                               fontSize: 12,
                             ),
                           ),
@@ -147,12 +149,12 @@ class _QuestionCreateViewState extends State<QuestionCreateView> {
                         // যদি ইউজার সুপার এডমিন হয়, তবেই এই এক্সট্রা বাটনটি কার্ডের নিচে দেখাবে
                         if (widget.userRole == 'super_admin') ...[
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
                             child: Align(
                               alignment: Alignment.centerRight,
                               child: ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red.shade50,
+                                  backgroundColor: AppTheme.tileOf(context, Colors.red),
                                   foregroundColor: Colors.red,
                                   elevation: 0,
                                   padding: const EdgeInsets.symmetric(
@@ -314,88 +316,10 @@ class _ClassSelectViewState extends State<ClassSelectView> {
   }
 
   // ভিউ আইকনে ক্লিক করলে শুধুমাত্র নির্দিষ্ট ইউজারের (যিনি আপলোড করেছেন) ফাইলগুলো দেখানোর ফাংশন
-  Future<void> _showUploadedFilesInfo() async {
-    try {
-      Get.dialog(
-        const Center(child: CircularProgressIndicator()),
-        barrierDismissible: false,
-      );
-
-      // নির্দিষ্ট একাডেমি, পরীক্ষা এবং নির্দিষ্ট ইউজারের আপলোড করা ফাইলগুলো ফেচ করা
-      final response = await supabase
-          .from('exam_files')
-          .select('*')
-          .eq('academy_id', widget.academyId) // ১. নির্দিষ্ট প্রতিষ্ঠান
-          .eq('exam_title', widget.examTitle) // ২. নির্দিষ্ট পরীক্ষা
-          .eq(
-            'uploaded_by',
-            widget.currentUserId,
-          ); // ৩. শুধুমাত্র নির্দিষ্ট ইউজার (নিজের ফাইল) // শুধুমাত্র নির্দিষ্ট ইউজারের ফাইল ফিল্টার করা
-
-      Get.back(); // লোডিং বন্ধ
-
-      List<Map<String, dynamic>> filesList = List<Map<String, dynamic>>.from(
-        response,
-      );
-
-      Get.defaultDialog(
-        title: 'আপনার আপলোড করা ফাইলসমূহ',
-        titleStyle: const TextStyle(
-          color: Colors.deepPurple,
-          fontWeight: FontWeight.bold,
-          fontSize: 16,
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          height: 300,
-          child: filesList.isEmpty
-              ? const Center(
-                  child: Text(
-                    'এই পরীক্ষার জন্য আপনার কোনো ফাইল আপলোড করা নেই।',
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: filesList.length,
-                  itemBuilder: (context, index) {
-                    final item = filesList[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      elevation: 1,
-                      child: ListTile(
-                        title: Text(
-                          'বিষয়: ${item['subject_name'] ?? 'নেই'}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          'শ্রেণি: ${item['class_name']}\nআপলোডকারী: ${item['uploader_name'] ?? 'অজানা'}\nসময়: ${item['created_at']?.toString().substring(0, 16) ?? ''}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        isThreeLine: true,
-                      ),
-                    );
-                  },
-                ),
-        ),
-        textConfirm: 'বন্ধ করুন',
-        confirmTextColor: Colors.white,
-        buttonColor: Colors.deepPurple,
-        onConfirm: () => Get.back(),
-      );
-        } catch (e) {
-      Get.back();
-      Get.snackbar(
-        'ত্রুটি',
-        'তথ্য লোড করতে সমস্যা হয়েছে: $e',
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppTheme.altSurfaceOf(context),
       appBar: AppBar(
         title: Text(widget.examTitle),
         backgroundColor: Colors.deepPurple,
@@ -418,25 +342,25 @@ class _ClassSelectViewState extends State<ClassSelectView> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator())
           : _classesList.isEmpty
-          ? const Center(
+          ? Center(
               child: Text(
                 'এই প্রতিষ্ঠানে কোনো ক্লাস যুক্ত করা হয়নি!',
-                style: TextStyle(color: Colors.grey, fontSize: 16),
+                style: TextStyle(color: AppTheme.mutedOf(context), fontSize: 16),
               ),
             )
           : Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'একটি শ্রেণি নির্বাচন করুন:',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.normal,
-                      color: Colors.black87,
+                      color: AppTheme.inkOf(context),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -466,20 +390,20 @@ class _ClassSelectViewState extends State<ClassSelectView> {
                           },
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: AppTheme.surfaceOf(context),
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.grey.shade200,
+                                  color: AppTheme.borderOf(context),
                                   blurRadius: 5,
                                   spreadRadius: 1,
                                 ),
                               ],
                               border: Border.all(
-                                color: Colors.deepPurple.shade100,
+                                color: AppTheme.tileOf(context, Colors.deepPurple),
                               ),
                             ),
-                            padding: const EdgeInsets.symmetric(
+                            padding: EdgeInsets.symmetric(
                               horizontal: 10,
                               vertical: 8,
                             ),
@@ -490,7 +414,7 @@ class _ClassSelectViewState extends State<ClassSelectView> {
                                   children: [
                                     CircleAvatar(
                                       backgroundColor:
-                                          Colors.deepPurple.shade50,
+                                          AppTheme.tileOf(context, Colors.deepPurple),
                                       radius: 15,
                                       child: const Icon(
                                         Icons.class_,
@@ -498,19 +422,19 @@ class _ClassSelectViewState extends State<ClassSelectView> {
                                         size: 15,
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
+                                    SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
                                         className,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.normal,
-                                          color: Colors.black87,
+                                          color: AppTheme.inkOf(context),
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    const Icon(
+                                    Icon(
                                       Icons.arrow_forward_ios,
                                       size: 13,
                                       color: Colors.deepPurple,
@@ -518,23 +442,23 @@ class _ClassSelectViewState extends State<ClassSelectView> {
                                   ],
                                 ),
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(
+                                  padding: EdgeInsets.symmetric(
                                     vertical: 6.0,
                                   ),
                                   child: Divider(
                                     height: 1,
                                     thickness: 1,
-                                    color: Colors.deepPurple.shade50,
+                                    color: AppTheme.tileOf(context, Colors.deepPurple),
                                   ),
                                 ),
-                                const SizedBox(height: 8),
+                                SizedBox(height: 8),
                                 SizedBox(
                                   width: double.infinity,
                                   height: 29,
                                   child: ElevatedButton.icon(
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor:
-                                          Colors.deepPurple.shade50,
+                                          AppTheme.tileOf(context, Colors.deepPurple),
                                       foregroundColor: Colors.deepPurple,
                                       elevation: 0,
                                       padding: EdgeInsets.zero,
@@ -586,12 +510,12 @@ class _ClassSelectViewState extends State<ClassSelectView> {
                                                 border: OutlineInputBorder(),
                                               ),
                                             ),
-                                            const SizedBox(height: 12),
-                                            const Text(
+                                            SizedBox(height: 12),
+                                            Text(
                                               'লোকাল মেমোরি থেকে প্রশ্নপত্র (PDF/Image) সিলেক্ট করুন:',
                                               style: TextStyle(
                                                 fontSize: 12,
-                                                color: Colors.grey,
+                                                color: AppTheme.mutedOf(context),
                                               ),
                                             ),
                                           ],
@@ -717,21 +641,25 @@ class _SubjectQuestionViewState extends State<SubjectQuestionView> {
       return;
     }
 
+    if (!AppConfig.hasGeminiApiKey) {
+      Get.snackbar(
+        "AI সেটআপ প্রয়োজন",
+        "প্রশ্ন এক্সট্রাকশনের জন্য GEMINI_API_KEY কনফিগার করা হয়নি। "
+        "অ্যাডমিনের সাথে যোগাযোগ করুন অথবা ম্যানুয়ালি টাইপ করুন।",
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 5),
+      );
+      return;
+    }
+
     setState(() => _isExtracting = true);
 
     try {
-      const apiKey = "";
-      final model = GenerativeModel(model: 'gemini-3.6-flash', apiKey: apiKey);
       final imageBytes = await _pickedImage!.readAsBytes();
-
-      final response = await model.generateContent([
-        Content.multi([
-          TextPart(
-            "Extract all text from this exam paper image with 100% precision, preserving exact Bangla and English text formatting.",
-          ),
-          DataPart('image/jpeg', imageBytes),
-        ]),
-      ]);
+      final extractedText = await GeminiService.extractTextFromImage(
+        imageBytes,
+      );
 
       setState(() => _isExtracting = false);
 
@@ -743,7 +671,7 @@ class _SubjectQuestionViewState extends State<SubjectQuestionView> {
           subjectName: _subjectController.text.trim(),
           fullMark: _fullMarkController.text.trim(),
           examTime: _timeController.text.trim(),
-          initialQuestionText: response.text ?? '',
+          initialQuestionText: extractedText ?? '',
         ),
       );
     } catch (e) {
@@ -1182,6 +1110,9 @@ class _QuestionEditorViewState extends State<QuestionEditorView> {
       </body>
       </html>
     ''';
+    // Printing.convertHtml is deprecated, but the printing package offers no
+    // cross-platform replacement; flutter_native_html_to_pdf is mobile-only.
+    // ignore: deprecated_member_use
     return await Printing.convertHtml(format: format, html: htmlContent);
   }
 
@@ -1195,8 +1126,8 @@ class _QuestionEditorViewState extends State<QuestionEditorView> {
         actions: [
           TextButton.icon(
             style: TextButton.styleFrom(foregroundColor: Colors.white),
-            icon: const Icon(Icons.print, size: 20),
-            label: const Text(
+            icon: Icon(Icons.print, size: 20),
+            label: Text(
               'প্রিন্ট / পিডিএফ',
               style: TextStyle(fontWeight: FontWeight.normal),
             ),
@@ -1206,15 +1137,15 @@ class _QuestionEditorViewState extends State<QuestionEditorView> {
               );
             },
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(8),
-            color: Colors.deepPurple.shade50,
+            padding: EdgeInsets.all(8),
+            color: AppTheme.tileOf(context, Colors.deepPurple),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Wrap(
@@ -1467,7 +1398,7 @@ class _QuestionEditorViewState extends State<QuestionEditorView> {
                                 item.isHidden
                                     ? Icons.visibility_off
                                     : Icons.visibility,
-                                color: Colors.grey.shade700,
+                                color: AppTheme.mutedOf(context),
                                 size: 20,
                               ),
                               tooltip: item.isHidden
@@ -1748,7 +1679,7 @@ class _UploadedFilesViewState extends State<UploadedFilesView> {
         'ডাউনলোড করতে সমস্যা হয়েছে: $e',
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        duration: const Duration(seconds: 5),
+        duration: Duration(seconds: 5),
       );
     }
   }
@@ -1759,7 +1690,7 @@ class _UploadedFilesViewState extends State<UploadedFilesView> {
     try {
       DateTime utcDate = DateTime.parse(timestamp).toUtc();
       // বাংলাদেশের জন্য ৬ ঘণ্টা যোগ করা (UTC +6)
-      DateTime bdDate = utcDate.add(const Duration(hours: 6));
+      DateTime bdDate = utcDate.add(Duration(hours: 6));
       return DateFormat('dd MMM yyyy, hh:mm a').format(bdDate);
     } catch (e) {
       return timestamp.substring(0, 16);
@@ -1769,19 +1700,19 @@ class _UploadedFilesViewState extends State<UploadedFilesView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppTheme.altSurfaceOf(context),
       appBar: AppBar(
         title: Text('${widget.examTitle} - ফাইলসমূহ'),
         backgroundColor: Colors.deepPurple,
         foregroundColor: Colors.white,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator())
           : _filesList.isEmpty
-          ? const Center(
+          ? Center(
               child: Text(
                 'এই পরীক্ষার জন্য আপনার কোনো ফাইল আপলোড করা নেই।',
-                style: TextStyle(color: Colors.grey, fontSize: 16),
+                style: TextStyle(color: AppTheme.mutedOf(context), fontSize: 16),
               ),
             )
           : RefreshIndicator(
@@ -1798,20 +1729,20 @@ class _UploadedFilesViewState extends State<UploadedFilesView> {
                   );
 
                   return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    margin: EdgeInsets.symmetric(vertical: 8),
                     elevation: 2,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(12.0),
+                      padding: EdgeInsets.all(12.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
                               CircleAvatar(
-                                backgroundColor: Colors.deepPurple.shade50,
+                                backgroundColor: AppTheme.tileOf(context, Colors.deepPurple),
                                 child: const Icon(
                                   Icons.insert_drive_file,
                                   color: Colors.deepPurple,
@@ -1824,17 +1755,17 @@ class _UploadedFilesViewState extends State<UploadedFilesView> {
                                   children: [
                                     Text(
                                       'বিষয়: $subjectName',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
                                       ),
                                     ),
-                                    const SizedBox(height: 2),
+                                    SizedBox(height: 2),
                                     Text(
                                       'শ্রেণি: ${item['class_name']}',
                                       style: TextStyle(
                                         fontSize: 13,
-                                        color: Colors.grey.shade700,
+                                        color: AppTheme.mutedOf(context),
                                       ),
                                     ),
                                   ],
@@ -1885,7 +1816,7 @@ class _UploadedFilesViewState extends State<UploadedFilesView> {
                               ),
                             ],
                           ),
-                          const Divider(height: 20),
+                          Divider(height: 20),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -1893,12 +1824,12 @@ class _UploadedFilesViewState extends State<UploadedFilesView> {
                                 'সময়: $formattedTime',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey.shade600,
+                                  color: AppTheme.mutedOf(context),
                                 ),
                               ),
                               ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.deepPurple.shade50,
+                                  backgroundColor: AppTheme.tileOf(context, Colors.deepPurple),
                                   foregroundColor: Colors.deepPurple,
                                   elevation: 0,
                                   padding: const EdgeInsets.symmetric(

@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class PrivacyPolicyView extends StatelessWidget {
@@ -24,9 +25,9 @@ class PrivacyPolicyView extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.teal.withOpacity(0.1),
+                color: Colors.teal.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: const [
@@ -59,6 +60,7 @@ class PrivacyPolicyView extends StatelessWidget {
 
             // মূল কন্টেন্ট কার্ডসমূহ
             _buildPolicyCard(
+              context: context,
               title: '1. Information We Collect',
               icon: Icons.data_usage,
               content:
@@ -67,6 +69,7 @@ class PrivacyPolicyView extends StatelessWidget {
             const SizedBox(height: 12),
 
             _buildPolicyCard(
+              context: context,
               title: '2. Use of Advertisements',
               icon: Icons.ads_click,
               content:
@@ -75,6 +78,7 @@ class PrivacyPolicyView extends StatelessWidget {
             const SizedBox(height: 12),
 
             _buildPolicyCard(
+              context: context,
               title: '3. Data Security',
               icon: Icons.security,
               content:
@@ -83,6 +87,7 @@ class PrivacyPolicyView extends StatelessWidget {
             const SizedBox(height: 12),
 
             _buildPolicyCard(
+              context: context,
               title: '4. Third-Party Services',
               icon: Icons.link,
               content:
@@ -91,6 +96,7 @@ class PrivacyPolicyView extends StatelessWidget {
             const SizedBox(height: 12),
 
             _buildPolicyCard(
+              context: context,
               title: '5. Contact Us',
               icon: Icons.contact_support,
               content:
@@ -105,6 +111,7 @@ class PrivacyPolicyView extends StatelessWidget {
 
   // স্মার্ট কার্ড উইজেট ডিজাইন জেনারেটর
   Widget _buildPolicyCard({
+    required BuildContext context,
     required String title,
     required IconData icon,
     required String content,
@@ -113,34 +120,34 @@ class PrivacyPolicyView extends StatelessWidget {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Icon(icon, color: Colors.teal, size: 22),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: AppTheme.inkOf(context),
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            const Divider(height: 1),
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
+            Divider(height: 1),
+            SizedBox(height: 10),
             Text(
               content,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
-                color: Colors.black54,
+                color: AppTheme.mutedOf(context),
                 height: 1.5,
               ),
             ),

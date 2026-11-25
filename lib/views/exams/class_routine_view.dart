@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -433,6 +434,7 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
     );
 
     if (pickedTime != null) {
+      if (!context.mounted) return null;
       final localizations = MaterialLocalizations.of(context);
       final formattedTimeOfDay = localizations.formatTimeOfDay(
         pickedTime,
@@ -761,7 +763,7 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
                 }
                 Navigator.pop(context);
               },
-              child: const Text('হ্যাঁ, ডিলিট করুন'),
+              child: Text('হ্যাঁ, ডিলিট করুন'),
             ),
           ],
         );
@@ -773,37 +775,37 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('রুটিন তৈরি করুন'),
+        title: Text('রুটিন তৈরি করুন'),
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
         actions: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+            padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
+                backgroundColor: AppTheme.surfaceOf(context),
                 foregroundColor: Colors.teal,
               ),
               onPressed: isSaving ? null : _saveFullRoutine,
               icon: isSaving
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.save, size: 16),
+                  : Icon(Icons.save, size: 16),
               label: Text(isSaving ? 'সেভ হচ্ছে...' : 'সেভ করুন'),
             ),
           ),
         ],
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.teal))
+          ? Center(child: CircularProgressIndicator(color: Colors.teal))
           : Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
-                  color: Colors.teal.shade50,
+                  padding: EdgeInsets.all(12),
+                  color: AppTheme.tileOf(context, Colors.teal),
                   width: double.infinity,
                   child: Text(
                     'মোট শিক্ষক/এডমিন: ${teachers.length} জন | মোট ক্লাস: ${availableClasses.length}টি',
@@ -841,15 +843,15 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
                             String endTime = periodData['endTime'] ?? '';
 
                             return Container(
-                              margin: const EdgeInsets.symmetric(
+                              margin: EdgeInsets.symmetric(
                                 vertical: 4,
                                 horizontal: 8,
                               ),
-                              padding: const EdgeInsets.all(8),
+                              padding: EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
+                                color: AppTheme.altSurfaceOf(context),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.grey.shade200),
+                                border: Border.all(color: AppTheme.borderOf(context)),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -932,10 +934,6 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
                                     TextEditingController subjectController =
                                         subjectControllers[assignmentKey]!;
 
-                                    bool hasTeacher =
-                                        assignedTeacherId != null &&
-                                        assignedTeacherId.isNotEmpty;
-
                                     Set<String> assignedTeachersInThisPeriod =
                                         {};
                                     for (
@@ -978,14 +976,14 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
                                             width: 75,
                                             child: Container(
                                               padding:
-                                                  const EdgeInsets.symmetric(
+                                                  EdgeInsets.symmetric(
                                                     horizontal: 4,
                                                     vertical: 2,
                                                   ),
                                               decoration: BoxDecoration(
-                                                color: Colors.teal.shade50,
+                                                color: AppTheme.tileOf(context, Colors.teal),
                                                 border: Border.all(
-                                                  color: Colors.teal.shade200,
+                                                  color: AppTheme.tileOf(context, Colors.teal),
                                                 ),
                                                 borderRadius:
                                                     BorderRadius.circular(6),
@@ -1026,17 +1024,17 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
                                               ),
                                             ),
                                           ),
-                                          const SizedBox(width: 4),
+                                          SizedBox(width: 4),
                                           Expanded(
                                             child: isClassOff
                                                 ? Container(
                                                     height: 38,
                                                     alignment: Alignment.center,
                                                     decoration: BoxDecoration(
-                                                      color: Colors.red.shade50,
+                                                      color: AppTheme.tileOf(context, Colors.red),
                                                       border: Border.all(
                                                         color:
-                                                            Colors.red.shade200,
+                                                            AppTheme.tileOf(context, Colors.red),
                                                       ),
                                                       borderRadius:
                                                           BorderRadius.circular(
@@ -1056,15 +1054,13 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
                                                 : Container(
                                                     height: 38,
                                                     padding:
-                                                        const EdgeInsets.symmetric(
+                                                        EdgeInsets.symmetric(
                                                           horizontal: 6,
                                                         ),
                                                     decoration: BoxDecoration(
-                                                      color: Colors.white,
+                                                      color: AppTheme.surfaceOf(context),
                                                       border: Border.all(
-                                                        color: Colors
-                                                            .grey
-                                                            .shade300,
+                                                        color: AppTheme.borderOf(context),
                                                       ),
                                                       borderRadius:
                                                           BorderRadius.circular(
@@ -1207,7 +1203,7 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
                                                   fontSize: 10,
                                                 ),
                                                 contentPadding:
-                                                    const EdgeInsets.symmetric(
+                                                    EdgeInsets.symmetric(
                                                       horizontal: 6,
                                                       vertical: 0,
                                                     ),
@@ -1215,7 +1211,7 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
                                                   borderRadius:
                                                       BorderRadius.circular(6),
                                                   borderSide: BorderSide(
-                                                    color: Colors.grey.shade300,
+                                                    color: AppTheme.borderOf(context),
                                                   ),
                                                 ),
                                               ),
@@ -1250,18 +1246,18 @@ class _ClassRoutineViewState extends State<ClassRoutineView> {
                             );
                           }),
                           Padding(
-                            padding: const EdgeInsets.symmetric(
+                            padding: EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 8,
                             ),
                             child: ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.teal.shade50,
+                                backgroundColor: AppTheme.tileOf(context, Colors.teal),
                                 foregroundColor: Colors.teal,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(6),
-                                  side: BorderSide(color: Colors.teal.shade200),
+                                  side: BorderSide(color: AppTheme.tileOf(context, Colors.teal)),
                                 ),
                               ),
                               onPressed: () => _showAddPeriodDialog(day),

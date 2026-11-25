@@ -1,4 +1,5 @@
-﻿import 'package:academy_management/views/exams/Create_Exam_Routine_Page.dart';
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/views/exams/Create_Exam_Routine_Page.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:get/get.dart';
@@ -39,7 +40,7 @@ class _ExamRoutineViewState extends State<ExamRoutineView> {
           examList = List<Map<String, dynamic>>.from(response);
           isLoading = false;
         });
-            }
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -61,19 +62,16 @@ class _ExamRoutineViewState extends State<ExamRoutineView> {
 
     Get.defaultDialog(
       title: "নতুন পরীক্ষা যোগ করুন",
-      titleStyle: const TextStyle(
-        fontWeight: FontWeight.bold,
-        color: Colors.teal,
-      ),
+      titleStyle: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal),
       content: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        padding: EdgeInsets.symmetric(vertical: 8.0),
         child: TextField(
           controller: examTitleController,
           decoration: InputDecoration(
             labelText: 'পরীক্ষার নাম (যেমন: ১ম সাময়িক পরীক্ষা)',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             filled: true,
-            fillColor: Colors.grey.shade50,
+            fillColor: AppTheme.altSurfaceOf(context),
           ),
         ),
       ),
@@ -126,19 +124,16 @@ class _ExamRoutineViewState extends State<ExamRoutineView> {
 
     Get.defaultDialog(
       title: "পরীক্ষার নাম পরিবর্তন করুন",
-      titleStyle: const TextStyle(
-        fontWeight: FontWeight.bold,
-        color: Colors.teal,
-      ),
+      titleStyle: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal),
       content: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        padding: EdgeInsets.symmetric(vertical: 8.0),
         child: TextField(
           controller: examTitleController,
           decoration: InputDecoration(
             labelText: 'পরীক্ষার নাম',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             filled: true,
-            fillColor: Colors.grey.shade50,
+            fillColor: AppTheme.altSurfaceOf(context),
           ),
         ),
       ),
@@ -194,17 +189,14 @@ class _ExamRoutineViewState extends State<ExamRoutineView> {
   void _showDeleteConfirmation(String examId, String examTitle) {
     Get.defaultDialog(
       title: "সতর্কতা!",
-      titleStyle: const TextStyle(
-        fontWeight: FontWeight.bold,
-        color: Colors.red,
-      ),
+      titleStyle: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
       middleText:
           "আপনি কি '$examTitle' ডিলিট করতে চান?\n\nএটি ডিলিট করলে এর অধীনে থাকা সকল রুটিন চিরতরে মুছে যাবে!",
       textConfirm: "হ্যাঁ, ডিলিট করুন",
       confirmTextColor: Colors.white,
       buttonColor: Colors.red,
       textCancel: "বাতিল",
-      cancelTextColor: Colors.black,
+      cancelTextColor: AppTheme.inkOf(context),
       onConfirm: () async {
         try {
           // প্রথমে exam_routines টেবিল থেকে এই এক্সামের সব রুটিন ডিলিট করা
@@ -331,4 +323,3 @@ class _ExamRoutineViewState extends State<ExamRoutineView> {
     );
   }
 }
-

@@ -1,25 +1,32 @@
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/services/result_calculator.dart';
+import 'package:academy_management/services/result_pdf_service.dart';
+import 'package:academy_management/widgets/result_sheet.dart';
+import 'package:excel/excel.dart' as excel_parser;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
-import 'package:path_provider/path_provider.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:excel/excel.dart' as excel_parser;
 
+/// Admin / teacher result management screen. Main UI copy is English; the
+/// A4 result sheet itself uses the shared [ResultSheet] widget (Bangla+English).
 class AcademyResultManagementView extends StatefulWidget {
   final String academyId;
   final String? currentUserId;
   final String? currentUserName;
-  final bool isReadOnly; // নতুন যোগ করা হয়েছে (শিক্ষকদের জন্য true হবে)
+  final bool isReadOnly;
 
   const AcademyResultManagementView({
     super.key,
     required this.academyId,
     this.currentUserId,
     this.currentUserName,
-    this.isReadOnly = false, // ডিফল্টভাবে সুপার এডমিনের জন্য false
+    this.isReadOnly = false,
   });
 
   @override
@@ -34,29 +41,40 @@ class _AcademyResultManagementViewState
   bool isLoadingClasses = false;
   bool isLoadingExams = false;
   bool isLoadingStudents = false;
+  bool _isGeneratingPdf = false;
+  bool _bulkCancelled = false;
 
-  // সার্চ রিলেটেড ভেরিয়েবল
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
 
-  // ক্লাসের তালিকা এবং সিলেক্টেড ক্লাস
   List<String> availableClasses = [];
   String? selectedClass;
 
-  // পরীক্ষার তালিকা এবং সিলেক্টেড পরীক্ষা
   List<String> availableExams = [];
   String? selectedExam;
 
-  // ছাত্রছাত্রীদের তালিকা এবং ফিল্টারড তালিকা
   List<Map<String, dynamic>> studentsList = [];
   List<Map<String, dynamic>> filteredStudentsList = [];
 
-  // ছাত্রছাত্রীদের রোল অনুযায়ী সুপাবেস থেকে আনা রেজাল্ট ম্যাপ
   Map<String, Map<String, dynamic>> studentResultsMap = {};
+  Map<String, Map<String, dynamic>> fullMarksByRoll = {};
+  List<String> routineSubjects = [];
+
+  String statusFilter = 'all';
+
+  Map<String, dynamic> academyInfo = {};
+  Uint8List? logoBytes;
+  Uint8List? signatureBytes;
+  final Map<String, Uint8List?> _photoCache = {};
+
+  int get enteredCount => studentResultsMap.values
+      .where((data) => ResultCalculator.hasMarks(data))
+      .length;
 
   @override
   void initState() {
     super.initState();
+    _loadAcademyInfo();
     _loadAcademyClasses();
     _loadAcademyExams();
   }
@@ -67,7 +85,36 @@ class _AcademyResultManagementViewState
     super.dispose();
   }
 
-  // ১. 'classes' টেবিল থেকে class_order অনুযায়ী ক্রমানুসারে ক্লাস ফেচ করা
+  // ---------------------------------------------------------------------------
+  // Data loading
+  // ---------------------------------------------------------------------------
+  Future<void> _loadAcademyInfo() async {
+    try {
+      final row = await supabase
+          .from('academies')
+          .select()
+          .eq('id', widget.academyId)
+          .maybeSingle();
+      if (row == null || !mounted) return;
+      setState(() => academyInfo = Map<String, dynamic>.from(row));
+      final logoUrl = academyInfo['logo_url']?.toString();
+      final signatureUrl = (academyInfo['principal_signature_url'] ??
+              academyInfo['signature_url'])
+          ?.toString();
+      final results = await Future.wait([
+        ResultPdfService.fetchImageBytes(logoUrl),
+        ResultPdfService.fetchImageBytes(signatureUrl),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        logoBytes = results[0];
+        signatureBytes = results[1];
+      });
+    } catch (e) {
+      debugPrint('Academy info load skipped: $e');
+    }
+  }
+
   Future<void> _loadAcademyClasses() async {
     setState(() => isLoadingClasses = true);
     try {
@@ -76,26 +123,19 @@ class _AcademyResultManagementViewState
           .select('class_name, class_order')
           .eq('academy_id', widget.academyId)
           .order('class_order', ascending: true);
-
-      List<String> orderedClasses = [];
-      for (var item in (response as List)) {
-        String className = item['class_name']?.toString().trim() ?? '';
-        if (className.isNotEmpty && !orderedClasses.contains(className)) {
-          orderedClasses.add(className);
-        }
+      final classes = <String>[];
+      for (final item in (response as List)) {
+        final name = item['class_name']?.toString().trim() ?? '';
+        if (name.isNotEmpty && !classes.contains(name)) classes.add(name);
       }
-    
-      setState(() {
-        availableClasses = orderedClasses;
-      });
+      if (mounted) setState(() => availableClasses = classes);
     } catch (e) {
-      debugPrint("Error loading classes: $e");
+      debugPrint('Error loading classes: $e');
     } finally {
-      setState(() => isLoadingClasses = false);
+      if (mounted) setState(() => isLoadingClasses = false);
     }
   }
 
-  // ২. 'exam_titles' টেবিল থেকে লেটেস্ট পরীক্ষাগুলো সবার উপরে ফেচ করা
   Future<void> _loadAcademyExams() async {
     setState(() => isLoadingExams = true);
     try {
@@ -104,29 +144,21 @@ class _AcademyResultManagementViewState
           .select('exam_title, created_at')
           .eq('academy_id', widget.academyId)
           .order('created_at', ascending: false);
-
-      List<String> orderedExams = [];
-      for (var item in (response as List)) {
-        String examTitle = item['exam_title']?.toString().trim() ?? '';
-        if (examTitle.isNotEmpty && !orderedExams.contains(examTitle)) {
-          orderedExams.add(examTitle);
-        }
+      final exams = <String>[];
+      for (final item in (response as List)) {
+        final title = item['exam_title']?.toString().trim() ?? '';
+        if (title.isNotEmpty && !exams.contains(title)) exams.add(title);
       }
-    
-      setState(() {
-        availableExams = orderedExams;
-      });
+      if (mounted) setState(() => availableExams = exams);
     } catch (e) {
-      debugPrint("Error loading exams: $e");
+      debugPrint('Error loading exams: $e');
     } finally {
-      setState(() => isLoadingExams = false);
+      if (mounted) setState(() => isLoadingExams = false);
     }
   }
 
-  // ৩. 'students' টেবিল থেকে রোল অনুযায়ী স্টুডেন্ট ফেচ করা এবং সুপাবেস থেকে রেজাল্ট লোড করা
   Future<void> _loadStudentsForSelectedClass() async {
     if (selectedClass == null) return;
-
     setState(() => isLoadingStudents = true);
     try {
       final response = await supabase
@@ -135,495 +167,454 @@ class _AcademyResultManagementViewState
           .eq('academy_id', widget.academyId)
           .eq('class', selectedClass!)
           .order('roll', ascending: true);
-
-      studentsList = List<Map<String, dynamic>>.from(response ?? []);
-      filteredStudentsList = studentsList;
-
-      // ক্লাস ও পরীক্ষা সিলেক্ট করা থাকলে সুপাবেস থেকে ঐ ক্লাসের রেজাল্টগুলো ফেচ করা
-      if (selectedExam != null) {
-        await _loadExamResultsForClass();
-      }
+      studentsList = List<Map<String, dynamic>>.from(response);
+      if (selectedExam != null) await _loadExamResultsForClass();
+      _applyFilters();
     } catch (e) {
-      debugPrint("Error loading students: $e");
-      Get.snackbar(
-        "ত্রুটি",
-        "ছাত্রছাত্রীদের তালিকা লোড করতে সমস্যা হয়েছে.",
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      debugPrint('Error loading students: $e');
+      _snack('Error', 'Could not load students.', Colors.red);
     } finally {
-      setState(() => isLoadingStudents = false);
+      if (mounted) setState(() => isLoadingStudents = false);
     }
   }
 
-  // সুপাবেস থেকে নির্দিষ্ট পরীক্ষার রেজাল্ট ফেচ করার ফাংশন
-  Future<void> _loadExamResultsForClass() async {
-    if (selectedClass == null || selectedExam == null) return;
-
-    // নতুন পরীক্ষা সিলেক্ট করার সাথে সাথে আগের ম্যাপ ক্লিয়ার করে দেওয়া
-    setState(() {
-      studentResultsMap.clear();
-    });
-
-    try {
-      final resultsResponse = await supabase
-          .from('exam_results')
-          .select()
-          .eq('academy_id', widget.academyId)
-          .eq('exam_title', selectedExam!)
-          .eq('class_name', selectedClass!);
-
-      Map<String, Map<String, dynamic>> tempMap = {};
-      for (var res in (resultsResponse as List)) {
-        String roll = res['roll']?.toString() ?? '';
-        if (res['result_data'] is Map) {
-          tempMap[roll] = Map<String, dynamic>.from(res['result_data']);
-        }
-      }
-          setState(() {
-        studentResultsMap = tempMap;
-      });
-    } catch (e) {
-      debugPrint("Error loading exam results: $e");
+  Future<void> _loadRoutineSubjects() async {
+    if (selectedExam == null || selectedClass == null) {
+      routineSubjects = [];
+      return;
     }
-  }
-
-  // ৪. Syncfusion ব্যবহার করে ডাইনামিক এক্সেল টেমপ্লেট ডাউনলোড (পূর্বের সেভ করা ডাটা JSONB থেকে ফেচ করা সহ)
-  Future<void> _downloadExcelTemplate() async {
-    if (selectedExam == null || selectedClass == null) return;
-
     try {
-      Get.snackbar(
-        "অপেক্ষা করুন",
-        "এক্সেল ফাইল তৈরি করা হচ্ছে...",
-        backgroundColor: Colors.indigo.shade800,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-      );
-
-      // সুপাবেস থেকে রুটিন অনুযায়ী সাবজেক্ট লিস্ট আনা
-      final routinesResponse = await supabase
+      final response = await supabase
           .from('exam_routines')
           .select('subject_name')
           .eq('academy_id', widget.academyId)
           .eq('exam_title', selectedExam!)
           .eq('class_name', selectedClass!);
-
-      List<String> subjects = [];
-      for (var item in (routinesResponse as List)) {
-        String sub = item['subject_name']?.toString().trim() ?? '';
-        if (sub.isNotEmpty && !subjects.contains(sub)) {
-          subjects.add(sub);
-        }
+      final subjects = <String>{};
+      for (final item in (response as List)) {
+        final name = item['subject_name']?.toString().trim() ?? '';
+        if (name.isNotEmpty) subjects.add(name);
       }
-    
-      if (subjects.isEmpty) {
-        Get.snackbar(
-          "সতর্কতা",
-          "এই ক্লাসের জন্য 'exam_routines' টেবিলে কোনো বিষয় পাওয়া যায়নি!",
-          backgroundColor: Colors.orange,
-          colorText: Colors.white,
-          snackPosition: SnackPosition.BOTTOM,
-        );
-        return;
-      }
+      if (mounted) setState(() => routineSubjects = subjects.toList()..sort());
+    } catch (e) {
+      debugPrint('Error loading routine subjects: $e');
+    }
+  }
 
-      // পূর্বের সেভ করা রেজাল্ট ও ফুল মার্কস ফেচ করা
-      final existingResultsResponse = await supabase
+  Future<void> _loadExamResultsForClass() async {
+    if (selectedClass == null || selectedExam == null) return;
+    setState(() {
+      studentResultsMap.clear();
+      fullMarksByRoll.clear();
+    });
+    await _loadRoutineSubjects();
+    if (!mounted) return;
+
+    try {
+      final response = await supabase
           .from('exam_results')
           .select()
           .eq('academy_id', widget.academyId)
           .eq('exam_title', selectedExam!)
           .eq('class_name', selectedClass!);
 
-      Map<String, Map<String, dynamic>> savedResultsMap = {};
-      Map<String, Map<String, dynamic>> savedFullMarksMap = {};
-      for (var res in (existingResultsResponse as List)) {
-        String roll = res['roll']?.toString() ?? '';
-        if (res['result_data'] is Map) {
-          savedResultsMap[roll] = Map<String, dynamic>.from(
-            res['result_data'],
-          );
+      final results = <String, Map<String, dynamic>>{};
+      final marks = <String, Map<String, dynamic>>{};
+      for (final row in (response as List)) {
+        final roll = row['roll']?.toString() ?? '';
+        if (row['result_data'] is Map) {
+          results[roll] = Map<String, dynamic>.from(row['result_data']);
         }
-        if (res['full_marks_data'] is Map) {
-          savedFullMarksMap[roll] = Map<String, dynamic>.from(
-            res['full_marks_data'],
-          );
+        if (row['full_marks_data'] is Map) {
+          marks[roll] = Map<String, dynamic>.from(row['full_marks_data']);
         }
       }
-    
-      final xlsio.Workbook workbook = xlsio.Workbook();
-      final xlsio.Worksheet sheet = workbook.worksheets[0];
+      if (!mounted) return;
+      setState(() {
+        studentResultsMap = results;
+        fullMarksByRoll = marks;
+      });
+      _applyFilters();
+    } catch (e) {
+      debugPrint('Error loading exam results: $e');
+    }
+  }
 
-      String safeSheetName = selectedExam!
-          .replaceAll(RegExp(r'[\\/?*[:\]]'), '')
-          .trim();
-      if (safeSheetName.length > 31) {
-        safeSheetName = safeSheetName.substring(0, 31);
+  void _applyFilters() {
+    final query = _searchController.text.trim().toLowerCase();
+    if (!mounted) return;
+    setState(() {
+      filteredStudentsList = studentsList.where((student) {
+        final name = (student['name'] ?? '').toString().toLowerCase();
+        final roll = (student['roll'] ?? '').toString().toLowerCase();
+        final matches =
+            query.isEmpty || name.contains(query) || roll.contains(query);
+        if (!matches) return false;
+        if (statusFilter == 'all') return true;
+        final data = studentResultsMap[student['roll']?.toString()];
+        final hasMarks = data != null && ResultCalculator.hasMarks(data);
+        return statusFilter == 'entered' ? hasMarks : !hasMarks;
+      }).toList();
+    });
+  }
+
+  void _snack(String title, String message, Color color) {
+    Get.snackbar(
+      title,
+      message,
+      backgroundColor: color,
+      colorText: Colors.white,
+      snackPosition: SnackPosition.BOTTOM,
+    );
+  }
+
+  /// Human-friendly ETA, e.g. "45s" or "2m 10s".
+  static String _formatEta(Duration duration) {
+    final seconds = duration.inSeconds;
+    if (seconds < 60) return '${seconds}s';
+    return '${seconds ~/ 60}m ${seconds % 60}s';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Result sheet data (shared by preview and print)
+  // ---------------------------------------------------------------------------
+  List<Map<String, dynamic>> _peers() => studentsList.map((student) {
+    final roll = student['roll']?.toString() ?? '';
+    return <String, dynamic>{
+      'roll': roll,
+      'exam_title': selectedExam ?? '',
+      'class_name': selectedClass ?? '',
+      'result_data': studentResultsMap[roll] ?? <String, dynamic>{},
+    };
+  }).toList();
+
+  Future<Uint8List?> _photoFor(Map<String, dynamic> student) async {
+    final url = (student['image_url'] ?? student['photo_url'])?.toString();
+    if (url == null || url.isEmpty) return null;
+    if (_photoCache.containsKey(url)) return _photoCache[url];
+    final bytes = await ResultPdfService.fetchImageBytes(url);
+    _photoCache[url] = bytes;
+    return bytes;
+  }
+
+  Future<ResultSheetData> _sheetData({
+    required Map<String, dynamic> student,
+    required String examTitle,
+  }) async {
+    final roll = student['roll']?.toString() ?? '';
+    return ResultSheetData(
+      academy: academyInfo,
+      student: student,
+      examTitle: examTitle,
+      className: (student['class'] ?? selectedClass ?? '').toString(),
+      resultData: studentResultsMap[roll] ?? <String, dynamic>{},
+      fullMarksData: fullMarksByRoll[roll] ?? <String, dynamic>{},
+      peers: _peers(),
+      logoBytes: logoBytes,
+      photoBytes: await _photoFor(student),
+      photoUrl: (student['image_url'] ?? student['photo_url'])?.toString(),
+      signatureBytes: signatureBytes,
+      generatedAt: DateTime.now().toString().split('.').first,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Excel template + upload
+  // ---------------------------------------------------------------------------
+  Future<void> _downloadExcelTemplate() async {
+    if (selectedExam == null || selectedClass == null) return;
+    try {
+      final response = await supabase
+          .from('exam_routines')
+          .select('subject_name')
+          .eq('academy_id', widget.academyId)
+          .eq('exam_title', selectedExam!)
+          .eq('class_name', selectedClass!);
+      final subjects = <String>[];
+      for (final item in (response as List)) {
+        final name = item['subject_name']?.toString().trim() ?? '';
+        if (name.isNotEmpty && !subjects.contains(name)) subjects.add(name);
       }
-      sheet.name = safeSheetName;
+      if (subjects.isEmpty) {
+        _snack('Warning', 'No subjects found in the exam routine.', Colors.orange);
+        return;
+      }
 
+      final savedResults = await supabase
+          .from('exam_results')
+          .select()
+          .eq('academy_id', widget.academyId)
+          .eq('exam_title', selectedExam!)
+          .eq('class_name', selectedClass!);
+      final resultsByRoll = <String, Map<String, dynamic>>{};
+      final fullByRoll = <String, Map<String, dynamic>>{};
+      for (final row in (savedResults as List)) {
+        final roll = row['roll']?.toString() ?? '';
+        if (row['result_data'] is Map) {
+          resultsByRoll[roll] = Map<String, dynamic>.from(row['result_data']);
+        }
+        if (row['full_marks_data'] is Map) {
+          fullByRoll[roll] = Map<String, dynamic>.from(row['full_marks_data']);
+        }
+      }
+
+      final workbook = xlsio.Workbook();
+      final sheet = workbook.worksheets[0];
+      final safeName = selectedExam!.replaceAll(RegExp(r'[\\/?*[:\]]'), '').trim();
+      sheet.name = safeName.length > 31 ? safeName.substring(0, 31) : safeName;
       sheet.protect('AcademyResultSecure2026');
 
-      // রো ৫: মূল হেডার (রোল, শিক্ষার্থীর নাম, এবং সাবজেক্ট অনুযায়ী CQ, MCQ, Practical)
-      sheet.getRangeByIndex(5, 1).text = 'রোল';
+      sheet.getRangeByIndex(5, 1).text = 'Roll';
       sheet.getRangeByIndex(5, 1).cellStyle.locked = true;
-      sheet.getRangeByIndex(5, 2).text = 'শিক্ষার্থীর নাম';
+      sheet.getRangeByIndex(5, 2).text = 'Student Name';
       sheet.getRangeByIndex(5, 2).cellStyle.locked = true;
 
-      int subColIndex = 3;
-      for (var sub in subjects) {
-        // রো ১: সুপাবেস থেকে আসা বিষয়ের নাম (লকড থাকবে)
-        sheet.getRangeByIndex(1, subColIndex).text = sub;
-        sheet.getRangeByIndex(1, subColIndex).cellStyle.locked = true;
-
-        // রো ২: ফুল মার্কস (ডিফল্ট ১০০ বা পূর্বের সেভ করা মান)
-        var firstRoll = studentsList.isNotEmpty
-            ? studentsList.first['roll']?.toString() ?? ''
-            : '';
-        var savedFM = savedFullMarksMap[firstRoll];
-        sheet.getRangeByIndex(2, subColIndex).number =
-            double.tryParse(savedFM?[sub]?.toString() ?? '100') ?? 100;
-        sheet.getRangeByIndex(2, subColIndex).cellStyle.locked =
-            false; // শিক্ষক এডিট করতে পারবেন
-
-        // রো ৫-এ সাবজেক্টের ক্যাটাগরি হেডার
-        sheet.getRangeByIndex(5, subColIndex).text = '$sub(CQ)';
-        sheet.getRangeByIndex(5, subColIndex + 1).text = '$sub(MCQ)';
-        sheet.getRangeByIndex(5, subColIndex + 2).text = '$sub(practical)';
-
-        for (int c = subColIndex; c <= subColIndex + 2; c++) {
+      var column = 3;
+      final firstRoll = studentsList.isNotEmpty
+          ? studentsList.first['roll']?.toString() ?? ''
+          : '';
+      for (final subject in subjects) {
+        sheet.getRangeByIndex(1, column).text = subject;
+        sheet.getRangeByIndex(1, column).cellStyle.locked = true;
+        final savedFull = fullByRoll[firstRoll];
+        sheet.getRangeByIndex(2, column).number =
+            double.tryParse(savedFull?[subject]?.toString() ?? '100') ?? 100;
+        sheet.getRangeByIndex(2, column).cellStyle.locked = false;
+        sheet.getRangeByIndex(5, column).text = '$subject(CQ)';
+        sheet.getRangeByIndex(5, column + 1).text = '$subject(MCQ)';
+        sheet.getRangeByIndex(5, column + 2).text = '$subject(Viva)';
+        sheet.getRangeByIndex(5, column + 3).text = '$subject(Practical)';
+        for (var c = column; c <= column + 3; c++) {
           sheet.getRangeByIndex(5, c).cellStyle.locked = true;
         }
-
-        subColIndex += 3;
+        column += 4;
       }
 
-      // রো ৬ থেকে ছাত্রছাত্রীদের ডেটা শুরু হবে
-      int rowIndex = 6;
-      for (var student in studentsList) {
-        String roll = student['roll']?.toString() ?? '';
-        String name = student['name'] ?? '';
-
+      var rowIndex = 6;
+      for (final student in studentsList) {
+        final roll = student['roll']?.toString() ?? '';
         sheet.getRangeByIndex(rowIndex, 1).text = roll;
         sheet.getRangeByIndex(rowIndex, 1).cellStyle.locked = true;
-
-        sheet.getRangeByIndex(rowIndex, 2).text = name;
+        sheet.getRangeByIndex(rowIndex, 2).text = student['name'] ?? '';
         sheet.getRangeByIndex(rowIndex, 2).cellStyle.locked = true;
-
-        var studentSavedData = savedResultsMap[roll];
-
-        int colIdx = 3;
-        for (var sub in subjects) {
-          final cqCell = sheet.getRangeByIndex(rowIndex, colIdx);
-          if (studentSavedData != null &&
-              studentSavedData['${sub}_cq'] != null) {
-            cqCell.number =
-                double.tryParse(studentSavedData['${sub}_cq'].toString()) ?? 0;
+        final saved = resultsByRoll[roll];
+        var col = 3;
+        for (final subject in subjects) {
+          for (final component in ResultCalculator.components) {
+            final cell = sheet.getRangeByIndex(rowIndex, col);
+            final value = saved?['${subject}_$component'];
+            if (value != null) {
+              cell.number = double.tryParse(value.toString()) ?? 0;
+            }
+            cell.cellStyle.locked = false;
+            col++;
           }
-          cqCell.cellStyle.locked = false;
-
-          final mcqCell = sheet.getRangeByIndex(rowIndex, colIdx + 1);
-          if (studentSavedData != null &&
-              studentSavedData['${sub}_mcq'] != null) {
-            mcqCell.number =
-                double.tryParse(studentSavedData['${sub}_mcq'].toString()) ?? 0;
-          }
-          mcqCell.cellStyle.locked = false;
-
-          final practicalCell = sheet.getRangeByIndex(rowIndex, colIdx + 2);
-          if (studentSavedData != null &&
-              studentSavedData['${sub}_practical'] != null) {
-            practicalCell.number =
-                double.tryParse(
-                  studentSavedData['${sub}_practical'].toString(),
-                ) ??
-                0;
-          }
-          practicalCell.cellStyle.locked = false;
-
-          colIdx += 3;
         }
-
         rowIndex++;
       }
 
-      // কলামগুলোর সাইজ বা প্রস্থ লেখার সাইজ অনুযায়ী একদম ফিট করার লজিক
-      int totalColumns = 2 + (subjects.length * 3);
-      for (int col = 1; col <= totalColumns; col++) {
-        String headerText = sheet.getRangeByIndex(5, col).text ?? '';
-        int maxLength = headerText.length;
-
-        // সুপাবেস থেকে আসা বিষয়ের নাম বা ফুল মার্কসের ঘরের টেক্সট চেক করা
-        for (int r = 1; r <= 2; r++) {
-          String cellText = sheet.getRangeByIndex(r, col).text ?? '';
-          if (cellText.length > maxLength) {
-            maxLength = cellText.length;
-          }
+      final totalColumns = 2 + (subjects.length * 4);
+      for (var col = 1; col <= totalColumns; col++) {
+        var maxLength = (sheet.getRangeByIndex(5, col).text ?? '').length;
+        for (var r = 1; r <= 2; r++) {
+          final text = sheet.getRangeByIndex(r, col).text ?? '';
+          if (text.length > maxLength) maxLength = text.length;
         }
-
-        // শিক্ষার্থীর নামের কলামের জন্য একটু বেশি জায়গা রাখা
         if (col == 2) {
-          for (var st in studentsList) {
-            String stName = st['name'] ?? '';
-            if (stName.length > maxLength) {
-              maxLength = stName.length;
-            }
+          for (final student in studentsList) {
+            final name = student['name'] ?? '';
+            if (name.length > maxLength) maxLength = name.length;
           }
         }
-
-        // লেখার দৈর্ঘ্য অনুযায়ী একদম কাছাকাছি বা ফিট রাখার লজিক
-        double widthInPixels = (maxLength * 6.5) + 15;
+        var width = (maxLength * 6.5) + 15;
         if (col == 1) {
-          widthInPixels = 50; // রোলের কলাম সাইজ
-        } else if (widthInPixels < 60) {
-          widthInPixels = 60; // সর্বনিম্ন কলাম সাইজ ৬০ পিক্সেল
+          width = 50;
+        } else if (width < 60) {
+          width = 60;
         }
-
-        sheet.setColumnWidthInPixels(col, widthInPixels.round());
+        sheet.setColumnWidthInPixels(col, width.round());
       }
 
-      final List<int> fileBytes = workbook.saveAsStream();
+      final bytes = workbook.saveAsStream();
       workbook.dispose();
-
-      if (fileBytes.isNotEmpty) {
-        final Uint8List bytes = Uint8List.fromList(fileBytes);
-        String fileName =
-            "${selectedClass}_${DateTime.now().year}_Result_Template.xlsx";
-
-        Directory? directory;
-        if (Platform.isAndroid) {
-          directory = Directory('/storage/emulated/0/Download');
-          if (!await directory.exists()) {
-            directory = await getExternalStorageDirectory();
-          }
-        } else {
-          directory = await getApplicationDocumentsDirectory();
+      if (bytes.isEmpty) return;
+      Directory directory;
+      if (Platform.isAndroid) {
+        directory = Directory('/storage/emulated/0/Download');
+        if (!await directory.exists()) {
+          directory = await getExternalStorageDirectory() ?? Directory('/tmp');
         }
-
-        String filePath = "${directory?.path ?? ''}/$fileName";
-        File file = File(filePath);
-        await file.writeAsBytes(bytes);
-
-        Get.snackbar(
-          "সফল ডাউনলোড",
-          "ফাইল সেভ হয়েছে:\n$filePath",
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-          snackPosition: SnackPosition.BOTTOM,
-        );
+      } else {
+        directory = await getApplicationDocumentsDirectory();
       }
+      final file = File(
+        '${directory.path}/${selectedClass}_${DateTime.now().year}_Result_Template.xlsx',
+      );
+      await file.writeAsBytes(bytes);
+      _snack('Downloaded', 'Saved to ${file.path}', Colors.green);
     } catch (e) {
-      debugPrint("Error downloading excel template: $e");
+      debugPrint('Excel template error: $e');
+      _snack('Error', 'Could not create the Excel template.', Colors.red);
     }
   }
 
-  // ৫. পূরণকৃত এক্সেল ফাইল আপলোড এবং JSONB ফরম্যাটে সুপাবেসে সেভ (Upsert) করার ফাংশন
   Future<void> _uploadAndProcessExcel() async {
     if (selectedExam == null || selectedClass == null) {
-      Get.snackbar(
-        "সতর্কতা",
-        "দয়া করে প্রথমে পরীক্ষা এবং ক্লাস সিলেক্ট করুন।",
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
-      );
+      _snack('Warning', 'Select an exam and a class first.', Colors.orange);
       return;
     }
-
     try {
-      FilePickerResult? result = await FilePicker.pickFiles(
+      final picked = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['xlsx'],
       );
+      if (picked == null || picked.files.single.path == null) return;
+      if (!mounted) return;
+      final bytes = await File(picked.files.single.path!).readAsBytes();
+      final excelFile = excel_parser.Excel.decodeBytes(bytes);
 
-      if (result == null || result.files.single.path == null) return;
-
-      Get.snackbar(
-        "অপেক্ষা করুন",
-        "ফাইল প্রসেসিং ও ডেটা আপলোড হচ্ছে...",
-        backgroundColor: Colors.indigo.shade800,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-      );
-
-      File file = File(result.files.single.path!);
-      var bytes = await file.readAsBytes();
-      var excelFile = excel_parser.Excel.decodeBytes(bytes);
-
-      final routinesResponse = await supabase
+      final routineResponse = await supabase
           .from('exam_routines')
           .select('subject_name')
           .eq('academy_id', widget.academyId)
           .eq('exam_title', selectedExam!)
           .eq('class_name', selectedClass!);
-
-      List<String> subjects = [];
-      for (var item in (routinesResponse as List)) {
-        String sub = item['subject_name']?.toString().trim() ?? '';
-        if (sub.isNotEmpty && !subjects.contains(sub)) {
-          subjects.add(sub);
-        }
+      final subjects = <String>[];
+      for (final item in (routineResponse as List)) {
+        final name = item['subject_name']?.toString().trim() ?? '';
+        if (name.isNotEmpty && !subjects.contains(name)) subjects.add(name);
       }
-    
-      for (var table in excelFile.tables.keys) {
-        var sheet = excelFile.tables[table];
-        if (sheet == null) continue;
-
-        // রো ২ (ইনডেক্স ১) থেকে প্রতিটি বিষয়ের ফুল মার্কস রিড করা
-        Map<String, dynamic> fullMarksScores = {};
-        var fullMarksRow = sheet.rows.length > 1 ? sheet.rows[1] : null;
-
-        int colIdx = 2;
-        for (var sub in subjects) {
-          double fm =
-              fullMarksRow != null &&
-                  fullMarksRow.length > colIdx &&
-                  fullMarksRow[colIdx] != null
-              ? double.tryParse(fullMarksRow[colIdx]!.value.toString()) ?? 100
-              : 100;
-          fullMarksScores[sub] = fm;
-          colIdx += 3;
-        }
-
-        // রো ৬ (ইনডেক্স ৫) থেকে ছাত্রছাত্রীদের নম্বর রিড করা
-        for (int i = 5; i < sheet.rows.length; i++) {
-          var row = sheet.rows[i];
-          if (row.isEmpty || row[0] == null) continue;
-
-          String roll = row[0]?.value?.toString().trim() ?? '';
-          if (roll.isEmpty) continue;
-
-          Map<String, dynamic> subjectScores = {};
-          int colIndex = 2;
-          for (var sub in subjects) {
-            String cqVal = row.length > colIndex && row[colIndex] != null
-                ? row[colIndex]!.value.toString()
-                : '0';
-            String mcqVal =
-                row.length > colIndex + 1 && row[colIndex + 1] != null
-                ? row[colIndex + 1]!.value.toString()
-                : '0';
-            String practicalVal =
-                row.length > colIndex + 2 && row[colIndex + 2] != null
-                ? row[colIndex + 2]!.value.toString()
-                : '0';
-
-            subjectScores['${sub}_cq'] = double.tryParse(cqVal) ?? 0;
-            subjectScores['${sub}_mcq'] = double.tryParse(mcqVal) ?? 0;
-            subjectScores['${sub}_practical'] =
-                double.tryParse(practicalVal) ?? 0;
-
-            colIndex += 3;
-          }
-
-          Map<String, dynamic> rowDataToUpsert = {
-            'academy_id': widget.academyId,
-            'exam_title': selectedExam!,
-            'class_name': selectedClass!,
-            'roll': roll,
-            'result_data': subjectScores,
-            'full_marks_data':
-                fullMarksScores, // ফুল মার্কস ডেটা সুপাবেসে সেভ হবে
-          };
-
-          await supabase
-              .from('exam_results')
-              .upsert(
-                rowDataToUpsert,
-                onConflict: 'academy_id,exam_title,class_name,roll',
-              );
-        }
-      }
-
-      // আপলোড শেষে কার্ডের রেজাল্ট রিফ্রেশ করার জন্য
-      await _loadExamResultsForClass();
-
-      Get.snackbar(
-        "সফল",
-        "সকল শিক্ষার্থীর ফলাফল ও ফুল মার্কস সফলভাবে আপলোড ও আপডেট হয়েছে!",
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    } catch (e) {
-      debugPrint("Error uploading/processing excel: $e");
-      Get.snackbar(
-        "ত্রুটি",
-        "ফাইল আপলোড করতে সমস্যা হয়েছে: $e",
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    }
-  }
-
-  // সুপাবেসে একক শিক্ষার্থীর রেজাল্ট এডিট বা আপডেট করার ডায়ালগ ফাংশন
-  Future<void> _openEditResultDialog(Map<String, dynamic> student) async {
-    if (selectedExam == null || selectedClass == null) {
-      Get.snackbar(
-        "সতর্কতা",
-        "দয়া করে পরীক্ষা ও ক্লাস সিলেক্ট করুন।",
-        backgroundColor: Colors.orange,
-        colorText: Colors.white,
-      );
-      return;
-    }
-
-    String roll = student['roll']?.toString() ?? '';
-    String studentName = student['name'] ?? '';
-
-    // ঐ ক্লাসের বিষয়গুলোর তালিকা ফেচ করা
-    try {
-      final routinesResponse = await supabase
-          .from('exam_routines')
-          .select('subject_name')
-          .eq('academy_id', widget.academyId)
-          .eq('exam_title', selectedExam!)
-          .eq('class_name', selectedClass!);
-
-      List<String> subjects = [];
-      for (var item in (routinesResponse as List)) {
-        String sub = item['subject_name']?.toString().trim() ?? '';
-        if (sub.isNotEmpty && !subjects.contains(sub)) {
-          subjects.add(sub);
-        }
-      }
-    
       if (subjects.isEmpty) {
-        Get.snackbar(
-          "সতর্কতা",
-          "এই ক্লাসের জন্য কোনো বিষয় পাওয়া যায়নি!",
-          backgroundColor: Colors.orange,
-          colorText: Colors.white,
-        );
+        _snack('Warning', 'Add subjects to the exam routine first.', Colors.orange);
         return;
       }
 
-      // পূর্বের সেভ করা মার্কস ম্যাপ বের করা
-      Map<String, dynamic> currentData = studentResultsMap[roll] ?? {};
-      Map<String, TextEditingController> controllers = {};
+      for (final table in excelFile.tables.keys) {
+        final sheet = excelFile.tables[table];
+        if (sheet == null) continue;
+        final headerRow = sheet.rows.length > 4 ? sheet.rows[4] : null;
+        final hasViva = headerRow?.any(
+              (cell) =>
+                  cell?.value?.toString().toLowerCase().contains('viva') ??
+                  false,
+            ) ??
+            false;
+        final columnsPerSubject = hasViva ? 4 : 3;
 
-      for (var sub in subjects) {
-        controllers['${sub}_cq'] = TextEditingController(
-          text: currentData['${sub}_cq']?.toString() ?? '0',
-        );
-        controllers['${sub}_mcq'] = TextEditingController(
-          text: currentData['${sub}_mcq']?.toString() ?? '0',
-        );
-        controllers['${sub}_viva'] = TextEditingController(
-          text: currentData['${sub}_viva']?.toString() ?? '0',
-        );
-        controllers['${sub}_practical'] = TextEditingController(
-          text: currentData['${sub}_practical']?.toString() ?? '0',
-        );
+        final fullMarksRow = sheet.rows.length > 1 ? sheet.rows[1] : null;
+        final fullMarks = <String, dynamic>{};
+        var fmIndex = 2;
+        for (final subject in subjects) {
+          fullMarks[subject] =
+              fullMarksRow != null &&
+                      fullMarksRow.length > fmIndex &&
+                      fullMarksRow[fmIndex] != null
+                  ? double.tryParse(fullMarksRow[fmIndex]!.value.toString()) ?? 100
+                  : 100;
+          fmIndex += columnsPerSubject;
+        }
+
+        for (var i = 5; i < sheet.rows.length; i++) {
+          final row = sheet.rows[i];
+          if (row.isEmpty || row[0] == null) continue;
+          final roll = row[0]?.value?.toString().trim() ?? '';
+          if (roll.isEmpty) continue;
+          String cellAt(int offset) => row.length > offset && row[offset] != null
+              ? row[offset]!.value.toString()
+              : '0';
+          final marks = <String, dynamic>{};
+          var index = 2;
+          for (final subject in subjects) {
+            marks['${subject}_cq'] = double.tryParse(cellAt(index)) ?? 0;
+            marks['${subject}_mcq'] = double.tryParse(cellAt(index + 1)) ?? 0;
+            marks['${subject}_viva'] =
+                hasViva ? double.tryParse(cellAt(index + 2)) ?? 0 : 0;
+            marks['${subject}_practical'] =
+                double.tryParse(cellAt(index + (hasViva ? 3 : 2))) ?? 0;
+            index += columnsPerSubject;
+          }
+          await supabase.from('exam_results').upsert(
+            {
+              'academy_id': widget.academyId,
+              'exam_title': selectedExam!,
+              'class_name': selectedClass!,
+              'roll': roll,
+              'result_data': marks,
+              'full_marks_data': fullMarks,
+            },
+            onConflict: 'academy_id,exam_title,class_name,roll',
+          );
+        }
+      }
+      await _loadExamResultsForClass();
+      _snack('Success', 'Results and full marks uploaded.', Colors.green);
+    } catch (e) {
+      debugPrint('Excel upload error: $e');
+      _snack('Error', 'Could not upload results: $e', Colors.red);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Edit dialog
+  // ---------------------------------------------------------------------------
+  Future<void> _openEditResultDialog(Map<String, dynamic> student) async {
+    if (selectedExam == null || selectedClass == null) {
+      _snack('Warning', 'Select an exam and a class first.', Colors.orange);
+      return;
+    }
+    final accent = AppTheme.tileInkOf(context, Colors.indigo);
+    final muted = AppTheme.mutedOf(context);
+    final roll = student['roll']?.toString() ?? '';
+    final name = student['name'] ?? '';
+
+    try {
+      final response = await supabase
+          .from('exam_routines')
+          .select('subject_name')
+          .eq('academy_id', widget.academyId)
+          .eq('exam_title', selectedExam!)
+          .eq('class_name', selectedClass!);
+      final subjects = <String>[];
+      for (final item in (response as List)) {
+        final subject = item['subject_name']?.toString().trim() ?? '';
+        if (subject.isNotEmpty && !subjects.contains(subject)) subjects.add(subject);
+      }
+      if (subjects.isEmpty) {
+        _snack('Warning', 'No subjects found in the exam routine.', Colors.orange);
+        return;
       }
 
-      // ডায়ালগ পপআপ দেখানো
+      final current = studentResultsMap[roll] ?? {};
+      final controllers = <String, TextEditingController>{};
+      for (final subject in subjects) {
+        for (final component in ResultCalculator.components) {
+          controllers['${subject}_$component'] = TextEditingController(
+            text: current['${subject}_$component']?.toString() ?? '0',
+          );
+        }
+      }
+
       await Get.dialog(
         AlertDialog(
-          title: Text(
-            '$studentName (রোল: $roll) - ফলাফল এডিট',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$name (Roll: $roll) - Edit Result',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Edit CQ, MCQ, Viva and Practical. Full marks stay unchanged.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: muted,
+                ),
+              ),
+            ],
           ),
           content: SizedBox(
             width: double.maxFinite,
@@ -631,69 +622,35 @@ class _AcademyResultManagementViewState
               shrinkWrap: true,
               itemCount: subjects.length,
               itemBuilder: (context, index) {
-                String sub = subjects[index];
+                final subject = subjects[index];
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: 12.0),
+                  padding: const EdgeInsets.only(bottom: 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        sub,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.indigo.shade800,
-                        ),
+                        subject,
+                        style: TextStyle(fontWeight: FontWeight.bold, color: accent),
                       ),
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          Expanded(
-                            child: TextField(
-                              controller: controllers['${sub}_cq'],
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'CQ',
-                                border: OutlineInputBorder(),
-                                isDense: true,
+                          for (final component in ResultCalculator.components) ...[
+                            Expanded(
+                              child: TextField(
+                                controller: controllers['${subject}_$component'],
+                                keyboardType: TextInputType.number,
+                                decoration: InputDecoration(
+                                  labelText: component == 'practical'
+                                      ? 'Prac'
+                                      : component.toUpperCase(),
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: controllers['${sub}_mcq'],
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'MCQ',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: controllers['${sub}_viva'],
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Viva',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: controllers['${sub}_practical'],
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Practical',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
+                            const SizedBox(width: 6),
+                          ],
                         ],
                       ),
                     ],
@@ -703,748 +660,328 @@ class _AcademyResultManagementViewState
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Get.back(),
-              child: const Text('বাতিল', style: TextStyle(color: Colors.grey)),
-            ),
+            TextButton(onPressed: () => Get.back(), child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo.shade800,
+                backgroundColor: accent,
                 foregroundColor: Colors.white,
               ),
               onPressed: () async {
-                Map<String, dynamic> updatedScores = {};
-                for (var sub in subjects) {
-                  updatedScores['${sub}_cq'] =
-                      double.tryParse(controllers['${sub}_cq']!.text) ?? 0;
-                  updatedScores['${sub}_mcq'] =
-                      double.tryParse(controllers['${sub}_mcq']!.text) ?? 0;
-                  updatedScores['${sub}_viva'] =
-                      double.tryParse(controllers['${sub}_viva']!.text) ?? 0;
-                  updatedScores['${sub}_practical'] =
-                      double.tryParse(controllers['${sub}_practical']!.text) ??
-                      0;
+                final updated = <String, dynamic>{};
+                for (final subject in subjects) {
+                  for (final component in ResultCalculator.components) {
+                    updated['${subject}_$component'] =
+                        double.tryParse(
+                              controllers['${subject}_$component']!.text,
+                            ) ??
+                        0;
+                  }
                 }
-
-                // সুপাবেসে আপডেট (Upsert) করা
-                await supabase.from('exam_results').upsert({
-                  'academy_id': widget.academyId,
-                  'exam_title': selectedExam!,
-                  'class_name': selectedClass!,
-                  'roll': roll,
-                  'result_data': updatedScores,
-                }, onConflict: 'academy_id,exam_title,class_name,roll');
-
+                await supabase.from('exam_results').upsert(
+                  {
+                    'academy_id': widget.academyId,
+                    'exam_title': selectedExam!,
+                    'class_name': selectedClass!,
+                    'roll': roll,
+                    'result_data': updated,
+                  },
+                  onConflict: 'academy_id,exam_title,class_name,roll',
+                );
                 Get.back();
                 await _loadExamResultsForClass();
-
-                Get.snackbar(
-                  "সফল",
-                  "ফলাফল সফলভাবে আপডেট করা হয়েছে!",
-                  backgroundColor: Colors.green,
-                  colorText: Colors.white,
-                  snackPosition: SnackPosition.BOTTOM,
-                );
+                _snack('Success', 'Result updated.', Colors.green);
               },
-              child: const Text('সেভ করুন'),
+              child: const Text('Save'),
             ),
           ],
         ),
       );
     } catch (e) {
-      debugPrint("Error opening edit dialog: $e");
+      debugPrint('Edit result error: $e');
+      _snack('Error', 'Could not open the edit dialog.', Colors.red);
     }
   }
 
-  // --- হেল্পার মেথডসমূহ (Student_Result_View এর আদলে তৈরি) ---
-  Set<String> _extractSubjects(Map<String, dynamic> resultData) {
-    Set<String> subjects = {};
-    for (String key in resultData.keys) {
-      if (key.endsWith('_cq') ||
-          key.endsWith('_mcq') ||
-          key.endsWith('_practical')) {
-        String sub = key.substring(0, key.lastIndexOf('_'));
-        subjects.add(sub);
-      }
-    }
-    return subjects;
-  }
-
-  String _calculateSubjectPosition(
-    List<Map<String, dynamic>> allClassExamResults,
-    String subject,
-    double myTotalMark,
-  ) {
-    List<double> allSubjectTotals = [];
-    for (var res in allClassExamResults) {
-      if (res['result_data'] is Map) {
-        Map<String, dynamic> rData = Map<String, dynamic>.from(
-          res['result_data'],
-        );
-        double cq =
-            double.tryParse(rData['${subject}_cq']?.toString() ?? '0') ?? 0;
-        double mcq =
-            double.tryParse(rData['${subject}_mcq']?.toString() ?? '0') ?? 0;
-        double practical =
-            double.tryParse(rData['${subject}_practical']?.toString() ?? '0') ??
-            0;
-        double total = cq + mcq + practical;
-        if (total > 0) {
-          allSubjectTotals.add(total);
-        }
-      }
-    }
-
-    if (myTotalMark <= 0 || allSubjectTotals.isEmpty) return '-';
-
-    allSubjectTotals.sort((a, b) => b.compareTo(a));
-    int rank = 1;
-    for (double mark in allSubjectTotals) {
-      if (myTotalMark < mark) {
-        rank++;
-      } else {
-        break;
-      }
-    }
-
-    if (rank == 1) return '1st';
-    if (rank == 2) return '2nd';
-    if (rank == 3) return '3rd';
-    return '${rank}th';
-  }
-
-  String _calculateExamMeritPosition(
-    List<Map<String, dynamic>> allClassExamResults,
-    String studentRoll,
-  ) {
-    if (allClassExamResults.isEmpty) return '-';
-
-    Map<String, double> studentTotalMarksMap = {};
-    for (var res in allClassExamResults) {
-      String roll = res['roll']?.toString().trim() ?? '';
-      if (roll.isEmpty) continue;
-
-      if (res['result_data'] is Map) {
-        Map<String, dynamic> rData = Map<String, dynamic>.from(
-          res['result_data'],
-        );
-        Set<String> subs = _extractSubjects(rData);
-        double totalObtained = 0;
-        for (var sub in subs) {
-          double cq =
-              double.tryParse(rData['${sub}_cq']?.toString() ?? '0') ?? 0;
-          double mcq =
-              double.tryParse(rData['${sub}_mcq']?.toString() ?? '0') ?? 0;
-          double practical =
-              double.tryParse(rData['${sub}_practical']?.toString() ?? '0') ??
-              0;
-          totalObtained += (cq + mcq + practical);
-        }
-        studentTotalMarksMap[roll] = totalObtained;
-      }
-    }
-
-    if (!studentTotalMarksMap.containsKey(studentRoll.trim())) return '-';
-
-    double myScore = studentTotalMarksMap[studentRoll.trim()]!;
-    List<double> allScores = studentTotalMarksMap.values.toList();
-    allScores.sort((a, b) => b.compareTo(a));
-
-    int rank = 1;
-    for (double score in allScores) {
-      if (myScore < score) {
-        rank++;
-      } else {
-        break;
-      }
-    }
-
-    if (rank == 1) return '1st';
-    if (rank == 2) return '2nd';
-    if (rank == 3) return '3rd';
-    return '${rank}th';
-  }
-
-  Map<String, dynamic> _calculateExamPercentage(
-    Map<String, dynamic> examResult,
-  ) {
-    Map<String, dynamic> resultData = {};
-    Map<String, dynamic> fullMarksData = {};
-
-    if (examResult['result_data'] is Map) {
-      resultData = Map<String, dynamic>.from(examResult['result_data']);
-    }
-    if (examResult['full_marks_data'] is Map) {
-      fullMarksData = Map<String, dynamic>.from(examResult['full_marks_data']);
-    }
-
-    Set<String> subjects = _extractSubjects(resultData);
-    double totalObtained = 0;
-    double totalFullMarks = 0;
-
-    for (var sub in subjects) {
-      double cq =
-          double.tryParse(resultData['${sub}_cq']?.toString() ?? '0') ?? 0;
-      double mcq =
-          double.tryParse(resultData['${sub}_mcq']?.toString() ?? '0') ?? 0;
-      double practical =
-          double.tryParse(resultData['${sub}_practical']?.toString() ?? '0') ??
-          0;
-
-      totalObtained += (cq + mcq + practical);
-      double subFullMark =
-          double.tryParse(fullMarksData[sub]?.toString() ?? '100') ?? 100;
-      totalFullMarks += subFullMark;
-    }
-
-    if (totalFullMarks <= 0) {
-      return {'progressValue': 0.0, 'percentageStr': '0%'};
-    }
-
-    double percentage = (totalObtained / totalFullMarks);
-    if (percentage > 1.0) percentage = 1.0;
-
-    String percentageStr = '${(percentage * 100).toStringAsFixed(0)}%';
-    return {'progressValue': percentage, 'percentageStr': percentageStr};
-  }
-
-  Widget _buildProgressIndicator(
-    String title,
-    double value,
-    String percentage,
-  ) {
-    return Container(
-      width: 80,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      child: Column(
-        children: [
-          SizedBox(
-            width: 48,
-            height: 48,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                CircularProgressIndicator(
-                  value: value,
-                  backgroundColor: Colors.blue.shade100,
-                  color: const Color(0xFF1B365D),
-                  strokeWidth: 4.5,
-                ),
-                Center(
-                  child: Text(
-                    percentage,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1B365D),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            title,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ভিউ রেজাল্ট পেজ (পপআপের পরিবর্তে নিচ থেকে সম্পূর্ণ স্ক্রিনে স্লাইড হয়ে আসার জন্য Get.to ব্যবহার করা হয়েছে)
-  Future<void> _openViewResultDialog(
+  // ---------------------------------------------------------------------------
+  // View Result → the SAME A4 sheet shown in-app, with print action
+  // ---------------------------------------------------------------------------
+  Future<void> _openViewResult(
     Map<String, dynamic> student,
-    Map<String, dynamic>? studentResult,
+    Map<String, dynamic>? fallbackData,
   ) async {
-    String roll = student['roll']?.toString().trim() ?? '';
-    String studentName = student['name'] ?? '';
-
-    // সুপাবেস থেকে উক্ত ক্লাসের ঐ শিক্ষার্থীর সকল পরীক্ষার রেজাল্ট ফেচ করা
-    List<Map<String, dynamic>> studentAllExamsList = [];
-    List<Map<String, dynamic>> classAllResultsList = [];
-
-    try {
-      if (selectedClass != null) {
-        final res = await supabase
-            .from('exam_results')
-            .select()
-            .eq('academy_id', widget.academyId)
-            .eq('class_name', selectedClass!);
-
-        classAllResultsList = List<Map<String, dynamic>>.from(res);
-        studentAllExamsList = classAllResultsList
-            .where((r) => r['roll']?.toString().trim() == roll)
-            .toList();
-      }
-    } catch (e) {
-      debugPrint("Error fetching student exams for view page: $e");
+    if (selectedExam == null) {
+      _snack('Warning', 'Select an exam first.', Colors.orange);
+      return;
     }
-
-    if (studentAllExamsList.isEmpty &&
-        studentResult != null &&
-        studentResult.isNotEmpty) {
-      studentAllExamsList.add({
-        'exam_title': selectedExam ?? 'পরীক্ষা',
-        'result_data': studentResult,
-      });
+    final roll = student['roll']?.toString() ?? '';
+    if (fallbackData != null &&
+        studentResultsMap[roll] == null &&
+        fallbackData.isNotEmpty) {
+      studentResultsMap[roll] = fallbackData;
     }
+    final sheet = await _sheetData(student: student, examTitle: selectedExam!);
 
-    // পপআপের বদলে Get.to দিয়ে নিচ থেকে উপরে ফুল স্ক্রিন পেজ ওপেন করার ব্যবস্থা
-    Get.to(
-      () => Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          title: Text('$studentName (রোল: $roll)'),
-          backgroundColor: const Color(0xFF1B365D),
-          foregroundColor: Colors.white,
-        ),
-        body: studentAllExamsList.isEmpty
-            ? const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(24.0),
-                  child: Text(
-                    'এই শিক্ষার্থীর কোনো পরীক্ষার ফলাফল পাওয়া যায়নি।',
-                    style: TextStyle(color: Colors.grey, fontSize: 14),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              )
-            : ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  // প্রগ্রেস ওভারভিউ কার্ড
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 20),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue.shade200),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'একাডেমিক প্রগ্রেস ওভারভিউ',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1B365D),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: studentAllExamsList.map((examRes) {
-                              String title = examRes['exam_title'] ?? 'পরীক্ষা';
-                              Map<String, dynamic> calc =
-                                  _calculateExamPercentage(examRes);
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10.0,
-                                ),
-                                child: _buildProgressIndicator(
-                                  title,
-                                  calc['progressValue'],
-                                  calc['percentageStr'],
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // পরীক্ষার টেবিলগুলো
-                  ...studentAllExamsList.map((examRes) {
-                    String examTitle = examRes['exam_title'] ?? 'পরীক্ষা';
-                    Map<String, dynamic> resultData = {};
-                    if (examRes['result_data'] is Map) {
-                      resultData = Map<String, dynamic>.from(
-                        examRes['result_data'],
-                      );
-                    }
-                    Set<String> subjects = _extractSubjects(resultData);
-
-                    List<Map<String, dynamic>> examClassResults =
-                        classAllResultsList
-                            .where(
-                              (r) => r['exam_title']?.toString() == examTitle,
-                            )
-                            .toList();
-
-                    String meritPosition = _calculateExamMeritPosition(
-                      examClassResults,
-                      roll,
-                    );
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                examTitle,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1B365D),
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.indigo.shade50,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: Colors.indigo.shade200,
-                                  ),
-                                ),
-                                child: Text(
-                                  'মেরিট: $meritPosition',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF1B365D),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          subjects.isEmpty
-                              ? const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                                  child: Text(
-                                    'নম্বর এন্ট্রি করা হয়নি',
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                )
-                              : Table(
-                                  border: TableBorder.all(
-                                    color: Colors.blueGrey.shade300,
-                                    width: 1,
-                                  ),
-                                  columnWidths: const {
-                                    0: FlexColumnWidth(2.5),
-                                    1: FlexColumnWidth(1.0),
-                                    2: FlexColumnWidth(1.0),
-                                    3: FlexColumnWidth(1.2),
-                                    4: FlexColumnWidth(1.2),
-                                    5: FlexColumnWidth(1.0),
-                                  },
-                                  children: [
-                                    TableRow(
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFF1B365D),
-                                      ),
-                                      children: const [
-                                        Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 8,
-                                          ),
-                                          child: Text(
-                                            'বিষয়',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 4,
-                                          ),
-                                          child: Text(
-                                            'CQ',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                              color: Colors.white,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 4,
-                                          ),
-                                          child: Text(
-                                            'MCQ',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                              color: Colors.white,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 4,
-                                          ),
-                                          child: Text(
-                                            'Prac',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                              color: Colors.white,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 4,
-                                          ),
-                                          child: Text(
-                                            'Total',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                              color: Colors.white,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 4,
-                                          ),
-                                          child: Text(
-                                            'Pos',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                              color: Colors.white,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    ...subjects.toList().asMap().entries.map((
-                                      entry,
-                                    ) {
-                                      String sub = entry.value;
-                                      bool isEven = entry.key % 2 == 0;
-
-                                      double cq =
-                                          double.tryParse(
-                                            resultData['${sub}_cq']
-                                                    ?.toString() ??
-                                                '0',
-                                          ) ??
-                                          0;
-                                      double mcq =
-                                          double.tryParse(
-                                            resultData['${sub}_mcq']
-                                                    ?.toString() ??
-                                                '0',
-                                          ) ??
-                                          0;
-                                      double practical =
-                                          double.tryParse(
-                                            resultData['${sub}_practical']
-                                                    ?.toString() ??
-                                                '0',
-                                          ) ??
-                                          0;
-                                      double total = cq + mcq + practical;
-
-                                      String position =
-                                          _calculateSubjectPosition(
-                                            examClassResults,
-                                            sub,
-                                            total,
-                                          );
-
-                                      return TableRow(
-                                        decoration: BoxDecoration(
-                                          color: isEven
-                                              ? Colors.blue.shade50.withOpacity(
-                                                  0.5,
-                                                )
-                                              : Colors.white,
-                                        ),
-                                        children: [
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
-                                              horizontal: 8,
-                                            ),
-                                            child: Text(
-                                              sub.toUpperCase(),
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
-                                              horizontal: 4,
-                                            ),
-                                            child: Text(
-                                              '$cq',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
-                                              horizontal: 4,
-                                            ),
-                                            child: Text(
-                                              '$mcq',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
-                                              horizontal: 4,
-                                            ),
-                                            child: Text(
-                                              '$practical',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
-                                              horizontal: 4,
-                                            ),
-                                            child: Text(
-                                              '$total',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 12,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              vertical: 10,
-                                              horizontal: 4,
-                                            ),
-                                            child: Text(
-                                              position,
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.indigo,
-                                              ),
-                                              textAlign: TextAlign.center,
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    }),
-                                  ],
-                                ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
+    if (!mounted) return;
+    await Get.to(
+      () => ResultPreviewPage(
+        data: sheet,
+        title: 'Result Sheet - ${student['name'] ?? 'Student'}',
       ),
-      transition: Transition.downToUp, // নিচ থেকে উপরে স্লাইড হয়ে আসবে
+      transition: Transition.downToUp,
       duration: const Duration(milliseconds: 300),
     );
   }
 
-  // সার্চের ফিল্টার ফাংশন
-  void _filterStudents(String query) {
-    if (query.isEmpty) {
-      setState(() {
-        filteredStudentsList = studentsList;
-      });
-    } else {
-      setState(() {
-        filteredStudentsList = studentsList.where((student) {
-          String name = (student['name'] ?? '').toLowerCase();
-          String roll = (student['roll']?.toString() ?? '').toLowerCase();
-          String searchLower = query.toLowerCase();
-
-          return name.contains(searchLower) || roll.contains(searchLower);
-        }).toList();
-      });
+  // ---------------------------------------------------------------------------
+  // Download / Print
+  // ---------------------------------------------------------------------------
+  Future<void> _downloadStudentPdf(Map<String, dynamic> student) async {
+    if (_isGeneratingPdf) return;
+    if (selectedExam == null) {
+      _snack('Warning', 'Select an exam first.', Colors.orange);
+      return;
     }
+    if (!mounted) return;
+    setState(() => _isGeneratingPdf = true);
+    _snack('Please wait', 'Preparing result sheet...', AppTheme.tileInkOf(context, Colors.indigo));
+    try {
+      final sheet = await _sheetData(student: student, examTitle: selectedExam!);
+      final image = await ResultPdfService.captureSheet(sheet);
+      final pdfBytes = await ResultPdfService.buildPdf([image]);
+      final safeRoll = (student['roll']?.toString() ?? 'student')
+          .replaceAll(RegExp(r'[^\w-]'), '_');
+      await ResultPdfService.preview(
+        pdfBytes,
+        filename: 'result_$safeRoll.pdf',
+      );
+    } catch (e) {
+      debugPrint('Student PDF error: $e');
+      _snack('Error', 'Could not generate the PDF.', Colors.red);
+    } finally {
+      if (mounted) setState(() => _isGeneratingPdf = false);
+    }
+  }
+
+  Future<void> _downloadClassPdf() async {
+    if (_isGeneratingPdf) return;
+    if (selectedExam == null || selectedClass == null) {
+      _snack('Warning', 'Select an exam and a class first.', Colors.orange);
+      return;
+    }
+    if (filteredStudentsList.isEmpty) {
+      _snack('Warning', 'There are no students to export.', Colors.orange);
+      return;
+    }
+    if (!mounted) return;
+
+    final students = List<Map<String, dynamic>>.from(filteredStudentsList);
+    final total = students.length;
+    final startedAt = DateTime.now();
+    final progress = ValueNotifier<int>(0);
+    _bulkCancelled = false;
+    setState(() => _isGeneratingPdf = true);
+
+    var dialogOpen = true;
+    void closeDialog() {
+      if (dialogOpen && Get.isDialogOpen == true) {
+        Get.back();
+        dialogOpen = false;
+      }
+    }
+
+    // Live progress: X / Y + ETA derived from elapsed time, with a Cancel
+    // button that only flips a flag — the loop checks it between each student.
+    Get.dialog(
+      PopScope<Object?>(
+        canPop: false,
+        child: ValueListenableBuilder<int>(
+          valueListenable: progress,
+          builder: (context, current, _) {
+            final remaining = total - current;
+            final elapsedMs =
+                DateTime.now().difference(startedAt).inMilliseconds;
+            final msPerItem = current > 0 ? elapsedMs / current : 0.0;
+            final eta = Duration(
+              milliseconds: (msPerItem * remaining).round(),
+            );
+            return AlertDialog(
+              title: const Text('Preparing Result Sheets'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Center(child: CircularProgressIndicator()),
+                  const SizedBox(height: 16),
+                  Text('$current / $total students completed'),
+                  const SizedBox(height: 6),
+                  Text('Estimated time remaining: ${_formatEta(eta)}'),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => _bulkCancelled = true,
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+      barrierDismissible: false,
+    );
+
+    try {
+      final images = <Uint8List>[];
+      for (var index = 0; index < students.length; index++) {
+        if (_bulkCancelled) break; // stop before starting the next sheet
+        final sheet = await _sheetData(
+          student: students[index],
+          examTitle: selectedExam!,
+        );
+        if (_bulkCancelled) break; // stop after async image fetch
+        images.add(await ResultPdfService.captureSheet(sheet));
+        progress.value = index + 1;
+      }
+
+      closeDialog();
+      if (_bulkCancelled) {
+        if (mounted) {
+          _snack('Cancelled', 'Bulk download stopped.', Colors.orange);
+        }
+        return;
+      }
+
+      final pdfBytes = await ResultPdfService.buildPdf(images);
+      final safeName = 'results_${selectedClass}_$selectedExam'
+          .replaceAll(RegExp(r'[^\w-]+'), '_')
+          .replaceAll(RegExp(r'_+'), '_');
+      await ResultPdfService.preview(pdfBytes, filename: '$safeName.pdf');
+    } catch (e) {
+      debugPrint('Class PDF error: $e');
+      closeDialog();
+      if (mounted) _snack('Error', 'Could not generate the PDF.', Colors.red);
+    } finally {
+      closeDialog();
+      progress.dispose();
+      _bulkCancelled = false;
+      if (mounted) setState(() => _isGeneratingPdf = false);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // UI helpers
+  // ---------------------------------------------------------------------------
+  Widget _statusChip(String value, String label) => ChoiceChip(
+    label: Text(label, style: const TextStyle(fontSize: 11)),
+    selected: statusFilter == value,
+    onSelected: (_) {
+      statusFilter = value;
+      _applyFilters();
+    },
+  );
+
+  Widget _actionTile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color? color,
+  }) {
+    final foreground = color ?? AppTheme.tileInkOf(context, Colors.indigo);
+    return Expanded(
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: foreground,
+          side: BorderSide(color: foreground.withValues(alpha: 0.45)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 3),
+        ),
+        onPressed: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 17),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final accent = AppTheme.tileInkOf(context, Colors.indigo);
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        backgroundColor: Colors.indigo.shade800,
+        backgroundColor: accent,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: _isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-                decoration: const InputDecoration(
-                  hintText: 'ছাত্রছাত্রীর নাম বা রোল দিয়ে সার্চ করুন...',
-                  hintStyle: TextStyle(color: Colors.white60),
-                  border: InputBorder.none,
-                ),
-                onChanged: _filterStudents,
-              )
-            : const Text(
-                'ছাত্রছাত্রীদের রেজাল্ট ও বিবরণী',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-              ),
+        // No AppBar title — search and the bulk action live in `actions`.
         actions: [
+          if (_isSearching)
+            Center(
+              child: Container(
+                width: 230,
+                height: 40,
+                margin: const EdgeInsets.only(left: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.black, fontSize: 14),
+                  cursorColor: Colors.black,
+                  decoration: const InputDecoration(
+                    hintText: 'Search name or roll...',
+                    hintStyle: TextStyle(color: Colors.black54, fontSize: 13),
+                    border: InputBorder.none,
+                    isDense: true,
+                  ),
+                  onChanged: (_) => _applyFilters(),
+                ),
+              ),
+            )
+          else
+            TextButton.icon(
+              onPressed: _isGeneratingPdf ? null : _downloadClassPdf,
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+              icon: _isGeneratingPdf
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.picture_as_pdf_rounded, size: 18),
+              label: const Text(
+                'একসাথে সব ডাউনলোড করুন',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
           IconButton(
+            tooltip: _isSearching ? 'Close search' : 'Search students',
             icon: Icon(_isSearching ? Icons.close : Icons.search),
             onPressed: () {
               setState(() {
-                if (_isSearching) {
-                  _isSearching = false;
-                  _searchController.clear();
-                  filteredStudentsList = studentsList;
-                } else {
-                  _isSearching = true;
-                }
+                _isSearching = !_isSearching;
+                if (!_isSearching) _searchController.clear();
               });
+              _applyFilters();
             },
           ),
         ],
@@ -1454,12 +991,12 @@ class _AcademyResultManagementViewState
           : Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppTheme.surfaceOf(context),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
+                        color: Colors.black.withValues(alpha: 0.03),
                         blurRadius: 8,
                         offset: const Offset(0, 4),
                       ),
@@ -1470,99 +1007,70 @@ class _AcademyResultManagementViewState
                       Row(
                         children: [
                           Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
-                                borderRadius: BorderRadius.circular(8),
-                                color: Colors.grey.shade50,
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: selectedExam,
-                                  isExpanded: true,
-                                  hint: const Text(
-                                    "পরীক্ষা সিলেক্ট করুন",
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                  items: availableExams.map((String examName) {
-                                    return DropdownMenuItem<String>(
-                                      value: examName,
-                                      child: Text(
-                                        examName,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 13,
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: selectedExam,
+                                isExpanded: true,
+                                hint: const Text(
+                                  'Select exam',
+                                  style: TextStyle(fontSize: 13),
+                                ),
+                                items: availableExams
+                                    .map(
+                                      (exam) => DropdownMenuItem<String>(
+                                        value: exam,
+                                        child: Text(
+                                          exam,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 13,
+                                          ),
                                         ),
                                       ),
-                                    );
-                                  }).toList(),
-                                  onChanged: (String? newValue) async {
-                                    // পরীক্ষা চেঞ্জ করার সাথে সাথে পুরোনো রেজাল্ট ম্যাপ ক্লিয়ার করা
-                                    setState(() {
-                                      selectedExam = newValue;
-                                      studentResultsMap.clear();
-                                    });
-                                    if (selectedClass != null) {
-                                      await _loadExamResultsForClass();
-                                    }
-                                  },
-                                ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) async {
+                                  setState(() {
+                                    selectedExam = value;
+                                    studentResultsMap.clear();
+                                    fullMarksByRoll.clear();
+                                  });
+                                  if (selectedClass != null) {
+                                    await _loadExamResultsForClass();
+                                  }
+                                },
                               ),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
-                                borderRadius: BorderRadius.circular(8),
-                                color: Colors.grey.shade50,
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: selectedClass,
-                                  isExpanded: true,
-                                  hint: const Text(
-                                    "ক্লাস সিলেক্ট করুন",
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                  items: availableClasses.map((
-                                    String className,
-                                  ) {
-                                    return DropdownMenuItem<String>(
-                                      value: className,
-                                      child: Text(
-                                        className,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 13,
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: selectedClass,
+                                isExpanded: true,
+                                hint: const Text(
+                                  'Select class',
+                                  style: TextStyle(fontSize: 13),
+                                ),
+                                items: availableClasses
+                                    .map(
+                                      (cls) => DropdownMenuItem<String>(
+                                        value: cls,
+                                        child: Text(
+                                          cls,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 13,
+                                          ),
                                         ),
                                       ),
-                                    );
-                                  }).toList(),
-                                  onChanged: (String? newValue) async {
-                                    if (newValue != null) {
-                                      setState(() {
-                                        selectedClass = newValue;
-                                        _searchController.clear();
-                                        _isSearching = false;
-                                      });
-                                      await _loadStudentsForSelectedClass();
-                                    }
-                                  },
-                                ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) async {
+                                  if (value == null) return;
+                                  setState(() => selectedClass = value);
+                                  await _loadStudentsForSelectedClass();
+                                },
                               ),
                             ),
                           ),
@@ -1570,87 +1078,56 @@ class _AcademyResultManagementViewState
                       ),
                       if (!widget.isReadOnly &&
                           selectedExam != null &&
-                          selectedClass != null) ...[
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.teal.shade700,
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
+                          selectedClass != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.teal.shade700,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
                                   ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                  ),
-                                ),
-                                onPressed: _downloadExcelTemplate,
-                                icon: const Icon(Icons.download, size: 18),
-                                label: const Text(
-                                  'ডাউনলোড',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  onPressed: _downloadExcelTemplate,
+                                  icon: const Icon(Icons.download, size: 18),
+                                  label: const Text('এক্সেল টেমপ্লেট ডাউনলোড করুন'),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.indigo.shade800,
-                                  foregroundColor: Colors.white,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: accent,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
                                   ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                  ),
-                                ),
-                                onPressed: _uploadAndProcessExcel,
-                                icon: const Icon(Icons.upload_file, size: 18),
-                                label: const Text(
-                                  'আপলোড',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  onPressed: _uploadAndProcessExcel,
+                                  icon: const Icon(Icons.upload_file, size: 18),
+                                  label: const Text('রেজাল্ট আপলোড করুন'),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ],
                     ],
                   ),
                 ),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.all(16),
                     child: (selectedExam == null || selectedClass == null)
-                        ? Center(
+                        ? const Center(
                             child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  Icons.filter_list_alt,
-                                  size: 56,
-                                  color: Colors.indigo.shade200,
-                                ),
-                                const SizedBox(height: 12),
-                                const Text(
-                                  'দয়া করে ওপর থেকে প্রথমে "পরীক্ষা" এবং পরে "ক্লাস" সিলেক্ট করুন',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                Icon(Icons.filter_list_alt, size: 56),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Select an Exam first, then a Class.',
                                   textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: 14),
                                 ),
                               ],
                             ),
@@ -1658,409 +1135,86 @@ class _AcademyResultManagementViewState
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                             
+                             // const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
                                 children: [
-                                  Expanded(
-                                    child: Text(
-                                      'পরীক্ষা: $selectedExam | ক্লাস: $selectedClass',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.indigo.shade900,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.indigo.shade50,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      'মোট শিক্ষার্থী: ${filteredStudentsList.length} জন',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.indigo.shade800,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                                  _statusChip('all', 'All (${studentsList.length})'),
+                                  _statusChip('entered', 'Entered ($enteredCount)'),
+                                  _statusChip(
+                                    'pending',
+                                    'Pending (${studentsList.length - enteredCount})',
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 12),
-                              // যদি এই পরীক্ষার নামে কোনো রেজাল্ট না থাকে তবে টেক্সট বা নোটিশ দেখানোর অংশ
-                              if (!isLoadingStudents &&
-                                  filteredStudentsList.isNotEmpty &&
-                                  studentResultsMap.isEmpty) ...[
+                             // const SizedBox(height: 10),
+                              if (!widget.isReadOnly && routineSubjects.isEmpty)
                                 Container(
                                   width: double.infinity,
                                   padding: const EdgeInsets.all(12),
                                   margin: const EdgeInsets.only(bottom: 12),
                                   decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
+                                    color: AppTheme.tileOf(context, Colors.orange),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline,
+                                        color: Colors.orange,
+                                        size: 18,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'No subjects are configured in exam_routines for this exam and class. Add subjects to the routine first.',
+                                          style: TextStyle(
+                                            color: Colors.orange,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (!isLoadingStudents &&
+                                  filteredStudentsList.isNotEmpty &&
+                                  studentResultsMap.isEmpty)
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.tileOf(context, Colors.orange),
                                     borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: Colors.orange.shade200,
-                                    ),
                                   ),
                                   child: const Text(
-                                    'এখন এই পরীক্ষার নামে এই ক্লাশে কোনো রেজাল্ট পাওয়া যায়নি।',
+                                    'No results have been entered for this exam and class yet.',
+                                    textAlign: TextAlign.center,
                                     style: TextStyle(
                                       color: Colors.orange,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
                                     ),
-                                    textAlign: TextAlign.center,
                                   ),
                                 ),
-                              ],
                               Expanded(
                                 child: isLoadingStudents
-                                    ? const Center(
-                                        child: CircularProgressIndicator(),
-                                      )
+                                    ? const Center(child: CircularProgressIndicator())
                                     : filteredStudentsList.isEmpty
-                                    ? const Center(
-                                        child: Text(
-                                          'কোনো ছাত্রছাত্রী পাওয়া যায়নি।',
-                                          style: TextStyle(color: Colors.grey),
-                                        ),
-                                      )
-                                    : ListView.builder(
-                                        itemCount: filteredStudentsList.length,
-                                        itemBuilder: (context, index) {
-                                          var student =
-                                              filteredStudentsList[index];
-
-                                          String studentName =
-                                              student['name'] ?? 'নামবিহীন';
-                                          String fatherName =
-                                              student['father_name'] ??
-                                              'পাওয়া যায়নি';
-                                          String phone =
-                                              student['phone'] ?? 'নেই';
-                                          String address =
-                                              student['address'] ??
-                                              'ঠিকানা দেওয়া হয়নি';
-                                          String className =
-                                              student['class'] ??
-                                              selectedClass ??
-                                              '';
-                                          String studentRoll =
-                                              student['roll']?.toString() ??
-                                              'N/A';
-                                          String? imageUrl =
-                                              student['image_url'];
-
-                                          var studentResult =
-                                              studentResultsMap[studentRoll];
-                                          bool hasResult =
-                                              studentResult != null &&
-                                              studentResult.isNotEmpty;
-
-                                          return Card(
-                                            margin: const EdgeInsets.symmetric(
-                                              vertical: 8,
+                                        ? const Center(
+                                            child: Text(
+                                              'No students found.',
+                                              style: TextStyle(color: Colors.grey),
                                             ),
-                                            elevation: 2,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                              side: BorderSide(
-                                                color: Colors.indigo.shade100,
-                                                width: 1,
-                                              ),
-                                            ),
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(
-                                                12.0,
-                                              ),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Row(
-                                                    children: [
-                                                      CircleAvatar(
-                                                        radius: 26,
-                                                        backgroundColor: Colors
-                                                            .indigo
-                                                            .shade50,
-                                                        backgroundImage:
-                                                            (imageUrl != null &&
-                                                                imageUrl
-                                                                    .isNotEmpty)
-                                                            ? NetworkImage(
-                                                                imageUrl,
-                                                              )
-                                                            : null,
-                                                        child:
-                                                            (imageUrl == null ||
-                                                                imageUrl
-                                                                    .isEmpty)
-                                                            ? Icon(
-                                                                Icons.person,
-                                                                color: Colors
-                                                                    .indigo
-                                                                    .shade800,
-                                                                size: 30,
-                                                              )
-                                                            : null,
-                                                      ),
-                                                      const SizedBox(width: 12),
-                                                      Expanded(
-                                                        child: Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .start,
-                                                          children: [
-                                                            Text(
-                                                              studentName,
-                                                              style: const TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                                fontSize: 15,
-                                                                color: Colors
-                                                                    .black87,
-                                                              ),
-                                                            ),
-                                                            const SizedBox(
-                                                              height: 2,
-                                                            ),
-                                                            Text(
-                                                              'পিতা: $fatherName',
-                                                              style: TextStyle(
-                                                                fontSize: 12,
-                                                                color: Colors
-                                                                    .grey
-                                                                    .shade700,
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                      if (widget.isReadOnly)
-                                                        IconButton(
-                                                          icon: const Icon(
-                                                            Icons.visibility,
-                                                            color:
-                                                                Colors.indigo,
-                                                            size: 24,
-                                                          ),
-                                                          tooltip:
-                                                              'রেজাল্ট দেখুন',
-                                                          onPressed: () {
-                                                            _openViewResultDialog(
-                                                              student,
-                                                              studentResult,
-                                                            );
-                                                          },
-                                                        ),
-                                                      if (!widget.isReadOnly)
-                                                        Container(
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 8,
-                                                                vertical: 4,
-                                                              ),
-                                                          decoration: BoxDecoration(
-                                                            color: hasResult
-                                                                ? Colors
-                                                                      .green
-                                                                      .shade50
-                                                                : Colors
-                                                                      .orange
-                                                                      .shade50,
-                                                            borderRadius:
-                                                                BorderRadius.circular(
-                                                                  8,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                    ],
-                                                  ),
-                                                  const Divider(height: 16),
-                                                  Row(
-                                                    children: [
-                                                      Text(
-                                                        'ক্লাস: $className',
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          color: Colors
-                                                              .grey
-                                                              .shade800,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 16),
-                                                      Text(
-                                                        'রোল: $studentRoll',
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          color: Colors
-                                                              .grey
-                                                              .shade800,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  const SizedBox(height: 6),
-                                                  Row(
-                                                    children: [
-                                                      Icon(
-                                                        Icons.phone_android,
-                                                        size: 14,
-                                                        color: Colors
-                                                            .grey
-                                                            .shade600,
-                                                      ),
-                                                      const SizedBox(width: 4),
-                                                      Text(
-                                                        phone,
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          color: Colors
-                                                              .grey
-                                                              .shade800,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Row(
-                                                    children: [
-                                                      Icon(
-                                                        Icons
-                                                            .location_on_outlined,
-                                                        size: 14,
-                                                        color: Colors
-                                                            .grey
-                                                            .shade600,
-                                                      ),
-                                                      const SizedBox(width: 4),
-                                                      Expanded(
-                                                        child: Text(
-                                                          address,
-                                                          style: TextStyle(
-                                                            fontSize: 12,
-                                                            color: Colors
-                                                                .grey
-                                                                .shade700,
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  if (!widget.isReadOnly) ...[
-                                                    const SizedBox(height: 12),
-                                                    Row(
-                                                      children: [
-                                                        Expanded(
-                                                          child: OutlinedButton.icon(
-                                                            style: OutlinedButton.styleFrom(
-                                                              foregroundColor:
-                                                                  Colors
-                                                                      .indigo
-                                                                      .shade800,
-                                                              side: BorderSide(
-                                                                color: Colors
-                                                                    .indigo
-                                                                    .shade800,
-                                                              ),
-                                                              shape: RoundedRectangleBorder(
-                                                                borderRadius:
-                                                                    BorderRadius.circular(
-                                                                      8,
-                                                                    ),
-                                                              ),
-                                                              padding:
-                                                                  const EdgeInsets.symmetric(
-                                                                    vertical: 8,
-                                                                  ),
-                                                            ),
-                                                            onPressed: () {
-                                                              _openViewResultDialog(
-                                                                student,
-                                                                studentResult,
-                                                              );
-                                                            },
-                                                            icon: const Icon(
-                                                              Icons.visibility,
-                                                              size: 16,
-                                                            ),
-                                                            label: const Text(
-                                                              'ভিউ রেজাল্ট',
-                                                              style: TextStyle(
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(
-                                                          width: 10,
-                                                        ),
-                                                        Expanded(
-                                                          child: ElevatedButton.icon(
-                                                            style: ElevatedButton.styleFrom(
-                                                              backgroundColor:
-                                                                  Colors
-                                                                      .indigo
-                                                                      .shade800,
-                                                              foregroundColor:
-                                                                  Colors.white,
-                                                              elevation: 0,
-                                                              shape: RoundedRectangleBorder(
-                                                                borderRadius:
-                                                                    BorderRadius.circular(
-                                                                      8,
-                                                                    ),
-                                                              ),
-                                                              padding:
-                                                                  const EdgeInsets.symmetric(
-                                                                    vertical: 8,
-                                                                  ),
-                                                            ),
-                                                            onPressed: () {
-                                                              _openEditResultDialog(
-                                                                student,
-                                                              );
-                                                            },
-                                                            icon: const Icon(
-                                                              Icons.edit,
-                                                              size: 16,
-                                                            ),
-                                                            label: const Text(
-                                                              'রেজাল্ট এডিট',
-                                                              style: TextStyle(
-                                                                fontSize: 12,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .bold,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ],
-                                                ],
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
+                                          )
+                                        : ListView.builder(
+                                            itemCount: filteredStudentsList.length,
+                                            itemBuilder: (context, index) =>
+                                                _studentCard(filteredStudentsList[index]),
+                                          ),
                               ),
                             ],
                           ),
@@ -2068,6 +1222,274 @@ class _AcademyResultManagementViewState
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _studentCard(Map<String, dynamic> student) {
+    final name = student['name'] ?? 'Unnamed';
+    final fatherName = student['father_name'] ?? 'N/A';
+    final phone = student['phone'] ?? 'N/A';
+    final address = student['address'] ?? 'No address';
+    final className = student['class'] ?? selectedClass ?? '';
+    final roll = student['roll']?.toString() ?? 'N/A';
+    final imageUrl = (student['image_url'] ?? student['photo_url'])?.toString();
+    final data = studentResultsMap[roll];
+    final hasResult = data != null && ResultCalculator.hasMarks(data);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: AppTheme.tileOf(context, Colors.indigo)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: AppTheme.tileOf(context, Colors.indigo),
+                  child: ClipOval(
+                    child: imageUrl != null && imageUrl.isNotEmpty
+                        ? Image.network(
+                            imageUrl,
+                            width: 52,
+                            height: 52,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Icon(
+                              Icons.person,
+                              color: AppTheme.tileInkOf(
+                                context,
+                                Colors.indigo,
+                              ),
+                              size: 30,
+                            ),
+                          )
+                        : Icon(
+                            Icons.person,
+                            color: AppTheme.tileInkOf(context, Colors.indigo),
+                            size: 30,
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name.toString(),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Father: $fatherName',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.mutedOf(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!widget.isReadOnly)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.tileOf(
+                        context,
+                        hasResult ? Colors.green : Colors.orange,
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      hasResult ? 'Entered' : 'Pending',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.inkOf(context),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const Divider(height: 16),
+            Row(
+              children: [
+                Text('Class: $className', style: const TextStyle(fontSize: 12)),
+                const SizedBox(width: 16),
+                Text('Roll: $roll', style: const TextStyle(fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(Icons.phone_android, size: 14, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text('$phone', style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.location_on_outlined, size: 14),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    address.toString(),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _actionTile(
+                  icon: Icons.visibility_outlined,
+                  label: 'রেজাল্ট দেখুন',
+                  onTap: () => _openViewResult(student, data),
+                ),
+                if (!widget.isReadOnly)
+                  _actionTile(
+                    icon: Icons.edit_outlined,
+                    label: 'রেজাল্ট এডিট',
+                    onTap: () => _openEditResultDialog(student),
+                  ),
+                _actionTile(
+                  icon: Icons.picture_as_pdf_rounded,
+                  label: 'ডাউনলোড / প্রিন্ট',
+                  color: AppTheme.successOf(context),
+                  onTap: () => _downloadStudentPdf(student),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// In-app A4 preview of the exact sheet used for printing.
+class ResultPreviewPage extends StatefulWidget {
+  final ResultSheetData data;
+  final String title;
+
+  const ResultPreviewPage({
+    super.key,
+    required this.data,
+    required this.title,
+  });
+
+  @override
+  State<ResultPreviewPage> createState() => _ResultPreviewPageState();
+}
+
+class _ResultPreviewPageState extends State<ResultPreviewPage> {
+  bool _isPreparing = false;
+
+  Future<void> _printSheet() async {
+    if (_isPreparing) return;
+    if (!mounted) return;
+    setState(() => _isPreparing = true);
+    try {
+      final image = await ResultPdfService.captureSheet(widget.data);
+      final bytes = await ResultPdfService.buildPdf([image]);
+      final roll = widget.data.student['roll']?.toString() ?? 'student';
+      await ResultPdfService.preview(
+        bytes,
+        filename: 'result_${roll.replaceAll(RegExp(r'[^\w-]'), '_')}.pdf',
+      );
+    } catch (e) {
+      debugPrint('Preview print error: $e');
+      Get.snackbar(
+        'Error',
+        'Could not open the print preview.',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      if (mounted) setState(() => _isPreparing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFE2E8F0),
+      appBar: AppBar(
+        title: Text(widget.title),
+        backgroundColor: const Color(0xFF1B365D),
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            tooltip: 'Print / Download / Share',
+            onPressed: _isPreparing ? null : _printSheet,
+            icon: _isPreparing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.print_outlined),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _isPreparing ? null : _printSheet,
+        backgroundColor: const Color(0xFF1B365D),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.picture_as_pdf_outlined),
+        label: const Text('Print / Download / Share'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: MediaQuery(
+            // Match the PDF capture: A4 size and text scale 1 so the preview
+            // and the downloaded sheet are pixel-for-pixel identical.
+            data: MediaQuery.of(context).copyWith(
+              size: const Size(
+                ResultSheet.sheetWidth,
+                ResultSheet.sheetHeight,
+              ),
+              textScaler: TextScaler.linear(1),
+            ),
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.18),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: ResultSheet(data: widget.data),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

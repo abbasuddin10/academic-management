@@ -1,3 +1,5 @@
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/services/password_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -227,7 +229,11 @@ class _TeachersViewState extends State<TeachersView> {
         try {
           Get.back();
 
-          await supabase.from('users').delete().eq('id', teacherId);
+          await supabase
+              .from('users')
+              .delete()
+              .eq('id', teacherId)
+              .eq('academy_id', academyId!);
 
           Get.snackbar(
             "সফল",
@@ -289,24 +295,24 @@ class _TeachersViewState extends State<TeachersView> {
                 bottom: MediaQuery.of(context).viewInsets.bottom + 16,
               ),
               child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
+                physics: BouncingScrollPhysics(),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       titleText,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 18,
                         color: Colors.teal,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(height: 12),
                     GestureDetector(
                       onTap: pickImage,
                       child: CircleAvatar(
                         radius: 35,
-                        backgroundColor: Colors.teal.shade100,
+                        backgroundColor: AppTheme.tileOf(context, Colors.teal),
                         backgroundImage: selectedImage != null
                             ? FileImage(selectedImage!)
                             : null,
@@ -369,7 +375,7 @@ class _TeachersViewState extends State<TeachersView> {
                     TextField(
                       controller: passwordController,
                       decoration: const InputDecoration(
-                        labelText: 'পাসওয়ার্ড (প্লেইন টেক্সট)',
+                        labelText: 'পাসওয়ার্ড',
                         prefixIcon: Icon(Icons.lock),
                         isDense: true,
                       ),
@@ -416,7 +422,9 @@ class _TeachersViewState extends State<TeachersView> {
                           await supabase.from('users').insert({
                             'academy_id': academyId,
                             'email': emailController.text.trim(),
-                            'password': passwordController.text.trim(),
+                            'password': PasswordService.hash(
+                              passwordController.text.trim(),
+                            ),
                             'full_name': nameController.text.trim(),
                             'phone': phoneController.text.trim(),
                             'salary': salaryController.text.trim(),
@@ -514,7 +522,6 @@ class _TeachersViewState extends State<TeachersView> {
                             String teacherName =
                                 teacher['full_name'] ?? 'নাম নেই';
                             String role = teacher['role'] ?? 'teacher';
-                            String rawPassword = teacher['password'] ?? 'নেই';
                             String phone = teacher['phone'] ?? 'নথিভুক্ত নয়';
                             String salary =
                                 teacher['salary']?.toString() ?? '০';
@@ -525,29 +532,29 @@ class _TeachersViewState extends State<TeachersView> {
                             Color roleColor = Colors.teal.shade700;
                             if (isSuper) {
                               roleDisplay = 'প্রধান শিক্ষক (Super Admin)';
-                              roleColor = Colors.orange.shade800;
+                              roleColor = AppTheme.tileInkOf(context, Colors.orange);
                             } else if (isStaff) {
                               roleDisplay = 'কর্মচারী (Staff)';
                               roleColor = Colors.blue.shade700;
                             }
 
                             return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              margin: EdgeInsets.symmetric(vertical: 4),
                               elevation: 2,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Padding(
-                                padding: const EdgeInsets.all(8.0),
+                                padding: EdgeInsets.all(8.0),
                                 child: ListTile(
                                   contentPadding: EdgeInsets.zero,
                                   leading: CircleAvatar(
                                     radius: 22,
                                     backgroundColor: isSuper
-                                        ? Colors.orange.shade100
+                                        ? AppTheme.tileOf(context, Colors.orange)
                                         : (isStaff
-                                              ? Colors.blue.shade100
-                                              : Colors.teal.shade100),
+                                              ? AppTheme.tileOf(context, Colors.blue)
+                                              : AppTheme.tileOf(context, Colors.teal)),
                                     backgroundImage:
                                         (photoUrl != null &&
                                             photoUrl.isNotEmpty)
@@ -562,9 +569,9 @@ class _TeachersViewState extends State<TeachersView> {
                                                       ? Icons.badge
                                                       : Icons.person),
                                             color: isSuper
-                                                ? Colors.orange.shade800
+                                                ? AppTheme.tileInkOf(context, Colors.orange)
                                                 : (isStaff
-                                                      ? Colors.blue.shade800
+                                                      ? AppTheme.tileInkOf(context, Colors.blue)
                                                       : Colors.teal),
                                             size: 22,
                                           )
@@ -609,12 +616,12 @@ class _TeachersViewState extends State<TeachersView> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      const SizedBox(height: 2),
+                                      SizedBox(height: 2),
                                       Text(
                                         'প্রতিষ্ঠান: $academyName',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 12,
-                                          color: Colors.black54,
+                                          color: AppTheme.mutedOf(context),
                                         ),
                                       ),
                                       Text(
@@ -644,16 +651,16 @@ class _TeachersViewState extends State<TeachersView> {
                                             },
                                             child: Container(
                                               padding:
-                                                  const EdgeInsets.symmetric(
+                                                  EdgeInsets.symmetric(
                                                     horizontal: 6,
                                                     vertical: 2,
                                                   ),
                                               decoration: BoxDecoration(
-                                                color: Colors.teal.shade50,
+                                                color: AppTheme.tileOf(context, Colors.teal),
                                                 borderRadius:
                                                     BorderRadius.circular(4),
                                                 border: Border.all(
-                                                  color: Colors.teal.shade200,
+                                                  color: AppTheme.tileOf(context, Colors.teal),
                                                 ),
                                               ),
                                               child: const Text(
@@ -673,9 +680,9 @@ class _TeachersViewState extends State<TeachersView> {
                                         mainAxisAlignment:
                                             MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text(
-                                            'পাসওয়ার্ড: $rawPassword',
-                                            style: const TextStyle(
+                                          const Text(
+                                            'পাসওয়ার্ড: সংরক্ষিত (দেখা যাবে না)',
+                                            style: TextStyle(
                                               color: Colors.blueAccent,
                                               fontWeight: FontWeight.bold,
                                               fontSize: 12,
@@ -707,9 +714,9 @@ class _TeachersViewState extends State<TeachersView> {
           // একটি বটম শিট বা অপশন ডায়ালগ ওপেন হবে
           Get.bottomSheet(
             Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Colors.white,
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceOf(context),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Column(

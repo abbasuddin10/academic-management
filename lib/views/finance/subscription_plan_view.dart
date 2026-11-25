@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,7 +20,7 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
-          children: const [
+          children: [
             Icon(Icons.info_outline, color: Colors.orange, size: 28),
             SizedBox(width: 8),
             Text(
@@ -28,9 +29,9 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
             ),
           ],
         ),
-        content: const Text(
+        content: Text(
           'দুঃখিত! বেসিক (মাসিক) প্ল্যানটি আপাতত চালু নেই।\n\nআপনি নিশ্চিন্তে লাইফটাইম অ্যাক্সেসের জন্য "প্রিমিয়াম" প্ল্যানটি সিলেক্ট করতে পারেন।',
-          style: TextStyle(fontSize: 13, height: 1.4, color: Colors.black87),
+          style: TextStyle(fontSize: 13, height: 1.4, color: AppTheme.inkOf(context)),
         ),
         actions: [
           ElevatedButton(
@@ -56,7 +57,7 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
     final TextEditingController txnController = TextEditingController();
     String selectedMethod = 'bKash';
     bool isLoading = false;
-    const String paymentNumber = '01883073202';
+    String paymentNumber = '01883073202';
 
     showModalBottomSheet(
       context: context,
@@ -72,8 +73,8 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                 right: 16,
                 top: 16,
               ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceOf(context),
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(24),
                   topRight: Radius.circular(24),
@@ -89,14 +90,14 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                         width: 40,
                         height: 4,
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade300,
+                          color: AppTheme.borderOf(context),
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     Row(
-                      children: const [
+                      children: [
                         Icon(
                           Icons.payment_rounded,
                           color: Colors.teal,
@@ -108,19 +109,19 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                            color: AppTheme.inkOf(context),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     Container(
-                      padding: const EdgeInsets.all(14),
+                      padding: EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.teal.shade50,
+                        color: AppTheme.tileOf(context, Colors.teal),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.teal.shade300,
+                          color: AppTheme.tileOf(context, Colors.teal),
                           width: 1.5,
                         ),
                       ),
@@ -139,7 +140,7 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Text(
+                              Text(
                                 paymentNumber,
                                 style: TextStyle(
                                   fontSize: 24,
@@ -152,7 +153,7 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                               InkWell(
                                 onTap: () {
                                   Clipboard.setData(
-                                    const ClipboardData(text: paymentNumber),
+                                    ClipboardData(text: paymentNumber),
                                   );
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
@@ -169,17 +170,17 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                                       ),
                                       backgroundColor: Colors.teal.shade700,
                                       behavior: SnackBarBehavior.floating,
-                                      duration: const Duration(seconds: 2),
+                                      duration: Duration(seconds: 2),
                                     ),
                                   );
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.all(6),
+                                  padding: EdgeInsets.all(6),
                                   decoration: BoxDecoration(
-                                    color: Colors.teal.shade100,
+                                    color: AppTheme.tileOf(context, Colors.teal),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.copy_rounded,
                                     size: 18,
                                     color: Colors.teal,
@@ -188,13 +189,13 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
+                          SizedBox(height: 4),
+                          Text(
                             'bKash / Nagad / Rocket / Upay',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: Colors.black54,
+                              color: AppTheme.mutedOf(context),
                             ),
                           ),
                           const Divider(height: 14),
@@ -209,13 +210,13 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
+                    SizedBox(height: 16),
+                    Text(
                       'পেমেন্ট মাধ্যম সিলেক্ট করুন:',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey,
+                        color: AppTheme.mutedOf(context),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -246,13 +247,13 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                         }
                       },
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
+                    SizedBox(height: 12),
+                    Text(
                       'যে নম্বর থেকে টাকা পাঠিয়েছেন:',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey,
+                        color: AppTheme.mutedOf(context),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -261,7 +262,7 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                       keyboardType: TextInputType.phone,
                       decoration: InputDecoration(
                         hintText: '০17xxxxxxxx',
-                        contentPadding: const EdgeInsets.symmetric(
+                        contentPadding: EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 12,
                         ),
@@ -270,13 +271,13 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
+                    SizedBox(height: 12),
+                    Text(
                       'ট্রানজেকশন আইডি (TxnID):',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey,
+                        color: AppTheme.mutedOf(context),
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -345,7 +346,7 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                                       ?.toString();
 
                                   String? academyName;
-                                  // ২. academies টেবিল থেকে academy_id দিয়ে প্রতিষ্ঠানের নাম (academy_name) আনা[cite: 7]
+                                  // ২. academies টেবিল থেকে academy_id দিয়ে প্রতিষ্ঠানের নাম (academy_name) আনা
                                   if (academyId != null) {
                                     final academyResponse = await supabase
                                         .from('academies')
@@ -430,7 +431,7 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Column(
-          children: const [
+          children: [
             Icon(Icons.check_circle_rounded, color: Colors.green, size: 55),
             SizedBox(height: 8),
             Text(
@@ -443,10 +444,10 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
             ),
           ],
         ),
-        content: const Text(
+        content: Text(
           'আপনার পেমেন্ট তথ্য সফলভাবে জমা নেওয়া হয়েছে।\n\nসার্ভারের কাজের জন্য একটু লেট হতে পারে। ভেরিফিকেশন সম্পন্ন হওয়া মাত্রই আপনার প্রিমিয়াম ফিচার চালু হয়ে যাবে।',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 13, height: 1.4, color: Colors.black87),
+          style: TextStyle(fontSize: 13, height: 1.4, color: AppTheme.inkOf(context)),
         ),
         actions: [
           Center(
@@ -476,7 +477,7 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'সাবস্ক্রিপশন প্ল্যান',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
@@ -486,31 +487,31 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(16.0),
+        physics: BouncingScrollPhysics(),
+        padding: EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const SizedBox(height: 10),
+            SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.amber.shade50,
+                color: AppTheme.tileOf(context, Colors.amber),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.workspace_premium_rounded,
                 size: 60,
                 color: Colors.amber,
               ),
             ),
-            const SizedBox(height: 12),
-            const Text(
+            SizedBox(height: 12),
+            Text(
               'আপনার একাডেমি পরিচালনা করুন আরও সহজে!',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: AppTheme.inkOf(context),
               ),
               textAlign: TextAlign.center,
             ),
@@ -520,7 +521,7 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
               style: TextStyle(fontSize: 12, color: Colors.grey),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             GestureDetector(
               onTap: () {
                 setState(() {
@@ -531,22 +532,22 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                 clipBehavior: Clip.none,
                 children: [
                   AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.all(16),
+                    duration: Duration(milliseconds: 200),
+                    padding: EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: _selectedPlan == 'premium'
-                          ? Colors.teal.shade50
+                          ? AppTheme.tileOf(context, Colors.teal)
                           : Colors.white,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: _selectedPlan == 'premium'
                             ? Colors.teal
-                            : Colors.grey.shade300,
+                            : AppTheme.borderOf(context),
                         width: 2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.teal.withOpacity(0.08),
+                          color: Colors.teal.withValues(alpha: 0.08),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -566,8 +567,8 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                                 });
                               },
                             ),
-                            const SizedBox(width: 6),
-                            const Expanded(
+                            SizedBox(width: 6),
+                            Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -576,7 +577,7 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                                     style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
+                                      color: AppTheme.inkOf(context),
                                     ),
                                   ),
                                   SizedBox(height: 2),
@@ -631,18 +632,18 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             GestureDetector(
               onTap: () {
                 _showBasicPlanNotice();
               },
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.all(16),
+                duration: Duration(milliseconds: 200),
+                padding: EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: AppTheme.altSurfaceOf(context),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade300, width: 1.5),
+                  border: Border.all(color: AppTheme.borderOf(context), width: 1.5),
                 ),
                 child: Row(
                   children: [
@@ -654,29 +655,29 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                         _showBasicPlanNotice();
                       },
                     ),
-                    const SizedBox(width: 6),
+                    SizedBox(width: 6),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              const Text(
+                              Text(
                                 'বেসিক প্ল্যান (Basic)',
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.grey,
+                                  color: AppTheme.mutedOf(context),
                                 ),
                               ),
-                              const SizedBox(width: 6),
+                              SizedBox(width: 6),
                               Container(
-                                padding: const EdgeInsets.symmetric(
+                                padding: EdgeInsets.symmetric(
                                   horizontal: 6,
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.red.shade100,
+                                  color: AppTheme.tileOf(context, Colors.red),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: const Text(
@@ -690,34 +691,34 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 2),
-                          const Text(
+                          SizedBox(height: 2),
+                          Text(
                             'প্রতি মাসে রিনিউযোগ্য (মাসিক)',
                             style: TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                         ],
                       ),
                     ),
-                    const Text(
+                    Text(
                       '৳ ৯৯\n/মাস',
                       textAlign: TextAlign.right,
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: Colors.grey,
+                        color: AppTheme.mutedOf(context),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            SizedBox(height: 20),
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.blue.shade50,
+                color: AppTheme.tileOf(context, Colors.blue),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.shade200),
+                border: Border.all(color: AppTheme.tileOf(context, Colors.blue)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -727,7 +728,7 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                     color: Colors.blue.shade700,
                     size: 26,
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -737,15 +738,15 @@ class _SubscriptionPlanViewState extends State<SubscriptionPlanView> {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade900,
+                            color: AppTheme.tileInkOf(context, Colors.blue),
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: 4),
                         Text(
                           'পেমেন্ট সম্পর্কিত কোনো সমস্যা হলে বা সার্ভিস পছন্দ না হলে ২৪ ঘণ্টার মধ্যে রিফান্ড রিকোয়েস্ট করতে পারবেন।',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.blue.shade900.withOpacity(0.8),
+                            color: AppTheme.tileInkOf(context, Colors.blue).withValues(alpha: 0.8),
                             height: 1.4,
                           ),
                         ),

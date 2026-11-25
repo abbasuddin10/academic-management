@@ -1,3 +1,5 @@
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/views/finance/teacher_salary_history_report_view.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -97,11 +99,10 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
 
       double totalPaid = 0.0;
       for (var item in (historyResponse as List)) {
-        double amt =
-            double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
+        double amt = double.tryParse(item['amount']?.toString() ?? '0') ?? 0.0;
         totalPaid += amt;
       }
-    
+
       double due = totalPayableSalary - totalPaid;
       if (due < 0) due = 0;
 
@@ -276,6 +277,7 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                         'amount': amount,
                       });
 
+                      if (!context.mounted) return;
                       Navigator.pop(context);
                       // ব্যাকগ্রাউন্ডে আবার ডেটা আপডেট করে নেওয়া
                       _fetchTeachersAndStaffInBackground();
@@ -288,6 +290,7 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                         ),
                       );
                     } catch (e) {
+                      if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('ডাটা সেভ করতে সমস্যা হয়েছে: $e'),
@@ -438,7 +441,7 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
               children: [
                 CircleAvatar(
                   radius: 40,
-                  backgroundColor: Colors.teal.shade100,
+                  backgroundColor: AppTheme.tileOf(context, Colors.teal),
                   backgroundImage:
                       photoUrl != null && photoUrl.toString().isNotEmpty
                       ? NetworkImage(photoUrl)
@@ -477,7 +480,7 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                 ListTile(
                   dense: true,
                   leading: const Icon(Icons.payments, color: Colors.teal),
-                  title: const Text('মূল মাসিক বেতন'),
+                  title: Text('মূল মাসিক বেতন'),
                   subtitle: Text('৳ ${teacher['salary'] ?? 0}'),
                 ),
               ],
@@ -486,7 +489,7 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('বন্ধ করুন'),
+              child: Text('বন্ধ করুন'),
             ),
           ],
         );
@@ -503,7 +506,7 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppTheme.altSurfaceOf(context),
       appBar: AppBar(
         // অ্যাপবারে সার্চবার টগল করার ব্যবস্থা
         title: _isSearching
@@ -531,6 +534,19 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            tooltip: 'শিক্ষক বেতন ইতিহাস রিপোর্ট',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => TeacherSalaryHistoryReportView(
+                    academyId: widget.academyId,
+                  ),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: Icon(_isSearching ? Icons.close : Icons.search),
             onPressed: () {
               setState(() {
@@ -547,7 +563,7 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
         ],
       ),
       body: _isLoading
-          ? const Center(
+          ? Center(
               // ইউজারকে বোঝানোর জন্য সেরা উপায়ে লোডিং দেখানো হচ্ছে
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -556,7 +572,10 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                   SizedBox(height: 12),
                   Text(
                     'ডেটা লোড হচ্ছে, দয়া করে অপেক্ষা করুন...',
-                    style: TextStyle(color: Colors.grey, fontSize: 14),
+                    style: TextStyle(
+                      color: AppTheme.mutedOf(context),
+                      fontSize: 14,
+                    ),
                   ),
                 ],
               ),
@@ -592,7 +611,7 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(12.0),
+                    padding: EdgeInsets.all(12.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -602,7 +621,10 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                               onTap: () => _showTeacherProfile(teacher),
                               child: CircleAvatar(
                                 radius: 22,
-                                backgroundColor: Colors.teal.shade100,
+                                backgroundColor: AppTheme.tileOf(
+                                  context,
+                                  Colors.teal,
+                                ),
                                 backgroundImage:
                                     photoUrl != null &&
                                         photoUrl.toString().isNotEmpty
@@ -645,8 +667,8 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                                             vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: roleBadgeColor.withOpacity(
-                                              0.1,
+                                            color: roleBadgeColor.withValues(
+                                              alpha: 0.1,
                                             ),
                                             borderRadius: BorderRadius.circular(
                                               4,
@@ -668,9 +690,9 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                                     ),
                                     Text(
                                       'মূল বেতন: ৳ $monthlySalary',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 12,
-                                        color: Colors.grey,
+                                        color: AppTheme.mutedOf(context),
                                       ),
                                     ),
                                     FutureBuilder<Map<String, dynamic>>(
@@ -680,11 +702,11 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                                       ),
                                       builder: (context, dueSnapshot) {
                                         if (!dueSnapshot.hasData) {
-                                          return const Text(
+                                          return Text(
                                             'বকেয়া হিসাব হচ্ছে...',
                                             style: TextStyle(
                                               fontSize: 11,
-                                              color: Colors.grey,
+                                              color: AppTheme.mutedOf(context),
                                             ),
                                           );
                                         }
@@ -744,7 +766,7 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                           builder: (context, historySnapshot) {
                             if (!historySnapshot.hasData ||
                                 historySnapshot.data!.isEmpty) {
-                              return const Row(
+                              return Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
@@ -752,7 +774,7 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                                     'সর্বশেষ পেমেন্ট: এখনো দেওয়া হয়নি',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Colors.grey,
+                                      color: AppTheme.mutedOf(context),
                                     ),
                                   ),
                                 ],
@@ -765,10 +787,10 @@ class _AcademyTeachersSalaryViewState extends State<AcademyTeachersSalaryView> {
                                 Expanded(
                                   child: Text(
                                     'সর্বশেষ: ${latestHistory['month']} (${latestHistory['payment_date']}) - ৳ ${latestHistory['amount']}',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
-                                      color: Colors.black87,
+                                      color: AppTheme.inkOf(context),
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),

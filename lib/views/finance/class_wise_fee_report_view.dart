@@ -1,3 +1,4 @@
+import 'package:academy_management/config/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -77,8 +78,6 @@ class ClassWiseFeeReportView extends StatelessWidget {
                   'নভেম্বর',
                   'ডিসেম্বর',
                 ];
-                String currentMonthStr = '${months[now.month - 1]} ${now.year}';
-
                 var paidRecord = history.firstWhere(
                   (h) =>
                       h['student_id'] == student['id'] &&
@@ -130,7 +129,7 @@ class ClassWiseFeeReportView extends StatelessWidget {
                         style: const TextStyle(color: Colors.redAccent),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'ফি দেয়নি যারা:',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
@@ -139,12 +138,12 @@ class ClassWiseFeeReportView extends StatelessWidget {
                       ),
                       ...unpaidStudents.map(
                         (s) => Padding(
-                          padding: const EdgeInsets.only(left: 8, top: 2),
+                          padding: EdgeInsets.only(left: 8, top: 2),
                           child: Text(
                             '• ${s['full_name']} (মোবাইল: ${s['phone'] ?? 'নেই'})',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey,
+                              color: AppTheme.mutedOf(context),
                             ),
                           ),
                         ),

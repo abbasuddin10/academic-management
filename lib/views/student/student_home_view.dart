@@ -1,13 +1,29 @@
-﻿import 'package:academy_management/services/ad_service.dart';
+import 'dart:async';
+
+import 'package:academy_management/config/app_theme.dart';
+import 'package:academy_management/controllers/app_state_controller.dart';
+import 'package:academy_management/models/app_notification.dart';
+import 'package:academy_management/models/notice.dart';
+import 'package:academy_management/repositories/notice_repository.dart';
+import 'package:academy_management/services/ad_service.dart';
+import 'package:academy_management/services/app_actions.dart';
+import 'package:academy_management/services/fcm_token_service.dart';
+import 'package:academy_management/views/admin/academy_ai_assistant_view.dart';
+import 'package:academy_management/services/session_service.dart';
 import 'package:academy_management/views/auth/login_view.dart';
-import 'package:academy_management/views/exams/Student_Result_View.dart';
+import 'package:academy_management/views/exams/student_result_view.dart';
 import 'package:academy_management/views/attendance/student_attendance_view.dart';
 import 'package:academy_management/views/notices/student_complaint_view.dart';
+import 'package:academy_management/views/notices/notice_board_view.dart';
 import 'package:academy_management/views/exams/student_exam_routine_view.dart';
 import 'package:academy_management/views/finance/student_fee_details_view.dart';
 import 'package:academy_management/views/exams/student_model_test.dart';
 import 'package:academy_management/views/privacy_policy_view.dart';
+import 'package:academy_management/views/settings/settings_view.dart';
 import 'package:academy_management/views/student/student_teachers_view.dart';
+import 'package:academy_management/views/student/student_notification_center_view.dart';
+import 'package:academy_management/widgets/notification_bell.dart';
+import 'package:academy_management/widgets/theme_mode_toggle.dart';
 import 'package:academy_management/views/exams/student_routine_view.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -23,12 +39,18 @@ class StudentHomeView extends StatefulWidget {
   final String className;
   final String roll;
 
+  /// Optional deep-link arguments supplied by a push notification tap.
+  final String? initialNotificationRoute;
+  final String? initialTargetId;
+
   const StudentHomeView({
     super.key,
     required this.studentName,
     required this.academyName,
     required this.className,
     required this.roll,
+    this.initialNotificationRoute,
+    this.initialTargetId,
   });
 
   @override
@@ -43,6 +65,8 @@ class _StudentHomeViewState extends State<StudentHomeView> {
   List<Map<String, dynamic>> feeHistoryList = [];
 
   String _todayAttendanceStatus = 'তথ্য নেই';
+  String _academyId = '';
+  String _readerKey = '';
 
   BannerAd? _bannerAd;
   bool _isBannerAdLoaded = false;
@@ -141,7 +165,8 @@ class _StudentHomeViewState extends State<StudentHomeView> {
         }
       }
 
-      final academyId = studentResponse?['academy_id'] ?? '';
+      final academyId = studentResponse?['academy_id']?.toString() ?? '';
+      _academyId = academyId;
       final noticeResponse = await supabase
           .from('notices')
           .select()
@@ -171,8 +196,48 @@ class _StudentHomeViewState extends State<StudentHomeView> {
         isLoading = false;
         hasError = false;
       });
+
+      // Live unread badge for this student (academy + class scoped).
+      final appState = Get.isRegistered<AppStateController>()
+          ? AppStateController.to
+          : null;
+      if (appState != null && academyId.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        _readerKey = appState.readerKey.value?.isNotEmpty == true
+            ? appState.readerKey.value!
+            : SessionService.readerKeyFor(
+                role: 'student',
+                userId: prefs.getString(SessionService.studentIdKey) ?? '',
+              );
+        appState.startNoticeWatch(
+          academyId: academyId,
+          role: 'student',
+          readerKey: _readerKey,
+          className: widget.className,
+        );
+        appState.startActivityWatch(
+          academyId: academyId,
+          readerKey: _readerKey,
+        );
+        appState.refreshUnreadActivityCount();
+
+        // Defensive token refresh: covers logins that happened offline or a
+        // token that rotated while the app was closed. The same device token
+        // is what lets the send-push Edge Function reach this student for
+        // notices AND for fee/attendance/exam/routine events.
+        unawaited(FcmTokenService.syncNow());
+
+        // Handle a push tap that launched/reopened this screen.
+        final route = widget.initialNotificationRoute;
+        if (route != null && route.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _openNotificationRoute(route, widget.initialTargetId ?? '');
+          });
+        }
+      }
     } catch (e) {
-      print("Error fetching data: $e");
+      debugPrint("Error fetching data: $e");
       if (!mounted) return;
       setState(() {
         isLoading = false;
@@ -181,8 +246,124 @@ class _StudentHomeViewState extends State<StudentHomeView> {
     }
   }
 
+  /// Marks a notice read for this student with an optimistic badge update.
+  Future<void> _markNoticeRead(String noticeId) async {
+    if (noticeId.isEmpty || _academyId.isEmpty || _readerKey.isEmpty) return;
+    final appState = Get.isRegistered<AppStateController>()
+        ? AppStateController.to
+        : null;
+    appState?.decrementUnreadNoticeCount();
+    try {
+      await NoticeRepository().markAsRead(
+        noticeId,
+        academyId: _academyId,
+        readerKey: _readerKey,
+      );
+    } catch (_) {
+      appState?.incrementUnreadNoticeCount();
+    }
+  }
+
+  /// Opens the relevant student screen for a push notification category.
+  /// All arguments come from the current session/prefs, with safe fallbacks.
+  void _openNotificationRoute(String route, String targetId) {
+    try {
+      final academyId = _academyId;
+      if (academyId.isEmpty) return;
+      final studentId = studentDetails?['id']?.toString() ?? '';
+
+      switch (route) {
+        case NotificationTypes.fee:
+          _navigateToFeeDetailsPage();
+          break;
+        case NotificationTypes.attendance:
+          Get.to(
+            () => StudentAttendanceView(
+              studentId: studentId,
+              studentName: widget.studentName,
+            ),
+          );
+          break;
+        case NotificationTypes.examRoutine:
+          Get.to(
+            () => StudentExamRoutineView(
+              academyId: academyId,
+              className: widget.className,
+            ),
+          );
+          break;
+        case NotificationTypes.result:
+          Get.to(
+            () => StudentResultView(
+              academyId: academyId,
+              className: widget.className,
+              studentRoll: widget.roll,
+              studentName: widget.studentName,
+            ),
+          );
+          break;
+        case NotificationTypes.classRoutine:
+          Get.to(
+            () => StudentRoutineView(
+              academyId: academyId,
+              className: widget.className,
+            ),
+          );
+          break;
+        case NotificationTypes.modelTest:
+          Get.to(
+            () => StudentModelTestView(
+              academyId: academyId,
+              className: widget.className,
+              studentId: studentId,
+              studentName: widget.studentName,
+              studentRoll: widget.roll,
+              initialTestId: targetId.isEmpty ? null : targetId,
+            ),
+          );
+          break;
+        default:
+          Get.to(
+            () => NoticeBoardView(academyId: academyId, userRole: 'student'),
+          );
+      }
+    } catch (e) {
+      debugPrint('Notification route fallback: $e');
+      Get.snackbar(
+        'তথ্য',
+        'এই নোটিফিকেশনটি খোলা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
+        backgroundColor: Colors.orange,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  void _openNotificationCenter() {
+    if (_academyId.isEmpty) {
+      Get.snackbar(
+        'ত্রুটি',
+        'একাডেমি আইডি পাওয়া যায়নি।',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return;
+    }
+    Get.to(
+      () => StudentNotificationCenterView(
+        academyId: _academyId,
+        readerKey: _readerKey,
+        className: widget.className,
+        notices: noticesList
+            .map((row) => Notice.fromMap(Map<String, dynamic>.from(row)))
+            .toList(),
+        onOpen: _openNotificationRoute,
+      ),
+    );
+  }
+
   // একক নোটিশ সম্পূর্ণ দেখার জন্য ডায়ালগ বা ভিউ ফাংশন
   void _showSingleNoticeDetail(Map<String, dynamic> notice) {
+    _markNoticeRead(notice['id']?.toString() ?? '');
     Get.dialog(
       Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -195,43 +376,39 @@ class _StudentHomeViewState extends State<StudentHomeView> {
               children: [
                 Row(
                   children: [
-                    const Icon(
-                      Icons.campaign_rounded,
-                      color: Colors.blue,
-                      size: 26,
-                    ),
-                    const SizedBox(width: 10),
+                    Icon(Icons.campaign_rounded, color: Colors.blue, size: 26),
+                    SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         notice['title'] ?? 'নোটিশ শিরোনাম নেই',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                          color: AppTheme.inkOf(context),
                         ),
                       ),
                     ),
                   ],
                 ),
-                const Divider(height: 20),
+                Divider(height: 20),
                 Text(
                   notice['description'] ?? '',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: Colors.black87,
+                    color: AppTheme.inkOf(context),
                     height: 1.4,
                   ),
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text(
                     notice['created_at'] != null
                         ? 'প্রকাশের তারিখ: ${notice['created_at'].toString().substring(0, 10)}'
                         : '',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey,
+                      color: AppTheme.mutedOf(context),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -248,7 +425,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                       ),
                     ),
                     onPressed: () => Get.back(),
-                    child: const Text('বন্ধ করুন'),
+                    child: Text('বন্ধ করুন'),
                   ),
                 ),
               ],
@@ -263,15 +440,15 @@ class _StudentHomeViewState extends State<StudentHomeView> {
     Get.to(
       () => Scaffold(
         appBar: AppBar(
-          title: const Text('সকল নোটিশ'),
+          title: Text('সকল নোটিশ'),
           backgroundColor: Colors.indigo,
           foregroundColor: Colors.white,
         ),
         body: noticesList.isEmpty
-            ? const Center(
+            ? Center(
                 child: Text(
                   'এই মুহূর্তে কোনো নোটিশ নেই।',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: AppTheme.mutedOf(context)),
                 ),
               )
             : ListView.builder(
@@ -294,34 +471,35 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                           children: [
                             Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.campaign,
                                   color: Colors.indigo,
                                   size: 22,
                                 ),
-                                const SizedBox(width: 8),
+                                SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     notice['title'] ?? '',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
+                                      color: AppTheme.inkOf(context),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 6),
+                            SizedBox(height: 6),
                             Text(
                               notice['description'] ?? '',
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
-                                color: Colors.black87,
+                                color: AppTheme.mutedOf(context),
                               ),
                             ),
-                            const Divider(height: 16),
+                            Divider(height: 16),
                             Align(
                               alignment: Alignment.centerRight,
                               child: Text(
@@ -331,9 +509,9 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                                         10,
                                       )
                                     : '',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey,
+                                  color: AppTheme.mutedOf(context),
                                 ),
                               ),
                             ),
@@ -370,14 +548,14 @@ class _StudentHomeViewState extends State<StudentHomeView> {
 
   Future<void> _logoutStudent() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      // Removes only auth keys; unrelated app settings are preserved.
+      await SessionService.signOut();
       await Future.delayed(const Duration(milliseconds: 150));
       if (mounted) {
         Get.offAll(() => const LoginView());
       }
     } catch (e) {
-      print("Logout Error: $e");
+      debugPrint('Logout Error: $e');
     }
   }
 
@@ -391,7 +569,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
       buttonColor: Colors.indigo,
       onConfirm: () {
         Get.back();
-        Future.delayed(const Duration(milliseconds: 150), () {
+        Future.delayed(Duration(milliseconds: 150), () {
           _logoutStudent();
         });
       },
@@ -405,7 +583,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
     String? profileImageUrl = studentDetails?['image_url'];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
+      backgroundColor: AppTheme.canvasOf(context),
       appBar: AppBar(
         elevation: 0,
         title: const Text(
@@ -417,20 +595,20 @@ class _StudentHomeViewState extends State<StudentHomeView> {
         actions: [
           TextButton.icon(
             style: TextButton.styleFrom(foregroundColor: Colors.white),
-            onPressed: () {
-              Get.snackbar(
-                'একাডেমি অ্যাসিস্ট্যান্ট',
-                'খুব শীঘ্রই এআই চ্যাটবট ফিচারটি চালু হচ্ছে!',
-                backgroundColor: Colors.indigo.shade50,
-                colorText: Colors.indigo.shade900,
-                snackPosition: SnackPosition.BOTTOM,
-                margin: const EdgeInsets.all(16),
-                borderRadius: 12,
-                icon: const Icon(
-                  Icons.support_agent_rounded,
-                  color: Colors.indigo,
-                ),
-              );
+            onPressed: () async {
+              final prefs = await SharedPreferences.getInstance();
+              final academyId =
+                  prefs.getString(SessionService.studentAcademyIdKey) ?? '';
+              if (academyId.isEmpty) {
+                Get.snackbar(
+                  'ত্রুটি',
+                  'একাডেমি আইডি পাওয়া যায়নি।',
+                  backgroundColor: Colors.red,
+                  colorText: Colors.white,
+                );
+                return;
+              }
+              Get.to(() => AcademyAiAssistantView(academyId: academyId));
             },
             icon: const Icon(Icons.auto_awesome_rounded, size: 20),
             label: const Text(
@@ -438,41 +616,10 @@ class _StudentHomeViewState extends State<StudentHomeView> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_active_outlined),
-                onPressed: () {
-                  _showAllNoticesDialog();
-                },
-              ),
-              if (noticesList.isNotEmpty)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
-                    ),
-                    child: Text(
-                      '${noticesList.length}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
+          ThemeModeToggle(color: Colors.white),
+          NotificationBell(
+            icon: Icons.notifications_active_outlined,
+            onTap: _openNotificationCenter,
           ),
         ],
       ),
@@ -487,7 +634,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                 left: 16,
                 right: 16,
               ),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [Colors.indigo, Colors.indigo],
                   begin: Alignment.topLeft,
@@ -500,7 +647,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                 children: [
                   CircleAvatar(
                     radius: 32,
-                    backgroundColor: Colors.white,
+                    backgroundColor: AppTheme.surfaceOf(context),
                     backgroundImage:
                         (profileImageUrl != null && profileImageUrl.isNotEmpty)
                         ? NetworkImage(profileImageUrl)
@@ -510,7 +657,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                             widget.studentName.isNotEmpty
                                 ? widget.studentName[0]
                                 : 'S',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 30,
                               fontWeight: FontWeight.bold,
                               color: Colors.indigo,
@@ -522,7 +669,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                   Text(
                     widget.studentName,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
                       color: Colors.white,
@@ -532,7 +679,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                   Text(
                     widget.academyName,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -711,9 +858,12 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                       );
                     },
                   ),
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    child: Divider(thickness: 1, color: Colors.grey),
+                    child: Divider(
+                      thickness: 1,
+                      color: AppTheme.borderOf(context),
+                    ),
                   ),
                   ListTile(
                     shape: RoundedRectangleBorder(
@@ -732,7 +882,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      Get.snackbar("সেটিংস", "সেটিংস ফিচারটি খুব শীঘ্রই আসছে!");
+                      Get.to(() => const SettingsView());
                     },
                   ),
                   ListTile(
@@ -752,7 +902,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      Get.snackbar("ফিডব্যাক", "আপনার মতামতের জন্য ধন্যবাদ!");
+                      AppActions.showFeedbackDialog();
                     },
                   ),
                   ListTile(
@@ -784,25 +934,22 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      Get.snackbar(
-                        "শেয়ার",
-                        "প্লে-স্টোর লিংক কপি বা শেয়ার অপশন শীঘ্রই আসছে!",
-                      );
+                      AppActions.showShareUnavailable();
                     },
                   ),
                 ],
               ),
             ),
-            const Divider(height: 1),
+            Divider(height: 1),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: ListTile(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
-                tileColor: Colors.red.shade50,
+                tileColor: AppTheme.tileOf(context, Colors.red),
                 leading: const Icon(Icons.logout_rounded, color: Colors.red),
-                title: const Text(
+                title: Text(
                   'লগআউট করুন',
                   style: TextStyle(
                     color: Colors.red,
@@ -816,12 +963,12 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                 },
               ),
             ),
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(bottom: 16.0, top: 4.0),
               child: Text(
                 'App Version: 1.0.0',
                 style: TextStyle(
-                  color: Colors.grey,
+                  color: AppTheme.mutedOf(context),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -835,20 +982,23 @@ class _StudentHomeViewState extends State<StudentHomeView> {
           hasError
               ? Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(20.0),
+                    padding: EdgeInsets.all(20.0),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.wifi_off_rounded,
                           size: 60,
-                          color: Colors.grey,
+                          color: AppTheme.mutedOf(context),
                         ),
-                        const SizedBox(height: 12),
-                        const Text(
+                        SizedBox(height: 12),
+                        Text(
                           'ইন্টারনেট কানেকশন নেই অথবা ডাটা লোড করতে সমস্যা হচ্ছে।',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.mutedOf(context),
+                          ),
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton.icon(
@@ -867,18 +1017,21 @@ class _StudentHomeViewState extends State<StudentHomeView> {
               : RefreshIndicator(
                   onRefresh: fetchAllData,
                   child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16.0),
+                    physics: AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.all(16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: AppTheme.surfaceOf(context),
                             borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppTheme.borderOf(context),
+                            ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.indigo.withOpacity(0.12),
+                                color: Colors.indigo.withValues(alpha: 0.12),
                                 blurRadius: 15,
                                 offset: const Offset(0, 8),
                               ),
@@ -892,13 +1045,16 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                               ).copyWith(dividerColor: Colors.transparent),
                               child: ExpansionTile(
                                 initiallyExpanded: false,
-                                tilePadding: const EdgeInsets.symmetric(
+                                tilePadding: EdgeInsets.symmetric(
                                   horizontal: 16,
                                   vertical: 8,
                                 ),
                                 leading: CircleAvatar(
                                   radius: 26,
-                                  backgroundColor: Colors.indigo.shade50,
+                                  backgroundColor: AppTheme.tileOf(
+                                    context,
+                                    Colors.indigo,
+                                  ),
                                   backgroundImage:
                                       (profileImageUrl != null &&
                                           profileImageUrl.isNotEmpty)
@@ -911,7 +1067,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                                           widget.studentName.isNotEmpty
                                               ? widget.studentName[0]
                                               : 'S',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 20,
                                             fontWeight: FontWeight.bold,
                                             color: Colors.indigo,
@@ -924,10 +1080,10 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                                     Flexible(
                                       child: Text(
                                         widget.studentName,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 17,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.black87,
+                                          color: AppTheme.inkOf(context),
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -957,7 +1113,7 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                                   ],
                                 ),
                                 subtitle: Padding(
-                                  padding: const EdgeInsets.only(top: 4.0),
+                                  padding: EdgeInsets.only(top: 4.0),
                                   child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
@@ -966,47 +1122,53 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                                         widget.academyName,
                                         style: TextStyle(
                                           fontSize: 12,
-                                          color: Colors.grey.shade600,
+                                          color: AppTheme.mutedOf(context),
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
-                                      const SizedBox(height: 4),
+                                      SizedBox(height: 4),
                                       Row(
                                         children: [
                                           Container(
-                                            padding: const EdgeInsets.symmetric(
+                                            padding: EdgeInsets.symmetric(
                                               horizontal: 6,
                                               vertical: 2,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.indigo.shade50,
+                                              color: AppTheme.tileOf(
+                                                context,
+                                                Colors.indigo,
+                                              ),
                                               borderRadius:
                                                   BorderRadius.circular(6),
                                             ),
                                             child: Text(
                                               'শ্রেণি: ${widget.className}',
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontSize: 10,
                                                 color: Colors.indigo,
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),
                                           ),
-                                          const SizedBox(width: 6),
+                                          SizedBox(width: 6),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(
+                                            padding: EdgeInsets.symmetric(
                                               horizontal: 6,
                                               vertical: 2,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.orange.shade50,
+                                              color: AppTheme.tileOf(
+                                                context,
+                                                Colors.orange,
+                                              ),
                                               borderRadius:
                                                   BorderRadius.circular(6),
                                             ),
                                             child: Text(
                                               'রোল: ${widget.roll}',
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontSize: 10,
                                                 color: Colors.orange,
                                                 fontWeight: FontWeight.bold,
@@ -1076,13 +1238,13 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 25),
-                        const Text(
+                        SizedBox(height: 25),
+                        Text(
                           'একাডেমিক কার্যক্রম',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                            color: AppTheme.inkOf(context),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -1382,35 +1544,40 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 25),
-                        const Text(
+                        SizedBox(height: 25),
+                        Text(
                           'সর্বশেষ নোটিশসমূহ',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                            color: AppTheme.inkOf(context),
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        SizedBox(height: 12),
                         noticesList.isEmpty
                             ? Container(
-                                padding: const EdgeInsets.all(20),
+                                padding: EdgeInsets.all(20),
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
+                                  color: AppTheme.surfaceOf(context),
                                   borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: AppTheme.borderOf(context),
+                                  ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.grey.withOpacity(0.08),
+                                      color: Colors.grey.withValues(
+                                        alpha: 0.08,
+                                      ),
                                       blurRadius: 10,
-                                      offset: const Offset(0, 4),
+                                      offset: Offset(0, 4),
                                     ),
                                   ],
                                 ),
-                                child: const Center(
+                                child: Center(
                                   child: Text(
                                     'এই মুহূর্তে কোনো নতুন নোটিশ নেই',
                                     style: TextStyle(
-                                      color: Colors.grey,
+                                      color: AppTheme.mutedOf(context),
                                       fontSize: 14,
                                     ),
                                   ),
@@ -1421,17 +1588,22 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                                     ? 3
                                     : noticesList.length,
                                 shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
+                                physics: NeverScrollableScrollPhysics(),
                                 itemBuilder: (context, index) {
                                   final notice = noticesList[index];
                                   return Container(
-                                    margin: const EdgeInsets.only(bottom: 10),
+                                    margin: EdgeInsets.only(bottom: 10),
                                     decoration: BoxDecoration(
-                                      color: Colors.white,
+                                      color: AppTheme.surfaceOf(context),
                                       borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: AppTheme.borderOf(context),
+                                      ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.grey.withOpacity(0.06),
+                                          color: Colors.grey.withValues(
+                                            alpha: 0.06,
+                                          ),
                                           blurRadius: 8,
                                           offset: const Offset(0, 3),
                                         ),
@@ -1445,23 +1617,27 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                                         onTap: () =>
                                             _showSingleNoticeDetail(notice),
                                         child: Padding(
-                                          padding: const EdgeInsets.all(14),
+                                          padding: EdgeInsets.all(14),
                                           child: Row(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Container(
-                                                padding: const EdgeInsets.all(
-                                                  8,
-                                                ),
+                                                padding: EdgeInsets.all(8),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.blue.shade50,
+                                                  color: AppTheme.tileOf(
+                                                    context,
+                                                    Colors.blue,
+                                                  ),
                                                   shape: BoxShape.circle,
                                                 ),
-                                                child: const Icon(
+                                                child: Icon(
                                                   Icons.campaign_rounded,
                                                   size: 20,
-                                                  color: Colors.blue,
+                                                  color: AppTheme.tileInkOf(
+                                                    context,
+                                                    Colors.blue,
+                                                  ),
                                                 ),
                                               ),
                                               const SizedBox(width: 12),
@@ -1473,20 +1649,24 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                                                     Text(
                                                       notice['title'] ??
                                                           'নোটিশ শিরোনাম নেই',
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                         fontSize: 14,
                                                         fontWeight:
                                                             FontWeight.bold,
-                                                        color: Colors.black87,
+                                                        color: AppTheme.inkOf(
+                                                          context,
+                                                        ),
                                                       ),
                                                     ),
-                                                    const SizedBox(height: 4),
+                                                    SizedBox(height: 4),
                                                     Text(
                                                       notice['description'] ??
                                                           '',
-                                                      style: const TextStyle(
+                                                      style: TextStyle(
                                                         fontSize: 12,
-                                                        color: Colors.grey,
+                                                        color: AppTheme.mutedOf(
+                                                          context,
+                                                        ),
                                                       ),
                                                       maxLines: 2,
                                                       overflow:
@@ -1506,9 +1686,12 @@ class _StudentHomeViewState extends State<StudentHomeView> {
                                                                     10,
                                                                   )
                                                             : '',
-                                                        style: const TextStyle(
+                                                        style: TextStyle(
                                                           fontSize: 10,
-                                                          color: Colors.grey,
+                                                          color:
+                                                              AppTheme.mutedOf(
+                                                                context,
+                                                              ),
                                                         ),
                                                       ),
                                                     ),
@@ -1546,29 +1729,29 @@ class _StudentHomeViewState extends State<StudentHomeView> {
               height: _bannerAd!.size.height.toDouble(),
               child: AdWidget(ad: _bannerAd!),
             )
-          : const SizedBox.shrink(),
+          : SizedBox.shrink(),
     );
   }
 
   Widget _buildAnimatedDetailRow(IconData icon, String title, String value) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: Colors.indigo.shade300),
-        const SizedBox(width: 10),
+        Icon(icon, size: 18, color: AppTheme.tileInkOf(context, Colors.indigo)),
+        SizedBox(width: 10),
         Text(
           '$title: ',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
-            color: Colors.grey,
+            color: AppTheme.mutedOf(context),
             fontWeight: FontWeight.w500,
           ),
         ),
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: Colors.black87,
+              color: AppTheme.inkOf(context),
               fontWeight: FontWeight.bold,
             ),
             overflow: TextOverflow.ellipsis,
@@ -1599,15 +1782,16 @@ class _StudentHomeViewState extends State<StudentHomeView> {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         height: 115,
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
-          color: othersColor(color),
+          color: AppTheme.surfaceOf(context),
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.borderOf(context)),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.08),
+              color: Colors.grey.withValues(alpha: 0.08),
               blurRadius: 10,
-              offset: const Offset(0, 4),
+              offset: Offset(0, 4),
             ),
           ],
         ),
@@ -1615,31 +1799,31 @@ class _StudentHomeViewState extends State<StudentHomeView> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: AppTheme.tileOf(context, color),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 24, color: color),
+              child: Icon(
+                icon,
+                size: 24,
+                color: AppTheme.tileInkOf(context, color),
+              ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Text(
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: AppTheme.inkOf(context),
               ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  Color othersColor(Color color) {
-    return Colors.white;
   }
 }
